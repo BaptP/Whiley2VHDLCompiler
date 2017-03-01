@@ -90,7 +90,7 @@ public interface LexicalElement extends Tokenisable {
 		}
 
 		protected void details() {
-			System.err.println("Unsupported feature");
+			System.err.println("    Unsupported feature");
 		}
 	}
 }

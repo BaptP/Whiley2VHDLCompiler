@@ -1,6 +1,11 @@
 package wyvc.builder;
 
 import wyil.lang.Bytecode.Assign;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.function.Function;
+
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
 
@@ -15,5 +20,12 @@ public class Utils {
 			for(Location<?> l : a.getOperandGroup(SyntaxTree.RIGHTHANDSIDE))
 				printLocation(l, n+" |->");
 		}
+	}
+
+	public static <S,T> T[] toArray(Collection<S> l, Function<S,T> f, T[] t) {
+		ArrayList<T> m = new ArrayList<>();
+		for (S e : l)
+			m.add(f.apply(e));
+		return m.toArray(t);
 	}
 }

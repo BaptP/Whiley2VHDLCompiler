@@ -29,7 +29,6 @@ public class VHDLCompileTask implements Build.Task {
 
 	public VHDLCompileTask(Build.Project project) {
 		this.project = project;
-		System.out.println("VHDL compile task !!");
 	}
 
 	public Project project() {

@@ -34,7 +34,8 @@ public abstract class Type implements LexicalElement {
 
 
 	public static enum Primitive {
-		P_STD_LOGIC
+		P_STD_LOGIC,
+		P_BOOLEAN
 	}
 
 	private static final class PrimitiveType extends Type {
@@ -49,6 +50,9 @@ public abstract class Type implements LexicalElement {
 			case P_STD_LOGIC:
 				t.n("std_logic");
 				break;
+			case P_BOOLEAN:
+				t.n("boolean");
+				break;
 			default:
 				t.n("unknown");
 				break;
@@ -62,6 +66,7 @@ public abstract class Type implements LexicalElement {
 	}
 
 	public static final PrimitiveType Std_logic = new PrimitiveType(Primitive.P_STD_LOGIC);
+	public static final PrimitiveType Boolean = new PrimitiveType(Primitive.P_BOOLEAN);
 
 
 	public static abstract class VectorType extends Type {
@@ -104,9 +109,9 @@ public abstract class Type implements LexicalElement {
 		}
 	}
 
-	public static final class Std_vector extends VectorType {
+	public static final class Std_logic_vector extends VectorType {
 
-		public Std_vector(int start, int end) {
+		public Std_logic_vector(int start, int end) {
 			super(start, end);
 		}
 
@@ -117,12 +122,12 @@ public abstract class Type implements LexicalElement {
 
 		@Override
 		public boolean isSameVectorType(VectorType other) {
-			return other instanceof Std_vector;
+			return other instanceof Std_logic_vector;
 		}
 
 		@Override
 		public VectorType cloneType(int start, int end){
-			return new Std_vector(start, end);
+			return new Std_logic_vector(start, end);
 		}
 	}
 

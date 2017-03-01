@@ -2,15 +2,14 @@ package wyvc.builder;
 
 
 import java.util.ArrayList;
-import java.util.Map;
 
+import wycc.util.Pair;
 import wyil.lang.Bytecode;
 import wyil.lang.Bytecode.Const;
 import wyil.lang.Bytecode.Operator;
 import wyil.lang.Bytecode.VariableAccess;
 import wyil.lang.Bytecode.Invoke;
 import wyil.lang.SyntaxTree.Location;
-import wyvc.lang.TypedValue;
 import wyvc.lang.Type.*;
 import wyvc.lang.TypedValue.Port;
 import wyvc.lang.TypedValue.Port.Mode;
@@ -49,7 +48,7 @@ public class ExpressionCompiler {
 
 	private Expression compileVariableAccess(Location<VariableAccess> location) throws VHDLException {
 		assert(architecture.values.containsKey(location.getBytecode().getOperand(0)));
-		return new Access(architecture.values.get(location.getBytecode().getOperand(0)));
+		return new Access(architecture.values.get(location.getBytecode().getOperand(0)).read());
 	}
 
 	private Expression compileOperator(Location<Operator> location) throws VHDLException {
@@ -80,26 +79,37 @@ public class ExpressionCompiler {
 	public ArrayList<Expression> compileInvoke(Location<Invoke> location) throws VHDLException {
 		String fct = location.getBytecode().name().name();
 		if (! architecture.components.containsKey(fct))
-			architecture.components.put(fct, new Component(fct, ElementCompiler.compileInterface(fct, location.getBytecode().type())));
+			architecture.components.put(fct, new Pair<>(0,new Component(fct, ElementCompiler.compileInterface(fct, location.getBytecode().type()))));
 		ArrayList<Signal> ports = new ArrayList<>();
-		// TODO TODO Very temporary
 		ArrayList<ConcurrentStatement> funGroup = new ArrayList<>();
-		int nb = architecture.statements.size();
 		int inp = 0;
 		int out = 0;
 		ArrayList<Expression> output = new ArrayList<>();
-		for (Port p : architecture.components.get(fct).interface_.ports){
-			Signal s = new Signal(fct+"_"+nb+"_"+(p.mode == Mode.IN ? "in_"+inp++ : "out_"+out++), p.type);
-			architecture.signals.add(s);
-			ports.add(s);
-			if (p.mode == Mode.OUT)
-				architecture.sensitive.add(s);
-			else
+		Pair<Integer, Component> cmp = architecture.components.get(fct);
+		int callNb = cmp.first().intValue();
+		architecture .components.put(fct, new Pair<>(callNb+1, cmp.second()));
+		int k = 0;
+		for (Port p : cmp.second().interface_.ports){
+			if (p.mode == Mode.IN) {
+				Expression expr = compile(location.getOperand(inp));
+				if (expr instanceof Access && ((Access) expr).value instanceof Signal)
+					ports.add((Signal) ((Access) expr).value);
+				else {
+					Signal s = new Signal(fct+"_"+callNb+"_in_"+inp++, p.type);
+					architecture.signals.add(s);
+					ports.add(s);
+					funGroup.add(new SignalAssignment(s, expr));
+				}
+			}
+			else{
+				Signal s = new Signal(fct+"_"+callNb+"_in_"+inp++, p.type);
+				architecture.signals.add(s);
+				ports.add(s);
 				output.add(new Access(s));
+			}
+			k++;
 		}
-		for (int k = 0 ; k < location.numberOfOperands() ; ++k)
-			architecture.processStatements.add(new SignalAssignment(ports.get(k), compile(location.getOperand(k))));
-		funGroup.add(new ComponentInstance(fct+"_"+nb, architecture.components.get(fct), ports.toArray(new Signal[0])));
+		funGroup.add(new ComponentInstance(fct+"_"+callNb, cmp.second(), ports.toArray(new Signal[0])));
 		architecture.statements.add(new StatementGroup(funGroup.toArray(new ConcurrentStatement[0])));
 
 		return output;

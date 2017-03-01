@@ -15,7 +15,7 @@ public class Component extends NamedElement {
 	public void addTokens(Token t) {
 		t.n("component ").n(ident).endLine().indent();
 		t.n(interface_);
-		t.dedent().n("end component ").n(ident).semiColon().endLine();
+		t.dedent().n("end component ").n(ident).semiColon();
 	}
 
 }

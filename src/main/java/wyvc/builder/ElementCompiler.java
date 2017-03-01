@@ -1,6 +1,7 @@
 package wyvc.builder;
 
 import java.util.ArrayList;
+import java.util.Collection;
 
 import wyil.lang.Type;
 import wyil.lang.WyilFile.FunctionOrMethod;
@@ -27,12 +28,13 @@ public class ElementCompiler {
 		ArrayList<Port> ports = new ArrayList<Port>();
 		int i = 0;
 		for(Type t : type.params()){
-			ports.add(new Port("s_"+name+"_in_"+Integer.toString(i++), new wyvc.lang.Type.Signed(31,0), Mode.IN));
+			ports.add(new Port("I"+name+"_in_"+Integer.toString(i++), new wyvc.lang.Type.Signed(31,0), Mode.IN));
 		}
 		i = 0;
 		for(Type t : type.returns()){
-			ports.add(new Port("s_"+name+"_out_"+Integer.toString(i++), new wyvc.lang.Type.Signed(31,0), Mode.OUT));
+			ports.add(new Port("I"+name+"_out_"+Integer.toString(i++), new wyvc.lang.Type.Signed(31,0), Mode.OUT));
 		}
 		return new Interface(ports.toArray(new Port[0]));
 	}
+
 }
