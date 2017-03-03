@@ -1,111 +1,50 @@
 package wyvc.builder;
 
 
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
-import wycc.util.Pair;
+import javax.print.attribute.standard.PrinterLocation;
+
 import wyil.lang.Bytecode;
 import wyil.lang.Bytecode.Invoke;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
+import wyvc.utils.Pair;
+import wyvc.utils.Triple;
 import wyvc.builder.VHDLCompileTask.VHDLCompilationException;
 import wyvc.lang.Architecture;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
-import wyvc.lang.Expression;
+import wyvc.lang.LexicalElement.UnsupportedException;
 import wyvc.lang.LexicalElement.VHDLException;
 import wyvc.lang.Statement.StatementGroup;
 import wyvc.lang.Statement.ConcurrentStatement;
-import wyvc.lang.Statement.SequentialStatement;
-import wyvc.lang.Statement.SignalAssignment;
-import wyvc.lang.Statement.Process;
-import wyvc.lang.Type;
 import wyvc.lang.TypedValue.Constant;
-import wyvc.lang.TypedValue.Port;
-import wyvc.lang.TypedValue.Port.Mode;
+import wyvc.utils.Utils;
 import wyvc.lang.TypedValue.PortException;
 import wyvc.lang.TypedValue.Signal;
-import wyvc.lang.TypedValue.Variable;
 import wyvc.lang.Expression.TypesMismatchException;
-import wyvc.builder.Utils;
-import wyvc.builder.Utils;
+import wyvc.builder.ElementCompiler.CompilationData;
+import wyvc.builder.ElementCompiler.InterfacePattern;
+import wyvc.builder.ElementCompiler.TypedIdentifierTree;
+import wyvc.builder.ExpressionCompiler.ExpressionTree;
+import wyvc.builder.LexicalElementTree.IdentifierComponentException;
 
 public class ArchitectureCompiler {
+	private final CompilationData data;
+	private final Entity entity;
 
-	public static class ArchitectureData {
-		public final Entity entity;
-		public Map<Integer, SignalVariable> values = new HashMap<Integer, SignalVariable>();
-		public ArrayList<Signal> signals = new ArrayList<>();
-		public ArrayList<Signal> sensitive = new ArrayList<>();
-		public ArrayList<Variable> variables = new ArrayList<>();
-		public Map<String, Pair<Integer,Component>> components = new HashMap<>();
-		public ArrayList<ConcurrentStatement> statements = new ArrayList<>();
-		public ArrayList<SequentialStatement> processStatements = new ArrayList<>();
 
-		public ArchitectureData(Entity entity) {
-			this.entity = entity;
-		}
-	}
-
-	public static class SignalVariable {
-		private final ArchitectureData architecture;
-		private final String ident;
-		private int assignments = 0;
-		private Signal current = null;
-
-		public SignalVariable(String ident, Type type, ArchitectureData architecture) {
-			this.architecture = architecture;
-			this.ident = ident;
-			signal("I"+ident, type);
-		}
-
-		public SignalVariable(Port port, ArchitectureData architecture) {
-			this.architecture = architecture;
-			this.ident = port.ident.substring(1);
-			this.current = port;
-			this.assignments = port.mode == Mode.IN ? 1 : 0;
-		}
-
-		private void signal(String ident, Type type) {
-			this.current = new Signal(ident, type);
-			architecture.signals.add(this.current);
-		}
-
-		public final Signal read() {
-			return current;
-		}
-
-		public final SignalAssignment assign(Expression e) throws TypesMismatchException, PortException {
-			if (assignments++ != 0)
-				signal("N"+ident+"_"+assignments, current.type);
-			return new SignalAssignment(current, e);
-		}
-	}
-
-	private ArchitectureData architecture;
-
-	public ArchitectureCompiler(Entity entity) throws TypesMismatchException, PortException {
-		this.architecture = new ArchitectureData(entity);
-		int inPort = 0;
-		int outPort = 1;
-		for(Port p : entity.interface_.ports) {
-			SignalVariable s = new SignalVariable(p, this.architecture);
-			if (p.mode == Mode.IN)
-				architecture.values.put(inPort++, s);
-			else
-				architecture.values.put(-outPort++, s);
-		}
+	public ArchitectureCompiler(Entity entity, CompilationData data) throws TypesMismatchException, PortException {
+		this.data = data;
+		this.entity = entity;
 	}
 
 	public Architecture compile(Location<?> location) throws VHDLCompilationException, VHDLException {
 		compileStatements(location);
-		return new Architecture(architecture.entity, "Behavioural", architecture.signals.toArray(new Signal[0]), new Constant[0],
-			Utils.toArray(architecture.components.values(), (Pair<Integer, Component> p) -> p.second(), new Component[0]),
-			architecture.statements.toArray(new ConcurrentStatement[0]));
+		return new Architecture(entity, "Behavioural", data.signals.toArray(new Signal[0]), new Constant[0],
+			Utils.toArray(data.components.values(), (Triple<Integer, Component, InterfacePattern> p) -> p.second, new Component[0]),
+			data.statements.toArray(new ConcurrentStatement[0]));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -124,23 +63,39 @@ public class ArchitectureCompiler {
 
 	private void compileVariableDeclaration(Location<Bytecode.VariableDeclaration> location) throws VHDLCompilationException, VHDLException {
 		Bytecode.VariableDeclaration var = location.getBytecode();
-		SignalVariable s = new SignalVariable(var.getName(),new Type.Signed(31, 0), architecture);
-		architecture.values.put(location.getIndex(), s);
+		TypedIdentifierTree v = TypedIdentifierTree.createSignal(var.getName(), TypeCompiler.compileType(location.getType(), data), data);
+		data.values.put(location.getIndex(), v);
 		if (location.numberOfOperands() == 1) {
-			ExpressionCompiler expr = new ExpressionCompiler(architecture);
-			architecture.statements.add(s.assign(expr.compile(location.getOperand(0))));
+			ExpressionCompiler expr = new ExpressionCompiler(data);
+			data.statements.add(v.assign(expr.compile(location.getOperand(0))));
 		}
 		// TODO Type !!
 	}
 
+	public static class AssignmentException extends VHDLCompilationException {
+		private static final long serialVersionUID = -2618011322731674457L;
+
+		@Override
+		protected void details() {
+			System.err.println("    Bad assignment left hand side.");
+		}
+	}
+
+	private TypedIdentifierTree compileLeftHandSide(Location<?> location) throws AssignmentException, VHDLException, IdentifierComponentException {
+		if (location.getBytecode() instanceof Bytecode.FieldLoad)
+			return compileLeftHandSide(location.getOperand(0)).getComponent(((Bytecode.FieldLoad) location.getBytecode()).fieldName());
+		if (location.getBytecode() instanceof Bytecode.VariableAccess)
+			return data.values.get(location.getBytecode().getOperand(0));
+		throw new AssignmentException();
+	}
 
 	@SuppressWarnings("unchecked")
 	private void compileAssign(Location<Bytecode.Assign> location) throws VHDLCompilationException, VHDLException {
 		Location<?>[] lhs = location.getOperandGroup(SyntaxTree.LEFTHANDSIDE);
 		Location<?>[] rhs = location.getOperandGroup(SyntaxTree.RIGHTHANDSIDE);
 		Utils.printLocation(location, "");
-		ExpressionCompiler expr = new ExpressionCompiler(architecture);
-		ArrayList<Expression> crhs = new ArrayList<>();
+		ExpressionCompiler expr = new ExpressionCompiler(data);
+		ArrayList<ExpressionTree> crhs = new ArrayList<>();
 		ArrayList<ConcurrentStatement> assignGroup = new ArrayList<>();
 		for (Location<?> l : rhs) {
 			if (l.getBytecode() instanceof Invoke)
@@ -148,18 +103,30 @@ public class ArchitectureCompiler {
 			else
 				crhs.add(expr.compile(l));
 		}
-		for (int k = 0; k < lhs.length; ++k)
-			assignGroup.add(architecture.values.get(lhs[k].getOperand(0).getIndex()).assign(crhs.get(k)));
-		architecture.statements.add(new StatementGroup(assignGroup.toArray(new ConcurrentStatement[0])));
-	}
+		/*
+		for (int k = 0; k < lhs.length; ++k){
+			Utils.printLocation(lhs[k], "v"+k+"  ");
+			assignGroup.add(data.values.get(lhs[k].getOperand(0).getIndex()).assign(crhs.get(k)));
+		}
+		data.statements.add(new StatementGroup(assignGroup.toArray(new ConcurrentStatement[0])));
+		/*/
+		for (int k = 0; k < lhs.length; ++k){
+			Utils.printLocation(lhs[k], "v"+k+"  ");
+			assignGroup.add(compileLeftHandSide(lhs[k]).assign(crhs.get(k)));
+		}
+		data.statements.add(new StatementGroup(assignGroup.toArray(new ConcurrentStatement[0])));
+		//*/
+}
+
+
 
 	private void compileReturn(Location<Bytecode.Return> location) throws VHDLCompilationException, VHDLException {
-		ExpressionCompiler expr = new ExpressionCompiler(architecture);
+		ExpressionCompiler expr = new ExpressionCompiler(data);
 		int k = 0;
 		ArrayList<ConcurrentStatement> returnGroup = new ArrayList<>();
 		for(Location<?> l : location.getOperands())
-			returnGroup.add(architecture.values.get(-++k).assign(expr.compile(l)));
-		architecture.statements.add(new StatementGroup(returnGroup.toArray(new ConcurrentStatement[0])));
+			returnGroup.add(data.values.get(-++k).assign(expr.compile(l)));
+		data.statements.add(new StatementGroup(returnGroup.toArray(new ConcurrentStatement[0])));
 	}
 
 	private void compileBlock(Location<Bytecode.Block> location) throws VHDLCompilationException, VHDLException {
@@ -167,6 +134,5 @@ public class ArchitectureCompiler {
 			compileStatements(l);
 
 	}
-
 
 }

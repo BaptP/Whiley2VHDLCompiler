@@ -117,7 +117,7 @@ public abstract class Type implements LexicalElement {
 
 		@Override
 		protected Token addSubTypeTokens(Token t) {
-			return t.n("std_vector");
+			return t.n("std_logic_vector");
 		}
 
 		@Override

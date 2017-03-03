@@ -3,7 +3,9 @@ package wyvc.builder;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import wybs.lang.Build;
@@ -19,8 +21,11 @@ import wyfs.lang.Path.Root;
 import wyil.lang.WyilFile;
 import wyvc.lang.Entity;
 import wyvc.lang.LexicalElement.VHDLException;
+import wyvc.utils.Utils;
 import wyvc.lang.VHDLFile;
 import wyvc.builder.ElementCompiler;
+import wyvc.builder.ElementCompiler.CompilationData;
+import wyvc.builder.TypeCompiler.TypeTree;
 
 public class VHDLCompileTask implements Build.Task {
 	private Logger logger = Logger.NULL;
@@ -52,17 +57,20 @@ public class VHDLCompileTask implements Build.Task {
 			System.out.println(f.toString());
 
 			ArrayList<Entity> entities = new ArrayList<Entity>();
-
 			try {
+				CompilationData data = new CompilationData();
+				for (WyilFile.Type t  : f.types())
+					data.types.put(t.name(), TypeCompiler.compileType(t.type(),data));
 				for (FunctionOrMethod fct : f.functionOrMethods()){
-					entities.add(ElementCompiler.compileEntity(fct));
+					//Utils.printLocation(fct.getBody(), "");
+					entities.add(ElementCompiler.compileEntity(fct, data));
 				}
 			} catch (VHDLException e) {
 				e.printStackTrace();
 				e.info();
 			} catch (VHDLCompilationException e) {
 				e.printStackTrace();
-				System.err.println("Unsupported");
+				e.info();
 			}
 
 			Path.Entry<VHDLFile> target = dst.create(source.id(), Activator.ContentType);
@@ -85,8 +93,15 @@ public class VHDLCompileTask implements Build.Task {
 	}
 
 
-	public static class VHDLCompilationException extends Exception {
+	public abstract static class VHDLCompilationException extends Exception {
 		private static final long serialVersionUID = 1062123869833614980L;
+
+		protected abstract void details();
+
+		public void info() {
+			System.err.println("Unsupported VHDL compilation feature");
+			details();
+		}
 
 	}
 

@@ -3,6 +3,7 @@ package wyvc.lang;
 import static wyvc.lang.LexicalElement.stringFromStream;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import wycc.util.Pair;
 import wyvc.lang.TypedValue.Port;
@@ -37,6 +38,13 @@ public interface Statement extends LexicalElement {
 		@Override
 		public String toString(){
 			return stringFromStream(this);
+		}
+
+		public StatementGroup concat(StatementGroup other) {
+			ArrayList<ConcurrentStatement> st = new ArrayList<>(statements.length + other.statements.length);
+			st.addAll(Arrays.asList(statements));
+			st.addAll(Arrays.asList(other.statements));
+			return new StatementGroup(st.toArray(new ConcurrentStatement[0]));
 		}
 
 	}

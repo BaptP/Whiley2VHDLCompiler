@@ -241,7 +241,12 @@ public interface Expression extends LexicalElement {
 
 		public Value(Type type, String value) {
 			super(type);
-			this.value = value;
+			if (type instanceof Type.Signed)
+				this.value = "to_signed("+value+", "+((Type.Signed) type).lenght()+")";
+			else if (type instanceof Type.Std_logic_vector)
+				this.value = "\""+value.substring(0, value.length()-1)+"\"";
+			else
+				this.value = value;
 		}
 
 		@Override

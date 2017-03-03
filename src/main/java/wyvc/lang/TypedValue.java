@@ -17,6 +17,8 @@ public abstract class TypedValue implements LexicalElement {
 		return stringFromStream(this);
 	}
 
+	public abstract boolean isWritable();
+
 
 	public static class Constant extends TypedValue {
 		public Constant(String ident, Type type) {
@@ -26,6 +28,11 @@ public abstract class TypedValue implements LexicalElement {
 		@Override
 		public void addTokens(Token t) {
 			t.n("constant ").n(ident).align().n(" : ").n(type).semiColon();
+		}
+
+		@Override
+		public boolean isWritable() {
+			return false;
 		}
 	}
 
@@ -37,6 +44,11 @@ public abstract class TypedValue implements LexicalElement {
 		@Override
 		public void addTokens(Token t) {
 			t.n("signal ").n(ident).align().n(" : ").n(type).semiColon();
+		}
+
+		@Override
+		public boolean isWritable() {
+			return true;
 		}
 	}
 
@@ -58,6 +70,11 @@ public abstract class TypedValue implements LexicalElement {
 		@Override
 		public void addTokens(Token t) {
 			t.n(ident).align().n(" : ").n(mode == Mode.IN ? "in  " : "out ").align().n(type);
+		}
+
+		@Override
+		public boolean isWritable() {
+			return mode == Mode.OUT;
 		}
 
 	}
@@ -89,6 +106,11 @@ public abstract class TypedValue implements LexicalElement {
 		@Override
 		public void addTokens(Token t) {
 			t.n("variable ").n(ident).align().n(" : ").n(type).semiColon();
+		}
+
+		@Override
+		public boolean isWritable() {
+			return true;
 		}
 	}
 
