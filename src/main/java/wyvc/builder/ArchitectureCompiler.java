@@ -3,19 +3,15 @@ package wyvc.builder;
 
 import java.util.ArrayList;
 
-import javax.print.attribute.standard.PrinterLocation;
-
 import wyil.lang.Bytecode;
 import wyil.lang.Bytecode.Invoke;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
-import wyvc.utils.Pair;
 import wyvc.utils.Triple;
 import wyvc.builder.VHDLCompileTask.VHDLCompilationException;
 import wyvc.lang.Architecture;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
-import wyvc.lang.LexicalElement.UnsupportedException;
 import wyvc.lang.LexicalElement.VHDLException;
 import wyvc.lang.Statement.StatementGroup;
 import wyvc.lang.Statement.ConcurrentStatement;

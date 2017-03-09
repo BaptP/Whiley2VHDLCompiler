@@ -5,7 +5,6 @@ import java.util.List;
 
 import wyvc.utils.Pair;
 import wyvc.builder.LexicalElementTree.Tree;
-import wyvc.builder.TypeCompiler.NominalTypeException;
 import wyvc.builder.ElementCompiler.CompilationData;
 import wyvc.builder.LexicalElementTree.Compound;
 import wyvc.builder.LexicalElementTree.Primitive;
@@ -16,7 +15,7 @@ public class TypeCompiler {
 
 	public static class UnsupportedTypeException extends VHDLCompilationException {
 		private static final long serialVersionUID = -814513156259175164L;
-		private static wyil.lang.Type type;
+		private final wyil.lang.Type type;
 
 		public UnsupportedTypeException(wyil.lang.Type type) {
 			this.type = type;

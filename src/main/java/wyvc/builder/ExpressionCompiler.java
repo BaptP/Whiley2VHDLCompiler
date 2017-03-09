@@ -1,11 +1,8 @@
 package wyvc.builder;
 
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.swing.text.StyledEditorKit.StyledTextAction;
 
 import wyil.lang.Bytecode;
 import wyil.lang.Type;
@@ -19,14 +16,12 @@ import wyil.lang.SyntaxTree.Location;
 import wyvc.utils.Pair;
 import wyvc.utils.Triple;
 import wyvc.utils.Utils;
-import wyvc.lang.Type.*;
 import wyvc.lang.TypedValue.Signal;
 import wyvc.builder.ElementCompiler.CompilationData;
 import wyvc.builder.ElementCompiler.InterfacePattern;
 import wyvc.builder.ElementCompiler.PrimitiveTypedIdentifier;
 import wyvc.builder.ElementCompiler.TypedIdentifierTree;
 import wyvc.builder.LexicalElementTree.Compound;
-import wyvc.builder.LexicalElementTree.IdentifierStructureException;
 import wyvc.builder.LexicalElementTree.Primitive;
 import wyvc.builder.LexicalElementTree.Tree;
 import wyvc.builder.TypeCompiler.NominalTypeException;

@@ -56,7 +56,7 @@ public interface Statement extends LexicalElement {
 
 		@Override
 		public void addTokens(Token t) {
-			t.n(dest.ident).n(" <= ").n(expr).semiColon();
+			t.n(dest.ident).align().n(" <= ").n(expr).semiColon();
 		}
 
 		@Override
