@@ -9,12 +9,12 @@ import wyvc.builder.VHDLCompileTask.VHDLCompilationException;
 import wyvc.utils.Pair;
 
 public final class LexicalElementTree {
-	static class IdentifierStructureException extends VHDLCompilationException {
+	static class TreeStructureException extends VHDLCompilationException {
 		private static final long serialVersionUID = 3351421359541042141L;
 		private final Tree<?,?> expected;
 		private final Tree<?,?> encountered;
 
-		public IdentifierStructureException(Tree<?,?> expected, Tree<?,?> encountered) {
+		public TreeStructureException(Tree<?,?> expected, Tree<?,?> encountered) {
 			this.expected = expected;
 			this.encountered = encountered;
 		}
@@ -30,17 +30,21 @@ public final class LexicalElementTree {
 		}
 	}
 
-	static class IdentifierComponentException extends VHDLCompilationException {
+	static class TreeComponentException extends VHDLCompilationException {
 		private static final long serialVersionUID = 1678182755447780658L;
 		private final String name;
+		private final Tree<?,?> tree;
 
-		public IdentifierComponentException(String name) {
+		public TreeComponentException(String name, Tree<?,?> tree) {
 			this.name = name;
+			this.tree = tree;
 		}
 
 		@Override
 		public void details() {
 			System.err.println("    No such component : "+name);
+			System.err.println("    in : "+tree);
+			tree.printStructure(System.err, "          ");
 		}
 	}
 
@@ -51,9 +55,9 @@ public final class LexicalElementTree {
 		public default int getComponentNumber()	{
 			return getComponents().size();
 		}
-		public default <S extends Tree<S,U>,U> void checkIdenticalStructure(Tree<S,U> other) throws IdentifierStructureException {
+		public default <S extends Tree<S,U>,U> void checkIdenticalStructure(Tree<S,U> other) throws TreeStructureException {
 			if (!isStructuredAs(other))
-				throw new IdentifierStructureException(this, other);
+				throw new TreeStructureException(this, other);
 		}
 		public default List<V> getValues() {
 			if (this instanceof Primitive<?,?>)
@@ -69,11 +73,11 @@ public final class LexicalElementTree {
 					return true;
 			return false;
 		}
-		public default T getComponent(String c) throws IdentifierComponentException {
+		public default T getComponent(String c) throws TreeComponentException {
 			for (Pair<String,T> p : getComponents())
 				if (p.first.equals(c))
 					return p.second;
-			throw new IdentifierComponentException(c);
+			throw new TreeComponentException(c, this);
 		}
 		public default void printStructure(PrintStream s, String start) {
 			List<Pair<String, T>> l = getComponents();
@@ -106,12 +110,11 @@ public final class LexicalElementTree {
 		public <S extends Tree<S,U>,U> boolean isStructuredAs(Tree<S,U> other) {
 			return other instanceof Primitive;
 		}
-
-
 	}
 
 	public static class Compound<T extends Tree<T,V>,V> implements Tree<T,V> {
 		private final List<Pair<String, T>> components;
+		protected T parent = null;
 
 		public Compound(List<Pair<String, T>> components) {
 			this.components = components;
@@ -139,6 +142,13 @@ public final class LexicalElementTree {
 	}
 
 
+//	public static <T extends Tree<T,?>, V extends Tree<V,?>> V convert(
+//			Tree<T,?> tree,
+//			Function<? super Primitive<T,?>, ? extends Primitive<V,?>> leaf) {
+//		if (tree instanceof Primitive<?,?>)
+//			return leaf.apply(tree);
+//		return new Utils.<Pair<String, T>,Pair<String, V>>convert(tree.getComponents(), (Pair<String, T> p) -> new Pair<String, V>(p.first, convert(p.second, leaf)));
+//	}
 
 
 //

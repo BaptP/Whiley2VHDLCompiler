@@ -152,7 +152,7 @@ public class ExpressionCompiler {
 	}
 
 	private ExpressionTree compileConst(Location<Const> location) throws VHDLException, UnsupportedTypeException, NominalTypeException {
-		return new PrimitiveExpression(new Value(TypeCompiler.compileType(location.getType(), data).getValue(), location.getBytecode().constant().toString()));
+		return new PrimitiveExpression(new Value(TypeCompiler.compileType(location.getType(), data.types).getValue(), location.getBytecode().constant().toString()));
 	}
 
 	public ArrayList<ExpressionTree> compileInvoke(Location<Invoke> location) throws VHDLException, VHDLCompilationException {

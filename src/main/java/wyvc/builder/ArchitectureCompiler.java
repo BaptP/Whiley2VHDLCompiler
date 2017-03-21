@@ -24,7 +24,7 @@ import wyvc.builder.ElementCompiler.CompilationData;
 import wyvc.builder.ElementCompiler.InterfacePattern;
 import wyvc.builder.ElementCompiler.TypedIdentifierTree;
 import wyvc.builder.ExpressionCompiler.ExpressionTree;
-import wyvc.builder.LexicalElementTree.IdentifierComponentException;
+import wyvc.builder.LexicalElementTree.TreeComponentException;
 
 public class ArchitectureCompiler {
 	private final CompilationData data;
@@ -59,7 +59,7 @@ public class ArchitectureCompiler {
 
 	private void compileVariableDeclaration(Location<Bytecode.VariableDeclaration> location) throws VHDLCompilationException, VHDLException {
 		Bytecode.VariableDeclaration var = location.getBytecode();
-		TypedIdentifierTree v = TypedIdentifierTree.createSignal(var.getName(), TypeCompiler.compileType(location.getType(), data), data);
+		TypedIdentifierTree v = TypedIdentifierTree.createSignal(var.getName(), TypeCompiler.compileType(location.getType(), data.types), data);
 		data.values.put(location.getIndex(), v);
 		if (location.numberOfOperands() == 1) {
 			ExpressionCompiler expr = new ExpressionCompiler(data);
@@ -77,7 +77,7 @@ public class ArchitectureCompiler {
 		}
 	}
 
-	private TypedIdentifierTree compileLeftHandSide(Location<?> location) throws AssignmentException, VHDLException, IdentifierComponentException {
+	private TypedIdentifierTree compileLeftHandSide(Location<?> location) throws AssignmentException, VHDLException, TreeComponentException {
 		if (location.getBytecode() instanceof Bytecode.FieldLoad)
 			return compileLeftHandSide(location.getOperand(0)).getComponent(((Bytecode.FieldLoad) location.getBytecode()).fieldName());
 		if (location.getBytecode() instanceof Bytecode.VariableAccess)

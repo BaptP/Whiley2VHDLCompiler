@@ -2,10 +2,10 @@ package wyvc.builder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import wyvc.utils.Pair;
 import wyvc.builder.LexicalElementTree.Tree;
-import wyvc.builder.ElementCompiler.CompilationData;
 import wyvc.builder.LexicalElementTree.Compound;
 import wyvc.builder.LexicalElementTree.Primitive;
 import wyvc.builder.VHDLCompileTask.VHDLCompilationException;
@@ -75,7 +75,7 @@ public class TypeCompiler {
 
 
 
-	public static TypeTree compileType(wyil.lang.Type type, CompilationData data) throws UnsupportedTypeException, NominalTypeException {
+	public static TypeTree compileType(wyil.lang.Type type, Map<String, TypeTree> types) throws UnsupportedTypeException, NominalTypeException {
 		if (type == wyil.lang.Type.T_INT)
 			return SIGNED;
 		if (type == wyil.lang.Type.T_BOOL)
@@ -86,14 +86,14 @@ public class TypeCompiler {
 			wyil.lang.Type.Record record = (wyil.lang.Type.Record) type;
 			ArrayList<Pair<String, TypeTree>> fields = new ArrayList<>(record.getFieldNames().length);
 			for (String f : record.getFieldNames())
-				fields.add(new Pair<String, TypeTree>(f, compileType(record.getField(f), data)));
+				fields.add(new Pair<String, TypeTree>(f, compileType(record.getField(f), types)));
 			return new CompoundType(fields);
 		}
 		if (type instanceof wyil.lang.Type.Nominal) {
 			String t = ((wyil.lang.Type.Nominal) type).name().name();
-			if (! data.types.containsKey(t))
+			if (! types.containsKey(t))
 				throw new NominalTypeException(t);
-			return data.types.get(t);
+			return types.get(t);
 		}
 		throw new UnsupportedTypeException(type);
 	}

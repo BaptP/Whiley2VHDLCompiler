@@ -12,7 +12,7 @@ import wyil.lang.Type;
 import wyil.lang.WyilFile.FunctionOrMethod;
 import wyvc.builder.LexicalElementTree.Compound;
 import wyvc.builder.ExpressionCompiler.ExpressionTree;
-import wyvc.builder.LexicalElementTree.IdentifierStructureException;
+import wyvc.builder.LexicalElementTree.TreeStructureException;
 import wyvc.builder.LexicalElementTree.Primitive;
 import wyvc.builder.LexicalElementTree.Tree;
 import wyvc.builder.TypeCompiler.PrimitiveType;
@@ -39,7 +39,7 @@ public class ElementCompiler {
 
 	public static interface TypedIdentifierTree extends Tree<TypedIdentifierTree,TypedValue> {
 		public int getAssignmentsNumber();
-		public StatementGroup assign(ExpressionTree expression) throws IdentifierStructureException, TypesMismatchException, PortException;
+		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortException;
 		public TypeTree getType();
 		public String getIdent();
 
@@ -86,7 +86,7 @@ public class ElementCompiler {
 		}*/
 	}
 
-	public static class PrimitiveTypedIdentifier extends Primitive<TypedIdentifierTree,TypedValue> implements TypedIdentifierTree {
+	public static final class PrimitiveTypedIdentifier extends Primitive<TypedIdentifierTree,TypedValue> implements TypedIdentifierTree {
 		private final CompilationData data;
 		private int assignmentsNb;
 		private final String ident;
@@ -116,7 +116,7 @@ public class ElementCompiler {
 		}
 
 		@Override
-		public StatementGroup assign(ExpressionTree expression) throws IdentifierStructureException, TypesMismatchException, PortException {
+		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortException {
 			checkIdenticalStructure(expression);
 			++assignmentsNb;
 			if (assignmentsNb != 1) {
@@ -129,7 +129,7 @@ public class ElementCompiler {
 		}
 	}
 
-	public static class CompoundTypedIdentifier extends Compound<TypedIdentifierTree,TypedValue> implements TypedIdentifierTree {
+	public static final class CompoundTypedIdentifier extends Compound<TypedIdentifierTree,TypedValue> implements TypedIdentifierTree {
 		private final CompilationData data;
 		private int assignmentsNb;
 		private final String ident;
@@ -160,7 +160,7 @@ public class ElementCompiler {
 		}
 
 		@Override
-		public StatementGroup assign(ExpressionTree expression) throws IdentifierStructureException, TypesMismatchException, PortException {
+		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortException {
 			checkIdenticalStructure(expression);
 			++assignmentsNb;
 			if (assignmentsNb != 1)
@@ -230,10 +230,10 @@ public class ElementCompiler {
 		ArrayList<TypedIdentifierTree> outputs = new ArrayList<>();
 		int i = 0;
 		for(Type t : type.params())
-			inputs.add(TypedIdentifierTree.createPort(name+"_in_"+Integer.toString(i++), TypeCompiler.compileType(t, data), Mode.IN, ports, data));
+			inputs.add(TypedIdentifierTree.createPort(name+"_in_"+Integer.toString(i++), TypeCompiler.compileType(t, data.types), Mode.IN, ports, data));
 		i = 0;
 		for(Type t : type.returns())
-			outputs.add(TypedIdentifierTree.createPort(name+"_out_"+Integer.toString(i++), TypeCompiler.compileType(t, data), Mode.OUT, ports, data));
+			outputs.add(TypedIdentifierTree.createPort(name+"_out_"+Integer.toString(i++), TypeCompiler.compileType(t, data.types), Mode.OUT, ports, data));
 		return new InterfacePattern(new Interface(ports.toArray(new Port[0])), inputs, outputs);
 	}
 

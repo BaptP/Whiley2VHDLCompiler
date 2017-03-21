@@ -58,8 +58,17 @@ public class Utils {
 			m.add(f.apply(s));
 		return m;
 	}
+
 	@SuppressWarnings("unchecked")
 	public static <S,T> List<T> convert(List<S> l) {
 		return convert(l, (S s) -> (T) s);
+	}
+
+	public static <S,T> List<T> convertInd(List<S> l, Function<Pair<S,Integer>,T> f) {
+		ArrayList<T> m = new ArrayList<>(l.size());
+		int k = 0;
+		for (S s : l)
+			m.add(f.apply(new Pair<S,Integer>(s,k++)));
+		return m;
 	}
 }

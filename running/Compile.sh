@@ -1,6 +1,6 @@
 cd ..
 mvn package
-mv target/*.jar ../wdk-v0.4.0/lib/
+mv target/*.jar running/wdk-v0.4.0/lib/
 cd running
 ./wdk-v0.4.0/bin/wy vhdlcompile example.whiley
 
