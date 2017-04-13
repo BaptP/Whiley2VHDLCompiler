@@ -14,22 +14,20 @@ public abstract class Type implements LexicalElement {
 	}
 
 
-	public static abstract class TypeException extends VHDLException {
-		private static final long serialVersionUID = 3877750530770083046L;
+	public static abstract class TypeError extends VHDLError {
 		private final Type type;
 
-		public TypeException(Class<?> element, Type type) {
+		public TypeError(Class<?> element, Type type) {
 			super(element);
 			this.type = type;
 		}
 
 		@Override
-		protected final void details() {
-			System.err.print("    Given type "+type.toString() + " unexpected : ");
-			typeExceptionDetails();
+		protected final String details() {
+			return "Given type " + type.toString() + " unsuitable : " +typeExceptionDetails();
 		}
 
-		protected abstract void typeExceptionDetails();
+		protected abstract String typeExceptionDetails();
 	}
 
 

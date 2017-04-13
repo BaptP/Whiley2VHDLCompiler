@@ -17,7 +17,7 @@ import wyvc.lang.Statement.StatementGroup;
 import wyvc.lang.Statement.ConcurrentStatement;
 import wyvc.lang.TypedValue.Constant;
 import wyvc.utils.Utils;
-import wyvc.lang.TypedValue.PortException;
+import wyvc.lang.TypedValue.PortError;
 import wyvc.lang.TypedValue.Signal;
 import wyvc.lang.Expression.TypesMismatchException;
 import wyvc.builder.ElementCompiler.CompilationData;
@@ -31,12 +31,12 @@ public class ArchitectureCompiler {
 	private final Entity entity;
 
 
-	public ArchitectureCompiler(Entity entity, CompilationData data) throws TypesMismatchException, PortException {
+	public ArchitectureCompiler(Entity entity, CompilationData data) {
 		this.data = data;
 		this.entity = entity;
 	}
 
-	public Architecture compile(Location<?> location) throws VHDLCompilationException, VHDLException {
+	public Architecture compile(Location<?> location) {
 		compileStatements(location);
 		return new Architecture(entity, "Behavioural", data.signals.toArray(new Signal[0]), new Constant[0],
 			Utils.toArray(data.components.values(), (Triple<Integer, Component, InterfacePattern> p) -> p.second, new Component[0]),
@@ -44,7 +44,7 @@ public class ArchitectureCompiler {
 	}
 
 	@SuppressWarnings("unchecked")
-	private void compileStatements(Location<?> location) throws VHDLCompilationException, VHDLException {
+	private void compileStatements(Location<?> location) {
 		Bytecode bytecode = location.getBytecode();
 		System.out.println(location.toString());
 		if (bytecode instanceof Bytecode.VariableDeclaration)
@@ -57,7 +57,7 @@ public class ArchitectureCompiler {
 			compileAssign((Location<Bytecode.Assign>) location);
 	}
 
-	private void compileVariableDeclaration(Location<Bytecode.VariableDeclaration> location) throws VHDLCompilationException, VHDLException {
+	private void compileVariableDeclaration(Location<Bytecode.VariableDeclaration> location) {
 		Bytecode.VariableDeclaration var = location.getBytecode();
 		TypedIdentifierTree v = TypedIdentifierTree.createSignal(var.getName(), TypeCompiler.compileType(location.getType(), data.types), data);
 		data.values.put(location.getIndex(), v);

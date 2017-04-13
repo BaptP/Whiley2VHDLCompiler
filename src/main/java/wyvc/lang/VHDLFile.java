@@ -1,6 +1,6 @@
 package wyvc.lang;
 
-
+import wyvc.builder.CompilerLogger.CompilerException;
 
 /**
  * <p>
@@ -15,15 +15,10 @@ package wyvc.lang;
 public class VHDLFile implements LexicalElement {
 	public final Entity[] entities;
 
-	public VHDLFile() {
+	public VHDLFile() throws CompilerException {
 		Entity entity = new Entity("Bonjour");
 		entities = new Entity[] {entity};
-		try {
-			entity.addArchitectures(new Architecture(entity, "Behavioural"));
-		} catch (VHDLException e) {
-			e.printStackTrace();
-			e.info();
-		}
+		entity.addArchitectures(new Architecture(entity, "Behavioural"));
 	}
 
 	public VHDLFile(Entity[] entities) {

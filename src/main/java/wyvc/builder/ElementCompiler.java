@@ -23,14 +23,14 @@ import wyvc.lang.Entity;
 import wyvc.lang.Expression.TypesMismatchException;
 import wyvc.lang.Interface;
 import wyvc.lang.TypedValue;
-import wyvc.lang.LexicalElement.VHDLException;
+import wyvc.lang.LexicalElement.VHDLError;
 import wyvc.lang.Statement.ConcurrentStatement;
 import wyvc.lang.Statement.StatementGroup;
 import wyvc.lang.Statement.SignalAssignment;
 import wyvc.lang.TypedValue.Port;
 import wyvc.lang.TypedValue.Signal;
 import wyvc.lang.TypedValue.Port.Mode;
-import wyvc.lang.TypedValue.PortException;
+import wyvc.lang.TypedValue.PortError;
 
 public class ElementCompiler {
 	///////////////////////////////////////////////////////////////////////
@@ -39,7 +39,7 @@ public class ElementCompiler {
 
 	public static interface TypedIdentifierTree extends Tree<TypedIdentifierTree,TypedValue> {
 		public int getAssignmentsNumber();
-		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortException;
+		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortError;
 		public TypeTree getType();
 		public String getIdent();
 
@@ -116,7 +116,7 @@ public class ElementCompiler {
 		}
 
 		@Override
-		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortException {
+		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortError {
 			checkIdenticalStructure(expression);
 			++assignmentsNb;
 			if (assignmentsNb != 1) {
@@ -160,14 +160,14 @@ public class ElementCompiler {
 		}
 
 		@Override
-		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortException {
+		public StatementGroup assign(ExpressionTree expression) throws TreeStructureException, TypesMismatchException, PortError {
 			checkIdenticalStructure(expression);
 			++assignmentsNb;
 			if (assignmentsNb != 1)
 				for (Pair<String, TypedIdentifierTree> p : getComponents())
 					p.second = TypedIdentifierTree.createSignal(ident+"_"+assignmentsNb+"_"+p.first, p.second.getType(), data);
 			StatementGroup st = new StatementGroup(new ConcurrentStatement[0]);
-			for (Pair<TypedIdentifierTree, ExpressionTree> p : Utils.join(Utils.takeSecond(getComponents()), Utils.takeSecond(expression.getComponents())))
+			for (Pair<TypedIdentifierTree, ExpressionTree> p : Utils.gather(Utils.takeSecond(getComponents()), Utils.takeSecond(expression.getComponents())))
 				st = st.concat(p.first.assign(p.second));
 			return st;
 
@@ -194,7 +194,7 @@ public class ElementCompiler {
 
 
 
-	public static Entity compileEntity(FunctionOrMethod function, CompilationData data) throws VHDLException, VHDLCompilationException{
+	public static Entity compileEntity(FunctionOrMethod function, CompilationData data) throws VHDLError, VHDLCompilationException{
 		data.entityReset();
 		InterfacePattern interface_ = compileInterface(function.name(), function.type(), data);
 		Entity entity =  new Entity(

@@ -4,14 +4,16 @@ import static wyvc.lang.LexicalElement.stringFromStream;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
-import wycc.util.Pair;
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.lang.TypedValue.Port;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.lang.TypedValue.Signal;
 import wyvc.lang.TypedValue.Variable;
-import wyvc.lang.TypedValue.PortException;
+import wyvc.lang.TypedValue.PortError;
 import wyvc.lang.Expression.TypesMismatchException;
+import wyvc.utils.Pair;
 
 public interface Statement extends LexicalElement {
 
@@ -64,11 +66,11 @@ public interface Statement extends LexicalElement {
 			return stringFromStream(this);
 		}
 
-		public SignalAssignment(Signal dest, Expression expr) throws TypesMismatchException, PortException {
+		public SignalAssignment(Signal dest, Expression expr) throws CompilerException {
 			if (!dest.type.equals(expr.getType()))
-				throw new TypesMismatchException(SignalAssignment.class, dest.type, expr.getType());
+				throw new CompilerException(new TypesMismatchException(SignalAssignment.class, dest.type, expr.getType()));
 			if (dest instanceof Port && ((Port) dest).mode == Mode.IN)
-				throw new PortException(SignalAssignment.class, (Port)dest);
+				throw new CompilerException(new PortError(SignalAssignment.class, (Port)dest));
 			this.dest = dest;
 			this.expr = expr;
 		}
@@ -88,9 +90,9 @@ public interface Statement extends LexicalElement {
 			return stringFromStream(this);
 		}
 
-		public VariableAssignment(Variable dest, Expression expr) throws TypesMismatchException, PortException {
+		public VariableAssignment(Variable dest, Expression expr) throws CompilerException {
 			if (!dest.type.equals(expr.getType()))
-				throw new TypesMismatchException(SignalAssignment.class, dest.type, expr.getType());
+				throw new CompilerException(new TypesMismatchException(SignalAssignment.class, dest.type, expr.getType()));
 			this.dest = dest;
 			this.expr = expr;
 		}
@@ -115,7 +117,7 @@ public interface Statement extends LexicalElement {
 			for (int k = 0; k < ports.length; ++k)
 				connexions.add(new Pair<>(component.interface_.ports[k], ports[k]));
 			t.n(connexions, (Pair<Port, Signal> p, Token to)
-				-> to.n(p.first().ident).align().n(" => ").n(p.second().ident), ",\n");
+				-> to.n(p.first.ident).align().n(" => ").n(p.second.ident), ",\n");
 			t.dedent().endLine().n(")").semiColon();
 		}
 
@@ -146,5 +148,32 @@ public interface Statement extends LexicalElement {
 		}
 	}
 
+
+	public static class ConditionalSignalAssignment implements ConcurrentStatement {
+		public final Signal signal;
+		public final List<Pair<Expression, Expression>> cond;
+		public final Expression defaultExpr;
+
+		public ConditionalSignalAssignment(Signal signal, List<Pair<Expression, Expression>> cond, Expression defaultExpr) {
+			this.signal = signal;
+			this.cond = cond;
+			this.defaultExpr = defaultExpr;
+		}
+
+		@Override
+		public void addTokens(Token t) {
+			t.n(signal.ident).n(" <= ");
+			if (cond.size()!=1)
+				t.endLine();
+			String esp = cond.size() == 1 ? "" : "    ";
+			t.n(cond, (Pair<Expression, Expression> p, Token to) -> to.n(esp).align().n(p.first).align().n(" when ").n(p.second).align().n(" else "), "\n");
+			t.n(defaultExpr).endLine();
+		}
+
+		@Override
+		public String toString(){
+			return stringFromStream(this);
+		}
+	}
 
 }

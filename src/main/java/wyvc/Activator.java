@@ -25,10 +25,8 @@ public class Activator implements Module.Activator {
 		}
 
 		@Override
-		public VHDLFile read(Path.Entry<VHDLFile> e, InputStream input)
-				throws IOException {
-			//ClassFileReader reader = new ClassFileReader(input);
-			return new VHDLFile();//reader.readClass();
+		public VHDLFile read(Path.Entry<VHDLFile> e, InputStream input) throws IOException {
+			return null; // TODO Nécessaire ?
 		}
 
 		@Override

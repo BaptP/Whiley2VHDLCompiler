@@ -3,6 +3,7 @@ package wyvc.lang;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
+import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.io.TextualOutputStream;
 import wyvc.io.Tokenisable;
 import wyvc.io.Tokenisable.Token.StartToken;
@@ -66,31 +67,28 @@ public interface LexicalElement extends Tokenisable {
 		}
 	}
 
-	public static abstract class VHDLException extends Exception {
-		private static final long serialVersionUID = -9053725943728710364L;
+	public static abstract class VHDLError extends CompilerError {
 		private final String elementName;
 
-		public VHDLException(Class<?> element) {
+		public VHDLError(Class<?> element) {
 			this.elementName = element.getSimpleName();
 		}
 
-		public final void info() {
-			System.err.println("VHDL error : " + elementName);
-			details();
+		public final String info() {
+			return "VHDL error : " + elementName + "\n" + details();
 		}
 
-		protected abstract void details();
+		protected abstract String details();
 	}
 
-	public static class UnsupportedException extends VHDLException {
-		private static final long serialVersionUID = 8137641416108743385L;
+	public static class UnsupportedException extends VHDLError {
 
 		public UnsupportedException(Class<?> element) {
 			super(element);
 		}
 
-		protected void details() {
-			System.err.println("    Unsupported feature");
+		protected String details() {
+			return "    Unsupported feature";
 		}
 	}
 }

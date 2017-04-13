@@ -30,7 +30,7 @@ import wyvc.builder.VHDLCompileTask.VHDLCompilationException;
 import wyvc.lang.Component;
 import wyvc.lang.Expression;
 import wyvc.lang.Expression.*;
-import wyvc.lang.LexicalElement.VHDLException;
+import wyvc.lang.LexicalElement.VHDLError;
 import wyvc.lang.Statement.ConcurrentStatement;
 import wyvc.lang.Statement.StatementGroup;
 import wyvc.lang.Statement.ComponentInstance;
@@ -71,7 +71,7 @@ public class ExpressionCompiler {
 	}
 
 	@SuppressWarnings("unchecked")
-	public ExpressionTree compile(Location<?> location) throws VHDLException, VHDLCompilationException {
+	public ExpressionTree compile(Location<?> location) throws VHDLError, VHDLCompilationException {
 		Bytecode bytecode = location.getBytecode();
 		if (bytecode instanceof VariableAccess)
 			return compileVariableAccess((Location<VariableAccess>) location);
@@ -86,7 +86,7 @@ public class ExpressionCompiler {
 		throw new UnsupportedException(bytecode.getClass());
 	}
 
-	public static ExpressionTree compileIdentifierAccess(TypedIdentifierTree id) throws VHDLException {
+	public static ExpressionTree compileIdentifierAccess(TypedIdentifierTree id) throws VHDLError {
 		if (id instanceof PrimitiveTypedIdentifier)
 			return new PrimitiveExpression(new Access(id.getValue()));
 		ArrayList<Pair<String,ExpressionTree>> acc = new ArrayList<>();
@@ -95,29 +95,12 @@ public class ExpressionCompiler {
 		return new CompoundExpression(acc);
 	}
 
-	private ExpressionTree compileVariableAccess(Location<VariableAccess> location) throws VHDLException {
+	private ExpressionTree compileVariableAccess(Location<VariableAccess> location) throws VHDLError {
 		assert(data.values.containsKey(location.getBytecode().getOperand(0)));
 		return compileIdentifierAccess(data.values.get(location.getBytecode().getOperand(0)));
 	}
 
-	private Expression operator(Location<Operator> location, Expression e1, Expression e2) throws VHDLException{
-		switch (location.getBytecode().kind()) {
-		case ADD:
-			return new Add(e1, e2);
-		case SUB:
-			return new Sub(e1, e2);
-		case BITWISEAND:
-		case AND:
-			return new And(e1, e2);
-		case BITWISEOR:
-		case OR:
-			return new Or (e1, e2);
-		case BITWISEXOR:
-			return new Xor(e1, e2);
-		default:
-			throw new UnsupportedException(Expression.class);
-		}
-	}
+
 
 	static public class BadOperatorArgumentStructureException extends VHDLCompilationException {
 		private static final long serialVersionUID = 2495210249219832612L;
@@ -134,7 +117,7 @@ public class ExpressionCompiler {
 		}
 	}
 
-	private ExpressionTree compileOperator(Location<Operator> location) throws VHDLException, VHDLCompilationException {
+	private ExpressionTree compileOperator(Location<Operator> location) throws VHDLError, VHDLCompilationException {
 		if (location.getBytecode().kind() == OperatorKind.RECORDCONSTRUCTOR) {
 			int k = 0;
 			ArrayList<Pair<String, ExpressionTree>> fields = new ArrayList<>();
@@ -151,11 +134,11 @@ public class ExpressionCompiler {
 		return new PrimitiveExpression(operator(location, e1.getValue(), e2.getValue()));
 	}
 
-	private ExpressionTree compileConst(Location<Const> location) throws VHDLException, UnsupportedTypeException, NominalTypeException {
+	private ExpressionTree compileConst(Location<Const> location) throws VHDLError, UnsupportedTypeException, NominalTypeException {
 		return new PrimitiveExpression(new Value(TypeCompiler.compileType(location.getType(), data.types).getValue(), location.getBytecode().constant().toString()));
 	}
 
-	public ArrayList<ExpressionTree> compileInvoke(Location<Invoke> location) throws VHDLException, VHDLCompilationException {
+	public ArrayList<ExpressionTree> compileInvoke(Location<Invoke> location) throws VHDLError, VHDLCompilationException {
 		String fct = location.getBytecode().name().name();
 		if (! data.components.containsKey(fct)) {
 			InterfacePattern in = ElementCompiler.compileInterface(fct, location.getBytecode().type(), data);
@@ -188,7 +171,7 @@ public class ExpressionCompiler {
 	}
 
 
-	public ExpressionTree compileFieldLoad(Location<FieldLoad> location) throws VHDLException, VHDLCompilationException {
+	public ExpressionTree compileFieldLoad(Location<FieldLoad> location) throws VHDLError, VHDLCompilationException {
 		ExpressionTree t = compile(location.getOperand(0));
 		return t.getComponent(location.getBytecode().fieldName());
 	}

@@ -1,37 +1,32 @@
 package wyvc.builder;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import wyvc.builder.VHDLCompileTask.VHDLCompilationException;
+import wyvc.builder.CompilerLogger.CompilerError;
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.utils.Pair;
 
 public final class LexicalElementTree {
-	static class TreeStructureException extends VHDLCompilationException {
-		private static final long serialVersionUID = 3351421359541042141L;
+	static class TreeStructureError extends CompilerError {
 		private final Tree<?,?> expected;
 		private final Tree<?,?> encountered;
 
-		public TreeStructureException(Tree<?,?> expected, Tree<?,?> encountered) {
+		public TreeStructureError(Tree<?,?> expected, Tree<?,?> encountered) {
 			this.expected = expected;
 			this.encountered = encountered;
 		}
 
 		@Override
-		public void details() {
-			System.err.println("    Elements structure incoherent");
-			System.err.println("    Expected :    *");
-			expected.printStructure(System.err, "                 ");
-			System.err.println("    Encountered : *");
-			encountered.printStructure(System.err, "                 ");
-
+		public String info() {
+			return "Tree structures incoherent\n"+
+					" Expected :    *\n"+expected.toString("             ")+
+					" Encountered : *\n"+encountered.toString("             ");
 		}
 	}
 
-	static class TreeComponentException extends VHDLCompilationException {
-		private static final long serialVersionUID = 1678182755447780658L;
+	static class TreeComponentException extends CompilerError {
 		private final String name;
 		private final Tree<?,?> tree;
 
@@ -41,10 +36,9 @@ public final class LexicalElementTree {
 		}
 
 		@Override
-		public void details() {
-			System.err.println("    No such component : "+name);
-			System.err.println("    in : "+tree);
-			tree.printStructure(System.err, "          ");
+		public String info() {
+			return "No such component : "+name+"in\n"+
+					"  "+tree+"\n"+tree.toString("  ");
 		}
 	}
 
@@ -55,9 +49,9 @@ public final class LexicalElementTree {
 		public default int getComponentNumber()	{
 			return getComponents().size();
 		}
-		public default <S extends Tree<S,U>,U> void checkIdenticalStructure(Tree<S,U> other) throws TreeStructureException {
+		public default <S extends Tree<S,U>,U> void checkIdenticalStructure(Tree<S,U> other) throws CompilerException {
 			if (!isStructuredAs(other))
-				throw new TreeStructureException(this, other);
+				throw new CompilerException(new TreeStructureError(this, other));
 		}
 		public default List<V> getValues() {
 			if (this instanceof Primitive<?,?>)
@@ -73,20 +67,31 @@ public final class LexicalElementTree {
 					return true;
 			return false;
 		}
-		public default T getComponent(String c) throws TreeComponentException {
+		public default T getComponent(String c) throws CompilerException {
 			for (Pair<String,T> p : getComponents())
 				if (p.first.equals(c))
 					return p.second;
-			throw new TreeComponentException(c, this);
+			throw new CompilerException(new TreeComponentException(c, this));
 		}
-		public default void printStructure(PrintStream s, String start) {
+		public default void printStructure(CompilerLogger logger, String start) {
 			List<Pair<String, T>> l = getComponents();
 			int m = l.size();
 			int k = 0;
 			for (Pair<String, T> p : l){
-				s.println(start + (k+++1 == m ? " └─ " : " ├─ ") + p.first);
-				p.second.printStructure(s,  start + " │ ");
+				logger.debug(start + (k+++1 == m ? " └─ " : " ├─ ") + p.first);
+				p.second.printStructure(logger,  start + " │ ");
 			}
+		}
+		public default String toString(String prefix) {
+			String a = "";
+			List<Pair<String, T>> l = getComponents();
+			int m = l.size();
+			int k = 0;
+			for (Pair<String, T> p : l){
+				a += prefix + (k+++1 == m ? " └─ " : " ├─ ") + p.first+"\n";
+				p.second.toString(prefix + " │ ");
+			}
+			return a;
 		}
 	}
 
@@ -113,7 +118,7 @@ public final class LexicalElementTree {
 	}
 
 	public static class Compound<T extends Tree<T,V>,V> implements Tree<T,V> {
-		private final List<Pair<String, T>> components;
+		protected final List<Pair<String, T>> components;
 		protected T parent = null;
 
 		public Compound(List<Pair<String, T>> components) {
@@ -140,57 +145,4 @@ public final class LexicalElementTree {
 			return true;
 		}
 	}
-
-
-//	public static <T extends Tree<T,?>, V extends Tree<V,?>> V convert(
-//			Tree<T,?> tree,
-//			Function<? super Primitive<T,?>, ? extends Primitive<V,?>> leaf) {
-//		if (tree instanceof Primitive<?,?>)
-//			return leaf.apply(tree);
-//		return new Utils.<Pair<String, T>,Pair<String, V>>convert(tree.getComponents(), (Pair<String, T> p) -> new Pair<String, V>(p.first, convert(p.second, leaf)));
-//	}
-
-
-//
-//
-//	///////////////////////////////////////////////////////////////////////
-//	//                            Signals                                //
-//	///////////////////////////////////////////////////////////////////////
-//
-//	public static interface SignalTree extends Tree<SignalTree,Signal> {
-//		public void assign(ExpressionTree expression);
-//
-//		public static SignalTree create(String ident, TypeTree t) {
-//			if (t instanceof PrimitiveType)
-//				return new PrimitiveSignal(new Signal(ident, t.getValue()));
-//			ArrayList<SignalTree> cmp = new ArrayList<>(t.getComponentNumber());
-//			for (Pair<String, TypeTree> p : t.getComponents())
-//				cmp.add(create(ident, p.second));
-//			return null;
-//		}
-//	}
-//
-//	public static class PrimitiveSignal extends Primitive<SignalTree,Signal> implements SignalTree {
-//		public PrimitiveSignal(Signal signal) {
-//			super(signal);
-//		}
-//
-//		@Override
-//		public void assign(ExpressionTree expression) {
-//
-//		}
-//	}
-//
-//	public static class CompoundSignal extends Compound<SignalTree,Signal> implements SignalTree {
-//		public CompoundSignal(List<Pair<String, SignalTree>> components) {
-//			super(components);
-//		}
-//
-//		@Override
-//		public void assign(ExpressionTree expression) {
-//
-//		}
-//	}
-
-
 }

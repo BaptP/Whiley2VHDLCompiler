@@ -1,7 +1,7 @@
 package wyvc.lang;
 
 import wyvc.lang.TypedValue.Signal;
-
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.lang.LexicalElement.NamedElement;
 import wyvc.lang.Statement.ConcurrentStatement;
 import wyvc.lang.TypedValue.Constant;
@@ -13,7 +13,7 @@ public class Architecture extends NamedElement {
 	public final Component[] components;
 	public /*final*/ ConcurrentStatement[] statements;
 
-	public Architecture(Entity entity, String ident) throws VHDLException {
+	public Architecture(Entity entity, String ident) throws CompilerException {
 		super(ident);
 		this.entity = entity;
 /*

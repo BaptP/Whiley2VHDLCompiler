@@ -79,20 +79,18 @@ public abstract class TypedValue implements LexicalElement {
 
 	}
 
-	public static class PortException extends VHDLException {
-		private static final long serialVersionUID = -3024890817632444811L;
 
+
+	public static class PortError extends VHDLError {
 		private final Port port;
 
-		public void details(){
-			System.err.print("    Bad port use : ");
-			if (port.mode == Port.Mode.IN)
-				System.err.println("Input port \""+port.ident+"\" cannot be written");
-			else
-				System.err.println("Output port \""+port.ident+"\" cannot be read");
+		@Override
+		protected String details() {
+			return "Bad port use : " + (port.mode == Port.Mode.IN ? "Input port \""+port.ident+"\" cannot be written"
+			                                                      : "Output port \""+port.ident+"\" cannot be read");
 		}
 
-		public PortException(Class<?> element, Port port) {
+		public PortError(Class<?> element, Port port) {
 			super(element);
 			this.port = port;
 		}

@@ -3,9 +3,10 @@ package wyvc.lang;
 
 import wyvc.lang.TypedValue.Port;
 import wyvc.lang.TypedValue.Port.Mode;
-import wyvc.lang.TypedValue.PortException;
+import wyvc.lang.TypedValue.PortError;
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.lang.Type.Signed;
-import wyvc.lang.Type.TypeException;
+import wyvc.lang.Type.TypeError;
 import wyvc.lang.Type.Unsigned;
 import wyvc.lang.Type.VectorType;
 
@@ -14,8 +15,7 @@ public interface Expression extends LexicalElement {
 	public Type getType();
 	public int getPrecedence();
 
-	public final class TypesMismatchException extends TypeException {
-		private static final long serialVersionUID = -2926759938972785709L;
+	public final class TypesMismatchException extends TypeError {
 		private final Type expected;
 
 		public TypesMismatchException(Class<?> element, Type expected, Type given) {
@@ -24,8 +24,8 @@ public interface Expression extends LexicalElement {
 		}
 
 		@Override
-		protected void typeExceptionDetails() {
-			System.err.println(expected.toString() + " expected");
+		protected String typeExceptionDetails() {
+			return expected + " expected";
 		}
 
 	}
@@ -79,11 +79,11 @@ public interface Expression extends LexicalElement {
 	}
 
 	public static abstract class LogicalBinaryOperation extends BinaryOperation {
-		public LogicalBinaryOperation(Expression arg1, String op, Expression arg2) throws TypesMismatchException {
+		public LogicalBinaryOperation(Expression arg1, String op, Expression arg2) throws CompilerException {
 				super(arg1, op, arg2, Precedence.LOGICAL_OP, getType(arg1.getType(), arg2.getType()));
 			}
 
-		private static final Type getType(Type t1, Type t2) throws TypesMismatchException{
+		private static final Type getType(Type t1, Type t2) throws CompilerException{
 			if (t1.equals(t2))
 				return t1;
 			if (t1 instanceof VectorType && t2 instanceof VectorType) {
@@ -92,58 +92,63 @@ public interface Expression extends LexicalElement {
 				if (vt1.isSameVectorType(vt2) && !(vt1.isAscendant()^vt2.isAscendant()))
 					return vt1.isAscendant() ? vt1.cloneType(0, Math.max(vt1.lenght(), vt2.lenght())-1)
 					                         : vt1.cloneType(Math.max(vt1.lenght(), vt2.lenght())-1, 0);
-				throw new TypesMismatchException(LogicalBinaryOperation.class, vt1, vt2);
+				throw new CompilerException(new TypesMismatchException(LogicalBinaryOperation.class, vt1, vt2));
 			}
-			throw new TypesMismatchException(LogicalBinaryOperation.class, t1, t2);
+			throw new CompilerException(new TypesMismatchException(LogicalBinaryOperation.class, t1, t2));
 		}
 	}
 
 	public static final class And extends LogicalBinaryOperation {
-		public And(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public And(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "and", arg2);
 		}
 	}
 
 	public static final class Nand extends LogicalBinaryOperation {
-		public Nand(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Nand(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "nand", arg2);
 		}
 	}
 
 	public static final class Or extends LogicalBinaryOperation {
-		public Or(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Or(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "or", arg2);
 		}
 	}
 
 	public static final class Nor extends LogicalBinaryOperation {
-		public Nor(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Nor(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "nor", arg2);
 		}
 	}
 
 	public static final class Xor extends LogicalBinaryOperation {
-		public Xor(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Xor(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "xor", arg2);
 		}
 	}
 
 	public static final class Xnor extends LogicalBinaryOperation {
-		public Xnor(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Xnor(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "xnor", arg2);
+		}
+	}
+
+	public static final class Eq extends LogicalBinaryOperation {
+		public Eq(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, "=", arg2);
 		}
 	}
 
 
 
 
-
 	public static abstract class AdditiveBinaryOperation extends BinaryOperation {
-		public AdditiveBinaryOperation(Expression arg1, String op, Expression arg2) throws TypesMismatchException {
+		public AdditiveBinaryOperation(Expression arg1, String op, Expression arg2) throws CompilerException {
 				super(arg1, op, arg2, Precedence.ADDITIVE_OP, getType(arg1.getType(), arg2.getType()));
 			}
 
-		private static final Type getType(Type t1, Type t2) throws TypesMismatchException{
+		private static final Type getType(Type t1, Type t2) throws CompilerException{
 			if (t1 instanceof Unsigned && t2 instanceof Unsigned &&
 					!(((Unsigned) t1).isAscendant() ^ ((Unsigned) t2).isAscendant())) {
 				Unsigned vt1 = (Unsigned) t1;
@@ -158,18 +163,18 @@ public interface Expression extends LexicalElement {
 				return vt1.isAscendant() ? new Signed(0, Math.max(vt1.lenght(), vt2.lenght())-1)
 				                         : new Signed(Math.max(vt1.lenght(), vt2.lenght())-1, 0);
 			}
-			throw new TypesMismatchException(LogicalBinaryOperation.class, t1, t2);
+			throw new CompilerException(new TypesMismatchException(LogicalBinaryOperation.class, t1, t2));
 		}
 	}
 
 	public static final class Add extends AdditiveBinaryOperation {
-		public Add(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Add(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "+", arg2);
 		}
 	}
 
 	public static final class Sub extends AdditiveBinaryOperation {
-		public Sub(Expression arg1, Expression arg2) throws TypesMismatchException {
+		public Sub(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "-", arg2);
 		}
 	}
@@ -215,11 +220,11 @@ public interface Expression extends LexicalElement {
 	public static class Access extends TypedElement implements Expression {
 		public final TypedValue value;
 
-		public Access(TypedValue value) throws PortException {
+		public Access(TypedValue value) throws CompilerException {
 			super(value.type);
 			this.value = value;
 			if (value instanceof Port && ((Port) value).mode == Mode.OUT)
-				throw new PortException(Access.class, (Port) value);
+				throw new CompilerException(new PortError(Access.class, (Port) value));
 		}
 
 		@Override

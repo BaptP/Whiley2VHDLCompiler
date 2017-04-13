@@ -1,36 +1,40 @@
 package wyvc.utils;
 
-import wyil.lang.Bytecode.Assign;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import wyil.lang.Bytecode.Assign;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
+import wyvc.builder.CompilerLogger;
+import wyvc.utils.CheckedFunctionalInterface.CheckedBiFunction;
+import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
 
 public class Utils {
-	public static void printLocation(Location<?> a, String n) {
-		System.out.println(n+a.toString());
+	public static void printLocation(CompilerLogger logger, Location<?> a, String n) {
+		logger.debug(n+a.toString());
 		for(Location<?> l : a.getOperands())
-			printLocation(l, n+" |  ");
+			printLocation(logger, l, n+" |  ");
 		if (a.getBytecode() instanceof Assign) {
 			for(Location<?> l : a.getOperandGroup(SyntaxTree.LEFTHANDSIDE))
-				printLocation(l, n+" |<-");
+				printLocation(logger, l, n+" |<-");
 			for(Location<?> l : a.getOperandGroup(SyntaxTree.RIGHTHANDSIDE))
-				printLocation(l, n+" |->");
+				printLocation(logger, l, n+" |->");
 		}
 	}
 
-	public static <S,T> T[] toArray(Collection<S> l, Function<S,T> f, T[] t) {
+	public static <S,T> T[] toArray(Collection<S> l, Function<? super S, ? extends T> f, T[] t) {
 		ArrayList<T> m = new ArrayList<>();
 		for (S e : l)
 			m.add(f.apply(e));
 		return m.toArray(t);
 	}
 
-	public static <S,T> List<Pair<S,T>> join(List<S> l1, List<T> l2) {
+	public static <S,T> List<Pair<S,T>> gather(List<S> l1, List<T> l2) {
 		int m = Math.min(l1.size(), l2.size());
 		ArrayList<Pair<S,T>> l = new ArrayList<>(m);
 		for (int k = 0; k < m; ++k)
@@ -52,7 +56,14 @@ public class Utils {
 		return n;
 	}
 
-	public static <S,T> List<T> convert(List<S> l, Function<S,T> f) {
+	public static <S,T> List<T> convert(List<S> l, Function<? super S, ? extends T> f) {
+		ArrayList<T> m = new ArrayList<>(l.size());
+		for (S s : l)
+			m.add(f.apply(s));
+		return m;
+	}
+
+	public static <S,T,E extends Exception> List<T> checkedConvert(List<S> l, CheckedFunction<? super S, ? extends T, E> f) throws E {
 		ArrayList<T> m = new ArrayList<>(l.size());
 		for (S s : l)
 			m.add(f.apply(s));
@@ -64,11 +75,19 @@ public class Utils {
 		return convert(l, (S s) -> (T) s);
 	}
 
-	public static <S,T> List<T> convertInd(List<S> l, Function<Pair<S,Integer>,T> f) {
+	public static <S,T> List<T> convert(List<S> l, BiFunction<? super S, ? super Integer, ? extends T> f) {
 		ArrayList<T> m = new ArrayList<>(l.size());
 		int k = 0;
 		for (S s : l)
-			m.add(f.apply(new Pair<S,Integer>(s,k++)));
+			m.add(f.apply(s,k++));
+		return m;
+	}
+
+	public static <S,T,E extends Exception> List<T> checkedConvert(List<S> l, CheckedBiFunction<? super S,? super Integer, ? extends T, E> f) throws E {
+		ArrayList<T> m = new ArrayList<>(l.size());
+		int k = 0;
+		for (S s : l)
+			m.add(f.apply(s, k++));
 		return m;
 	}
 }
