@@ -37,7 +37,7 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 		}
 		@Override
 		public String info() {
-			return "Compilation of recursive calls unsupported\n(Detected call loop stat in function "+call.funcName+")";
+			return "Compilation of recursive calls unsupported\n(Detected call loop start in function "+call.funcName+")";
 		}
 
 	}

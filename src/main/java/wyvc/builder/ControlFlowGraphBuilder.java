@@ -204,6 +204,7 @@ public final class ControlFlowGraphBuilder {
 			}
 
 			public PartialReturn completeReturn(PartialReturn rem) {
+				if (ret != null) return this;
 				if (tPart == null) tPart = rem;
 				else tPart.completeReturn(rem);
 				if (fPart == null) fPart = rem;

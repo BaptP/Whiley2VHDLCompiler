@@ -71,7 +71,7 @@ public class CompilerLogger {
 	private final PrintStream err;
 	private List<CompilerMessage> messages = new ArrayList<>();
 	private Map<CompilerMessageType, Integer> types = new HashMap<>();
-	private boolean debugOut = true;
+	private boolean debugOut = !true;
 
 	public CompilerLogger() {
 		err = System.err;
