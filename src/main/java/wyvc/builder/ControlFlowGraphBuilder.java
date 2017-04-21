@@ -40,8 +40,6 @@ import wyvc.builder.TypeCompiler.CompoundType;
 import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
-import wyvc.utils.CheckedFunctionalInterface.CheckedBiFunction;
-import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
 
 public final class ControlFlowGraphBuilder {
 
@@ -290,7 +288,7 @@ public final class ControlFlowGraphBuilder {
 			return type instanceof PrimitiveType ? new PrimitiveLabel(ident, graph.new LabelNode(ident, type,  input))
 			                                     : new CompoundLabel(ident, Utils.convert(type.getComponents(),
 			                                    	 (Pair<String, TypeTree> p) -> new Pair<String, LabelTree>(
-			                                    			 p.first, buildParameter(ident+"."+p.first, p.second, input))));
+			                                    			 p.first, buildParameter(ident+"_"+p.first, p.second, input))));
 		}
 
 		@SuppressWarnings("unchecked")
@@ -339,7 +337,7 @@ public final class ControlFlowGraphBuilder {
 			return expr instanceof PrimitiveNode<?> ? new PrimitiveLabel(ident, graph.new LabelNode(ident, expr.getValue()))
 			                                        : new CompoundLabel(ident, Utils.convert(expr.getComponents(),
 			                                        	(Pair<String, NodeTree<T>> p) -> new Pair<String, LabelTree>(
-			                                        			p.first, buildNamedValueHelper(ident+"."+p.first, p.second))));
+			                                        			p.first, buildNamedValueHelper(ident+"_"+p.first, p.second))));
 		}
 
 		private LabelTree buildNamedValue(String name, NodeTree<?> expr) {
@@ -352,7 +350,7 @@ public final class ControlFlowGraphBuilder {
 //			debug("Assign Name");
 //			Utils.printLocation(logger, field, "o ");
 			if (bytecode instanceof Bytecode.FieldLoad)
-				return buildAssignName(field.getOperand(0)).transformSecond((String a) -> a+"."+((Bytecode.FieldLoad) bytecode).fieldName());
+				return buildAssignName(field.getOperand(0)).transformSecond((String a) -> a+"_"+((Bytecode.FieldLoad) bytecode).fieldName());
 			if (bytecode instanceof Bytecode.VariableDeclaration)
 				return new Pair<Location<Bytecode.VariableDeclaration>,String>(
 						(Location<Bytecode.VariableDeclaration>) field,
@@ -383,11 +381,7 @@ public final class ControlFlowGraphBuilder {
 			Bytecode bytecode = field.getBytecode();
 			if (bytecode instanceof Bytecode.FieldLoad)
 				return recoverIdent(field.getOperand(0)).transformSecondChecked(
-					new CheckedFunction<LabelTree, LabelTree, CompilerException>() {
-						@Override
-						public LabelTree apply(LabelTree s) throws CompilerException {
-							return (LabelTree) s.getComponent(((Bytecode.FieldLoad) bytecode).fieldName());
-						}});
+					(LabelTree l) -> (LabelTree) l.getComponent(((Bytecode.FieldLoad) bytecode).fieldName()));
 			if (bytecode instanceof Bytecode.VariableDeclaration)
 				return new Pair<Integer, LabelTree>(field.getIndex(), vars.get(field.getIndex()));
 			if (bytecode instanceof Bytecode.VariableAccess)
@@ -464,7 +458,7 @@ public final class ControlFlowGraphBuilder {
 			throw new CompilerException(new WyilUnsupportedCompilerError(op));
 		}
 
-		private NodeTree<?> buildConst(Location<Const> val) {
+		private NodeTree<?> buildConst(Location<Const> val) throws CompilerException {
 			return new PrimitiveNode<DataNode>(graph.new ConstNode(val));
 		}
 
@@ -478,9 +472,7 @@ public final class ControlFlowGraphBuilder {
 				return end(buildFieldLoad((Location<FieldLoad>) location));
 			if (bytecode instanceof VariableAccess)
 				return end(buildVariableAccess((Location<VariableAccess>) location));
-			assert(false);
-			System.out.println("############### OUPS access #############");
-			return end(null);
+			throw new CompilerException(new WyilUnsupportedCompilerError(location));
 		}
 
 		private LabelTree buildFieldLoad(Location<FieldLoad> field) throws CompilerException {
@@ -501,14 +493,12 @@ public final class ControlFlowGraphBuilder {
 		}
 
 		private List<LabelTree> buildInvoke(Location<Invoke> call) throws CompilerException {
-			FuncCallNode c = graph.new FuncCallNode(call, Utils.checkedConvert(Arrays.asList(call.getOperands()),
-				new CheckedBiFunction<Location<?>, Integer, LabelNode, CompilerException>(){
-					@Override
-					public LabelNode apply(Location<?> s, Integer t) throws CompilerException {
-						return getEnclosingLabel("arg_"+t, buildExpression(s));
-					}
-			}));
-			return Utils.convert(Arrays.asList(call.getBytecode().type().returns()),
+			FuncCallNode c = graph.new FuncCallNode(call,
+				Utils.checkedConvert(
+					Arrays.asList(call.getOperands()),
+				    (Location<?> l, Integer t) -> getEnclosingLabel("arg_"+t, buildExpression(l))));
+			return Utils.checkedConvert(
+				Arrays.asList(call.getBytecode().type().returns()),
 				(Type t, Integer i) -> t instanceof PrimitiveType ? new PrimitiveLabel(graph.new LabelNode("ret_"+i, t, c))
 				                                                  : buildParameter("ret_"+i, TypeCompiler.compileType(logger, t, types), c));
 

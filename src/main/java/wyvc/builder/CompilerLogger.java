@@ -96,7 +96,7 @@ public class CompilerLogger {
 
 	public CompilerLogger addMessage(CompilerMessage message) {
 		messages.add(message);
-		err.println("┌─── "+message.type.name() + " ──────────────────────────────────────────────────".substring(0, 40-message.type.name().length()));
+		err.println("┌─── "+message.type.name() + " ────────────────────────────────────────────────────────────────".substring(0, 60-message.type.name().length()));
 		for (String i : message.info().split("\n"))
 			err.println("│"+i);
 		types.put(message.type, types.getOrDefault(message.type, 0) + 1);

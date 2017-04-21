@@ -38,7 +38,9 @@ public interface Tokenisable {
 		protected abstract void writeToken() throws IOException;
 
 		public void write(TextualOutputStream output) throws IOException {
+			//System.out.print("Token " + this+"... ");
 			write(new SharedData(output));
+			//System.out.println(" ok");
 		}
 
 		protected void write(SharedData data) throws IOException {
@@ -81,6 +83,10 @@ public interface Tokenisable {
 		}
 
 		public final <T extends Tokenisable> Token n(List<T> list, String end) {
+			/*System.out.println("LIST "+list.size());
+			for (T t : list)
+				System.out.print(t==null ? "NULL" : t.getClass()+" - ");
+			System.out.println("");*/
 			return n(list, (T e,Token t) -> e.addTokens(t), end);
 		}
 
@@ -130,6 +136,10 @@ public interface Tokenisable {
 
 		public final Token align() {
 			return n(new AlignToken());
+		}
+
+		public final Token merge() {
+			return n(new MergeToken());
 		}
 
 
@@ -245,6 +255,25 @@ public interface Tokenisable {
 				if (index == lengths.size() -1)
 					lengths.add(0);
 				return super.alignement(0, lengths, index+1);
+			}
+		}
+
+		private static class MergeToken extends Token {
+			@Override
+			protected void writeToken() throws IOException {
+				data.index--;
+				if (data.index >= 0 && data.index < data.align.size())
+					data.output.fill(data.output.getLineStart() + data.align.get(data.index));
+				data.index++;
+			}
+
+			@Override
+			public Token alignement(int pos, ArrayList<Integer> lengths, int index) {
+				if (index == lengths.size() -2)
+					lengths.add(0);
+				if (index == lengths.size() -1)
+					lengths.add(0);
+				return super.alignement(0, lengths, index+2);
 			}
 		}
 

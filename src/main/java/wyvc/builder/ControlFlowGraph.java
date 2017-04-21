@@ -2,12 +2,13 @@ package wyvc.builder;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import wyil.lang.Bytecode;
 import wyil.lang.SyntaxTree.Location;
 import wyil.lang.Type;
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.TypeCompiler.TypeTree;
+import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
 import wyvc.utils.GraphNode;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
@@ -42,7 +43,7 @@ public class ControlFlowGraph {
 		return b.toString();
 	}
 
-	TypeTree getType(Type t) {
+	TypeTree getType(Type t) throws CompilerException {
 		if (!types.containsKey(t))
 			types.put(t, TypeCompiler.compileType(logger, t, nominalTypes));
 		return types.get(t);
@@ -74,9 +75,7 @@ public class ControlFlowGraph {
 			return Collections.emptyList();
 		}
 
-		public abstract DataNode duplicate(List<DataNode> sources);
-
-		//public abstract DataNode duplicate();
+		public abstract DataNode duplicate(List<DataNode> sources) throws CompilerException;
 	}
 
 	public class WyilSection {
@@ -90,19 +89,19 @@ public class ControlFlowGraph {
 			this.invokes = invokes;
 		}
 
-		public WyilSection duplicate() {
+		public WyilSection duplicate() throws CompilerException {
 			Map<DataNode, DataNode> duplication = new HashMap<>();
-			Function<DataNode, DataNode> dpl = (DataNode d) -> duplicate(d, duplication, null);
+			CheckedFunction<DataNode, DataNode, CompilerException> dpl = (DataNode d) -> duplicate(d, duplication, null);
 			return new WyilSection(
-				Utils.convert(Utils.convert(inputs, dpl)),
-				Utils.convert(Utils.convert(outputs, dpl)),
-				Utils.convert(Utils.convert(invokes, dpl)));
+				Utils.convert(Utils.checkedConvert(inputs, dpl)),
+				Utils.convert(Utils.checkedConvert(outputs, dpl)),
+				Utils.convert(Utils.checkedConvert(invokes, dpl)));
 		}
 
-		private DataNode duplicate(DataNode d, Map<DataNode, DataNode> duplication, DataNode p) {
+		private DataNode duplicate(DataNode d, Map<DataNode, DataNode> duplication, DataNode p) throws CompilerException {
 			if (duplication.containsKey(d))
 				return duplication.get(d);
-			DataNode c = d.duplicate(Utils.convert(d.sources, (DataNode s) -> duplicate(s, duplication, d)));
+			DataNode c = d.duplicate(Utils.checkedConvert(d.sources, (DataNode n) -> duplicate(n, duplication, null)));
 			duplication.put(d, c);
 			for (DataNode t : d.targets)
 				if (t != p)
@@ -111,8 +110,8 @@ public class ControlFlowGraph {
 		}
 	}
 
-	public final class LabelNode extends DataNode { // TODO Garrantir 1 source max
-		public LabelNode(String ident, Type type, List<DataNode> sources) {
+	public class LabelNode extends DataNode { // TODO Garrantir 1 source max ?
+		public LabelNode(String ident, Type type, List<DataNode> sources) throws CompilerException {
 			super(ident, getType(type), sources);
 		}
 		public LabelNode(String ident, TypeTree type, List<DataNode> sources) {
@@ -122,14 +121,14 @@ public class ControlFlowGraph {
 		public LabelNode(String ident, DataNode source) {
 			super(ident, source.type, Collections.singletonList(source));
 		}
-		public LabelNode(String ident, Type type, DataNode source) {
+		public LabelNode(String ident, Type type, DataNode source) throws CompilerException {
 			super(ident, getType(type), Collections.singletonList(source));
 		}
 		public LabelNode(String ident, TypeTree type, DataNode source) {
 			super(ident, type, Collections.singletonList(source));
 		}
 
-		public LabelNode(String ident, Type type) {
+		public LabelNode(String ident, Type type) throws CompilerException {
 			super(ident, getType(type), Collections.emptyList());
 		}
 		public LabelNode(String ident, TypeTree type) {
@@ -154,7 +153,7 @@ public class ControlFlowGraph {
 	public abstract class WyilNode<T extends Bytecode> extends DataNode {
 		public final Location<T> location;
 
-		public WyilNode(Location<T> location, List<DataNode> sources) {
+		public WyilNode(Location<T> location, List<DataNode> sources) throws CompilerException {
 			super(ControlFlowGraph.toString(location.getBytecode()),
 				getType(location.getType()), sources);
 			this.location = location;
@@ -175,19 +174,19 @@ public class ControlFlowGraph {
 
 
 	public abstract class InstructionNode<T extends Bytecode> extends WyilNode<T> {
-		public InstructionNode(Location<T> location, List<DataNode> sources) {
+		public InstructionNode(Location<T> location, List<DataNode> sources) throws CompilerException {
 			super(location, sources);
 		}
 
 	}
 
 	public final class ConstNode extends InstructionNode<Bytecode.Const> {
-		public ConstNode(Location<Bytecode.Const> decl) {
+		public ConstNode(Location<Bytecode.Const> decl) throws CompilerException {
 			super(decl, Collections.emptyList());
 		}
 
 		@Override
-		public DataNode duplicate(List<DataNode> sources) {
+		public DataNode duplicate(List<DataNode> sources) throws CompilerException {
 			return new ConstNode(location);
 		}
 	}
@@ -195,13 +194,13 @@ public class ControlFlowGraph {
 	public final class UnaOpNode extends InstructionNode<Bytecode.Operator> {
 		public final DataNode op;
 
-		public UnaOpNode(Location<Bytecode.Operator> binOp, DataNode op) {
+		public UnaOpNode(Location<Bytecode.Operator> binOp, DataNode op) throws CompilerException {
 			super(binOp, Arrays.asList(op));
 			this.op = op;
 		}
 
 		@Override
-		public DataNode duplicate(List<DataNode> sources) {
+		public DataNode duplicate(List<DataNode> sources) throws CompilerException {
 			return new UnaOpNode(location, sources.get(0));
 		}
 	}
@@ -210,7 +209,7 @@ public class ControlFlowGraph {
 		public final DataNode op1;
 		public final DataNode op2;
 
-		public BinOpNode(Location<Bytecode.Operator> binOp, DataNode op1, DataNode op2) {
+		public BinOpNode(Location<Bytecode.Operator> binOp, DataNode op1, DataNode op2) throws CompilerException {
 			super(binOp, Arrays.asList(op1, op2));
 			this.op1 = op1;
 			this.op2 = op2;
@@ -222,7 +221,7 @@ public class ControlFlowGraph {
 		}
 
 		@Override
-		public DataNode duplicate(List<DataNode> sources) {
+		public DataNode duplicate(List<DataNode> sources) throws CompilerException {
 			return new BinOpNode(location, sources.get(0), sources.get(1));
 		}
 	}
@@ -236,7 +235,7 @@ public class ControlFlowGraph {
 			funcName = call.getBytecode().name().name();
 		}
 
-		public void inline(WyilSection func) {
+		public void inline(WyilSection func) throws CompilerException {
 			WyilSection cfunc = func.duplicate();
 			for (Pair<DataNode,LabelNode> a : Utils.gather(sources, cfunc.inputs)){
 				a.first.targets.replaceAll((DataNode n) -> n == this ? a.second : n);
@@ -257,9 +256,12 @@ public class ControlFlowGraph {
 	}
 
 
-	public final class IfNode extends WyilNode<Bytecode.If> {
+	public final class IfNode extends LabelNode {
+		public final Location<Bytecode.If> location;
+
 		public IfNode(Location<Bytecode.If> ifs, DataNode cond) {
-			super(ifs, cond.type, Collections.singletonList(cond));
+			super("if_cond", cond.type, Collections.singletonList(cond));
+			location = ifs;
 		}
 
 		@Override

@@ -112,7 +112,7 @@ public interface Statement extends LexicalElement {
 
 		@Override
 		public void addTokens(Token t) {
-			t.n(ident).n(": ").n(component.ident).n(" port map (").indent().endLine();
+			t.merge().n(ident).n(": ").n(component.ident).n(" port map (").indent().endLine();
 			ArrayList<Pair<Port, Signal>> connexions = new ArrayList<>();
 			for (int k = 0; k < ports.length; ++k)
 				connexions.add(new Pair<>(component.interface_.ports[k], ports[k]));
@@ -162,12 +162,17 @@ public interface Statement extends LexicalElement {
 
 		@Override
 		public void addTokens(Token t) {
-			t.n(signal.ident).n(" <= ");
+			t.n(signal.ident).align().n(" <= ");
 			if (cond.size()!=1)
 				t.endLine();
+			/*
 			String esp = cond.size() == 1 ? "" : "    ";
 			t.n(cond, (Pair<Expression, Expression> p, Token to) -> to.n(esp).align().n(p.first).align().n(" when ").n(p.second).align().n(" else "), "\n");
-			t.n(defaultExpr).endLine();
+			t.n("    ").n(defaultExpr).endLine();
+			/*/
+			t.endLine().n(cond, (Pair<Expression, Expression> p, Token to) -> to.n("    ").align().n(p.first).align().n(" when ").n(p.second).align().n(" else "), "\n");
+			t.endLine().n("    ").n(defaultExpr).endLine();
+			//*/
 		}
 
 		@Override
@@ -176,4 +181,10 @@ public interface Statement extends LexicalElement {
 		}
 	}
 
+	public static class NotAStatement implements ConcurrentStatement, SequentialStatement {
+		@Override
+		public void addTokens(Token t) {
+		}
+
+	}
 }

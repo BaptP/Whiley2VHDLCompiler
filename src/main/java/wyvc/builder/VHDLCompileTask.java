@@ -14,7 +14,14 @@ import wyfs.lang.Path;
 import wyfs.lang.Path.Entry;
 import wyfs.lang.Path.Root;
 import wyil.lang.WyilFile;
-import wyvc.builder.CompilationStep.CompilationFront;
+import wyvc.builder.compilationSteps.CompilationStep.CompilationFront;
+import wyvc.builder.compilationSteps.CompileFunctionsStep;
+import wyvc.builder.compilationSteps.CompileTypesStep;
+import wyvc.builder.compilationSteps.ExportFileStep;
+import wyvc.builder.compilationSteps.InliningStep;
+import wyvc.builder.compilationSteps.ParsingStep;
+import wyvc.builder.compilationSteps.ProducingVHDLStep;
+import wyvc.builder.compilationSteps.RecursionAnalysisStep;
 
 public class VHDLCompileTask implements Build.Task {
 
@@ -48,11 +55,13 @@ public class VHDLCompileTask implements Build.Task {
 	public VHDLCompileTask(Build.Project project) {
 		this.project = project;
 		compilation.
-		setNextStep(new CompilationStep.ParsingStep()).
-		setNextStep(new CompilationStep.CompileTypesStep()).
-		setNextStep(new CompilationStep.CompileFunctionsStep()).
-		setNextStep(new CompilationStep.InliningStep()).
-		setNextStep(new CompilationStep.ProducingVHDLStep());
+			setNextStep(new ParsingStep()).
+			setNextStep(new CompileTypesStep()).
+			setNextStep(new CompileFunctionsStep()).
+			setNextStep(new RecursionAnalysisStep()).
+			setNextStep(new InliningStep()).
+			setNextStep(new ProducingVHDLStep()).
+			setNextStep(new ExportFileStep());
 	}
 
 	public Project project() {

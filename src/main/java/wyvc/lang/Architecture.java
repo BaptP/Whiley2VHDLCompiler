@@ -43,6 +43,7 @@ public class Architecture extends NamedElement {
 		signals = new Signal[0];
 		constants = new Constant[0];
 		components = new Component[0];
+		statements = new ConcurrentStatement[0];
 	}
 
 	public Architecture(Entity entity, String ident, Signal[] signals, Constant[] constants,

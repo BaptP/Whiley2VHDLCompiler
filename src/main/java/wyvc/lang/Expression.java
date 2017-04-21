@@ -134,9 +134,51 @@ public interface Expression extends LexicalElement {
 		}
 	}
 
-	public static final class Eq extends LogicalBinaryOperation {
+	public static abstract class ComparisonOperation extends BinaryOperation {
+		public ComparisonOperation(Expression arg1, String op, Expression arg2) throws CompilerException {
+				super(arg1, op, arg2, Precedence.COMPARISON, getType(arg1.getType(), arg2.getType()));
+			}
+
+		private static final Type getType(Type t1, Type t2) throws CompilerException{
+			if (t1.equals(t2))
+				return Type.Boolean;
+			throw new CompilerException(new TypesMismatchException(ComparisonOperation.class, t1, t2));
+		}
+	}
+
+	public static final class Eq extends ComparisonOperation {
 		public Eq(Expression arg1, Expression arg2) throws CompilerException {
 			super(arg1, "=", arg2);
+		}
+	}
+
+	public static final class Ne extends ComparisonOperation {
+		public Ne(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, "/=", arg2);
+		}
+	}
+
+	public static final class Gt extends ComparisonOperation {
+		public Gt(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, ">", arg2);
+		}
+	}
+
+	public static final class Ge extends ComparisonOperation {
+		public Ge(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, ">=", arg2);
+		}
+	}
+
+	public static final class Lt extends ComparisonOperation {
+		public Lt(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, "<", arg2);
+		}
+	}
+
+	public static final class Le extends ComparisonOperation {
+		public Le(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, "<=", arg2);
 		}
 	}
 

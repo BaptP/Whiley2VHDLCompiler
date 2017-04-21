@@ -8,6 +8,7 @@ import wyvc.utils.Pair;
 import wyvc.utils.Utils;
 import wyvc.builder.LexicalElementTree.Tree;
 import wyvc.builder.CompilerLogger.CompilerError;
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.LexicalElementTree.Compound;
 import wyvc.builder.LexicalElementTree.Primitive;
 import wyvc.lang.Type;
@@ -84,7 +85,7 @@ public class TypeCompiler {
 
 
 
-	public static TypeTree compileType(CompilerLogger logger, wyil.lang.Type type, Map<String, TypeTree> types) {
+	public static TypeTree compileType(CompilerLogger logger, wyil.lang.Type type, Map<String, TypeTree> types) throws CompilerException {
 		if (type == wyil.lang.Type.T_INT)
 			return SIGNED;
 		if (type == wyil.lang.Type.T_BOOL)
@@ -101,9 +102,9 @@ public class TypeCompiler {
 		if (type instanceof wyil.lang.Type.Nominal) {
 			String t = ((wyil.lang.Type.Nominal) type).name().name();
 			if (!types.containsKey(t))
-				return logger.addMessage(new NominalTypeCompilerError(t), null);
+				throw new CompilerException(new NominalTypeCompilerError(t));
 			return types.get(t);
 		}
-		return logger.addMessage(new UnsupportedTypeCompilerError(type), null);
+		throw new CompilerException(new UnsupportedTypeCompilerError(type));
 	}
 }

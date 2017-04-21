@@ -32,6 +32,13 @@ public class Entity extends NamedElement {
 		this.interface_ = interface_;
 	}
 
+
+	public Entity(String ident, Interface interface_, Architecture architecture){
+		super(ident);
+		this.interface_ = interface_;
+		addArchitectures(architecture);
+	}
+
 	@Override
 	public void addTokens(Token t) {
 		t.comment().fill(60, '-').endLine();

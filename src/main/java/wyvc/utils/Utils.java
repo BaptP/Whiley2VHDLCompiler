@@ -90,4 +90,15 @@ public class Utils {
 			m.add(f.apply(s, k++));
 		return m;
 	}
+
+	public static <S> List<S> concat(List<S> l1, List<S> l2) {
+		List<S> l = new ArrayList<>(l1.size()+l2.size());
+		l.addAll(l1);
+		l.addAll(l2);
+		return l;
+	}
+
+	public static <S, T, E extends Exception> CheckedFunction<S, T, E> FICE(CheckedFunction<S, T, E> f) {
+		return f;
+	}
 }
