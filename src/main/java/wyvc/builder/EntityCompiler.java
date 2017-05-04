@@ -11,23 +11,23 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 
-import javax.lang.model.type.PrimitiveType;
-
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.CompilerWarning;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.CompilerLogger.UnsupportedCompilerError;
-import wyvc.builder.ControlFlowGraph.BinOpNode;
-import wyvc.builder.ControlFlowGraph.ConstNode;
-import wyvc.builder.ControlFlowGraph.DataNode;
-import wyvc.builder.ControlFlowGraph.EndIfNode;
-import wyvc.builder.ControlFlowGraph.FuncCallNode;
-import wyvc.builder.ControlFlowGraph.IfNode;
-import wyvc.builder.ControlFlowGraph.LabelNode;
-import wyvc.builder.ControlFlowGraph.WyilSection;
-import wyvc.builder.TypeCompiler.CompoundType;
-import wyvc.builder.TypeCompiler.TypeTree;
+import wyvc.builder.DataFlowGraph.BinOpNode;
+import wyvc.builder.DataFlowGraph.ConstNode;
+import wyvc.builder.DataFlowGraph.DataArrow;
+import wyvc.builder.DataFlowGraph.DataNode;
+import wyvc.builder.DataFlowGraph.EndIfNode;
+import wyvc.builder.DataFlowGraph.ExternConstNode;
+import wyvc.builder.DataFlowGraph.FuncCallNode;
+import wyvc.builder.DataFlowGraph.FunctionReturnNode;
+import wyvc.builder.DataFlowGraph.InputNode;
+import wyvc.builder.DataFlowGraph.InterfaceNode;
+import wyvc.builder.DataFlowGraph.NamedDataArrow;
+import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.lang.Architecture;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
@@ -42,8 +42,7 @@ import wyvc.lang.Statement.NotAStatement;
 import wyvc.lang.Statement.Process;
 import wyvc.lang.Statement.SequentialStatement;
 import wyvc.lang.Statement.SignalAssignment;
-import wyvc.lang.Statement.StatementGroup;
-import wyvc.lang.Type;
+import wyvc.lang.Type.VectorType;
 import wyvc.lang.TypedValue.Signal;
 import wyvc.lang.TypedValue.Variable;
 import wyvc.lang.TypedValue.Constant;
@@ -66,23 +65,11 @@ public class EntityCompiler {
 		}
 	}
 
-	private static class CompoundTypeNodeError extends CompilerError {
-		private final TypeTree type;
 
-		public CompoundTypeNodeError(TypeTree type) {
-			this.type = type;
-		}
-
-		@Override
-		public String info() {
-			return "Converting a compound type is unsupported\n"+type.toString("  ");
-		}
-
-	}
 
 	private static class Compiler extends LoggedBuilder {
 		private Queue<Pair<Signal, DataNode>> toCompile = new LinkedList<>();
-		private Map<LabelNode, Signal> created = new HashMap<>();
+		private Map<DataNode, Signal> created = new HashMap<>();
 		private Map<String, Component> fcts;
 		private List<Signal> signals = new ArrayList<>();
 		private List<Port> ports = new ArrayList<>();
@@ -90,18 +77,17 @@ public class EntityCompiler {
 		private Set<Component> components = new HashSet<>();
 		private Set<FuncCallNode> compiled = new HashSet<>();
 		private Set<String> used = new HashSet<>();
-		private Set<String> args = new HashSet<>();
 		private boolean portsIn;
 		private boolean portsOut;
+		//private String fctName;
 
-		public Compiler(CompilerLogger logger, Map<String, Component> fcts, List<String> inp) {
+		public Compiler(CompilerLogger logger, Map<String, Component> fcts) {
 			super(logger);
 			this.fcts = fcts;
-			args.addAll(inp);
-			used.addAll(inp);
+			used.addAll(fcts.keySet());
 		}
 
-		public Signal getIO(LabelNode n) {
+		public Signal getIO(InterfaceNode n) {
 			return created.get(n);
 		}
 
@@ -115,19 +101,14 @@ public class EntityCompiler {
 			return l;
 		}
 
-		private String getFreshLabel(String l, Mode mode) {
-			return mode == Mode.IN && args.contains(l) ? l : getFreshLabel(l);
-		}
-
 		public Interface getInterface() {
-			List<Port> ports = new ArrayList<>(this.ports);
-			Collections.reverse(ports);
 			return new Interface(ports.toArray(new Port[ports.size()]));
 		}
 
 		public Signal[] getSignals() {
 			return signals.toArray(new Signal[signals.size()]);
 		}
+
 
 		public Component[] getComponent() {
 			return components.toArray(new Component[components.size()]);
@@ -137,63 +118,93 @@ public class EntityCompiler {
 			return new Constant[0];
 		}
 
-		private Type getPrimitiveType(TypeTree type) throws CompilerException {
-			if (type instanceof CompoundType)
-				throw new CompilerException(new CompoundTypeNodeError(type));
-			return type.getValue();
-		}
-
-		private Signal createSignal(String ident, Type type, DataNode value){
-			Signal s = new Signal(getFreshLabel(ident), type);
-			signals.add(s);
-			if (value != null)
-				toCompile.add(new Pair<Signal, DataNode>(s, value));
-			return s;
-		}
-		private Signal createPort(String ident, Type type, DataNode value) {
-			if (value == null && !portsIn)
-				return createSignal(ident, type, value);
-			if (value != null && !portsOut)
-				return createSignal(ident, type, value);
-			Mode m = value == null ? Mode.IN : Mode.OUT;
-			Port p = new Port(getFreshLabel(ident,m), type, m);
-			ports.add(p);
-			if (value != null)
-				toCompile.add(new Pair<Signal, DataNode>(p, value));
-			return p;
-		}
-
-		private Signal getSignal(LabelNode label) throws CompilerException {
-			DataNode source = label.getSource();
-			if (source != null && source instanceof LabelNode && source.type instanceof PrimitiveType)
-				return getSignal((LabelNode) source);
-			if (!created.containsKey(label))
-				created.put(label, label.getSource() != null && !(label.getSource().type instanceof CompoundType)
-					? createSignal(label.nodeIdent, getPrimitiveType(label.type), label.getSource())
-					: createPort(label.nodeIdent, getPrimitiveType(label.type), null));
-			return created.get(label);
-		}
 
 
+
+
+		private Port createPort(String ident, DataNode node, Mode mode) {
+			Port port = new Port(getFreshLabel(ident), node.type, mode);
+			ports.add(port);
+			created.put(node, port);
+			return port;
+		}
+
+		private Signal createSignal(String ident, DataNode node) {
+			Signal signal = new Signal(getFreshLabel(ident), node.type);
+			created.put(node, signal);
+			signals.add(signal);
+			return signal;
+		}
+
+		private Signal createPort(InputNode input) {
+			return portsIn ? createPort(input.nodeIdent, input, Mode.IN)
+			               : createSignal(input.nodeIdent, input);
+		}
+
+		private Signal createPort(OutputNode output) {
+			Signal port = portsOut ? createPort(output.nodeIdent, output, Mode.OUT)
+				                   : createSignal(output.nodeIdent, output);
+			return planCompilation(port, output.source.from);
+		}
+
+		/**
+		 * Returns a signal linked to the source circuit.
+		 * If the arrow is not named, a name signal is created.
+		 * @param source
+		 * @param name
+		 * @return
+		 */
+		private Signal getSignal(DataArrow source, String name) {
+			return Utils.addIfAbsent(created, source.from, () -> planCompilation(createSignal(name, source.from), source.from));
+		}
+
+		private Signal getSignal(NamedDataArrow source) {
+			return getSignal(source, source.ident);
+		}
+
+
+		private Signal planCompilation(Signal signal, DataNode source) {
+			toCompile.add(new Pair<Signal, DataNode>(signal, source));
+			return signal;
+		}
+
+
+
+
+		private Expression compileAcces(NamedDataArrow arrow) throws CompilerException {
+			return new Access(getSignal(arrow));
+		}
+
+		private Expression compileExpression(DataArrow arrow) throws CompilerException {
+			if (arrow instanceof NamedDataArrow)
+				return compileAcces((NamedDataArrow) arrow);
+			return compileExpression(arrow.from);
+		}
+
+		private Expression compileInput(InputNode input) throws CompilerException {
+			return new Access(created.get(input));
+		}
 
 		private Expression compileExpression(DataNode node) throws CompilerException {
-			if (node instanceof LabelNode)
-				return compileLabel((LabelNode) node);
 			if (node instanceof BinOpNode)
 				return compileBinOp((BinOpNode) node);
 			if (node instanceof ConstNode)
 				return compileConst((ConstNode) node);
-			if (node instanceof IfNode)
-				return compileExpression(node.sources.get(0));
+			if (node instanceof ExternConstNode)
+				return compileExternConst((ExternConstNode) node);
+			if (node instanceof InputNode)
+				return compileInput((InputNode) node);
 			throw new CompilerException(new UnsupportedDataNodeError(node));
 		}
+
+		private Expression compileExternConst(ExternConstNode node) throws CompilerException {
+			return new Value(node.type, node.nodeIdent);
+		}
 		private Expression compileConst(ConstNode node) throws CompilerException {
-			return new Value(getPrimitiveType(node.type), node.nodeIdent);
+			return new Value(node.type, node.nodeIdent);
 		}
 
-		private Expression compileLabel(LabelNode label) throws CompilerException {
-			return new Access(getSignal(label));
-		}
+
 
 		private Expression compileBinOp(BinOpNode node) throws CompilerException {
 			Expression e1 = compileExpression(node.op1);
@@ -203,6 +214,8 @@ public class EntityCompiler {
 				return new Expression.Add(e1, e2);
 			case SUB:
 				return new Expression.Sub(e1, e2);
+			case MUL:
+				return new Expression.SubVector(new Expression.Mul(e1, e2), ((VectorType)node.type).lenght()-1, 0);
 			case BITWISEAND:
 			case AND:
 				return new Expression.And(e1, e2);
@@ -229,11 +242,11 @@ public class EntityCompiler {
 		}
 
 		private ConditionalSignalAssignment compileEndIf(Signal s, EndIfNode endIf) throws CompilerException {
-			Signal st = createSignal(s.ident+"1", s.type, endIf.getTrueNode());
-			Signal sf = createSignal(s.ident+"0", s.type, endIf.getFalseNode());
+			Signal st = getSignal(endIf.trueNode, s.ident+"1");
+			Signal sf = getSignal(endIf.falseNode, s.ident+"0");
+			Signal cd = getSignal(endIf.condition, s.ident+"2");
 			return new ConditionalSignalAssignment(s,
-				Arrays.asList(new Pair<Expression, Expression>(new Access(st),
-						compileExpression(endIf.getConditionNode()))),
+				Arrays.asList(new Pair<Expression, Expression>(new Access(st), new Access(cd))),
 				new Access(sf));
 		}
 
@@ -245,9 +258,12 @@ public class EntityCompiler {
 			Component fct = fcts.get(call.funcName);
 			components.add(fct);
 			List<Signal> args = Utils.checkedConvert(
-				call.sources,(DataNode n) -> getSignal((LabelNode) n));
-			args.addAll(Utils.checkedConvert(call.targets, (DataNode n) -> getSignal((LabelNode) n)));
-			return new ComponentInstance(getFreshLabel(call.funcName), fct, args.toArray(new Signal[args.size()]));
+				call.sources,
+				(DataArrow n, Integer k) -> getSignal(n, call.funcName+"_arg_"+k));
+			List<Signal> rets = Utils.checkedConvert(
+				call.returns,
+				(FunctionReturnNode n) -> Utils.addIfAbsent(created, n, () -> createSignal(n.nodeIdent, n)));
+			return new ComponentInstance(getFreshLabel(call.funcName), fct, Utils.concat(args, rets).toArray(new Signal[args.size()+rets.size()]));
 		}
 
 		private ConcurrentStatement compileSource(Pair<Signal, DataNode> source) throws CompilerException {
@@ -255,39 +271,34 @@ public class EntityCompiler {
 			if (source.second != null) {
 				if (source.second instanceof EndIfNode)
 					return compileEndIf(source.first, (EndIfNode) source.second);
-				if (source.second instanceof FuncCallNode)
-					return compileInvoke((FuncCallNode) source.second);
+				if (source.second instanceof FunctionReturnNode)
+					return compileInvoke(((FunctionReturnNode) source.second).fct);
 				return new SignalAssignment(source.first, compileExpression(source.second));
 			}
 			throw new CompilerException(new UnsupportedDataNodeError(source.second));
 		}
 
-		private void compileSignal() throws CompilerException {
+		private void compileSignals() throws CompilerException {
 			while (!toCompile.isEmpty())
 				statements.add(compileSource(toCompile.remove()));
 		}
 
-		private void checkInputs(String name, LabelNode l) throws CompilerException {
-			if (l.type instanceof CompoundType)
-				for (DataNode c : l.getTargets())
-					checkInputs(name, (LabelNode) c);
-			else if (!created.containsKey(l)){
-					addMessage(new UnusedInputSignalWarning(l.nodeIdent, name));
-					createPort(l.nodeIdent, getPrimitiveType(l.type), null);
-				}
-		}
+//		private void checkInputs(InputNode n) throws CompilerException {
+//			if (!created.containsKey(n)){
+//				addMessage(new UnusedInputSignalWarning(n.nodeIdent, fctName));
+//				createPort(n);
+//			}
+//		} TODO move !
 
-		public StatementGroup compile(String name, WyilSection sec, boolean portsIn, boolean portsOut) throws CompilerException {
+		public List<ConcurrentStatement> compile(String name, DataFlowGraph sec, boolean portsIn, boolean portsOut) throws CompilerException {
 			this.portsIn = portsIn;
 			this.portsOut = portsOut;
-			Collections.reverse(sec.outputs);
-			for (LabelNode l : sec.outputs)
-				createPort(l.nodeIdent, getPrimitiveType(l.type), l.getSource());
-			compileSignal();
-			for (LabelNode l : sec.inputs)
-				checkInputs(name, l);
+			//this.fctName = name;
+			Utils.checkedForEach(sec.inputs, (InputNode n) -> createPort(n));
+			Utils.checkedForEach(sec.outputs, (OutputNode n) -> createPort(n));
+			compileSignals();
 			Collections.reverse(statements);
-			return new StatementGroup(statements.toArray(new ConcurrentStatement[statements.size()]));
+			return statements;
 		}
 	}
 
@@ -304,7 +315,7 @@ public class EntityCompiler {
 		}
 	}
 
-	public static class UnusedInputSignalWarning extends CompilerWarning {
+	public static class UnusedInputSignalWarning extends CompilerWarning { // TODO à déplacer.
 		private final String arg;
 		private final String fun;
 
@@ -320,20 +331,19 @@ public class EntityCompiler {
 
 	}
 
-	public static Entity compile(CompilerLogger logger, String name, List<WyilSection> parts, Map<String, Component> fcts) throws CompilerException {
+	public static Entity compile(CompilerLogger logger, String name, List<DataFlowGraph> parts, Map<String, Component> fcts) throws CompilerException {
 		if (parts.isEmpty())
 			throw new CompilerException(new EmptyEntityError(name));
-
-		Compiler cmp = new Compiler(logger, fcts, Utils.convert(parts.get(0).inputs, (LabelNode n) -> n.nodeIdent));
+		Compiler cmp = new Compiler(logger, fcts);
 		List<ConcurrentStatement> statements = new ArrayList<>();
 		List<Signal> out = new ArrayList<>();
-		WyilSection pSec = parts.get(0);
-		statements.add(cmp.compile(name, pSec, true, parts.size() == 1));
-		for (WyilSection sec : parts.subList(1, parts.size())) {
-			out = Utils.convert(pSec.outputs, (LabelNode o) -> cmp.getIO(o));
-			statements.add(cmp.compile(name, sec, false, sec == parts.get(parts.size()-1)));
+		DataFlowGraph pSec = parts.get(0);
+		statements.addAll(cmp.compile(name, pSec, true, parts.size() == 1));
+		for (DataFlowGraph sec : parts.subList(1, parts.size())) {
+			out = Utils.convert(pSec.outputs, (OutputNode o) -> cmp.getIO(o));
+			statements.addAll(cmp.compile(name, sec, false, sec == parts.get(parts.size()-1)));
 			pSec = sec;
-			List<Signal> in = Utils.convert(pSec.inputs, (LabelNode o) -> cmp.getIO(o));
+			List<Signal> in = Utils.convert(pSec.inputs, (InputNode n) -> cmp.getIO(n));
 			statements.add(new Process(cmp.getFreshLabel("Cycle"), new Variable[0], new Signal[0],
 				Utils.checkedConvert(
 					Utils.gather(out, in),

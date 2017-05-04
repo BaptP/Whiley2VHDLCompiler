@@ -5,8 +5,8 @@ import java.util.List;
 import java.util.Map;
 
 import wyvc.builder.CompilerLogger;
+import wyvc.builder.DataFlowGraph;
 import wyvc.builder.CompilerLogger.CompilerException;
-import wyvc.builder.ControlFlowGraph.WyilSection;
 import wyvc.builder.EntityCompiler;
 import wyvc.builder.VHDLCompileTask.CompilationUnit;
 import wyvc.builder.compilationSteps.InliningStep.SplittedFunctions;
@@ -37,7 +37,7 @@ public class ProducingVHDLStep extends CompilationStep<SplittedFunctions, Produc
 		return new CompiledFile(data, new VHDLFile(
 			Utils.checkedConvert(
 				data.func,
-				(Pair<String, List<WyilSection>> s) -> EntityCompiler.compile(logger, s.first, s.second, fcts)
+				(Pair<String, List<DataFlowGraph>> s) -> EntityCompiler.compile(logger, s.first, s.second, fcts)
 			).toArray(new Entity[data.func.size()])));
 	}
 }

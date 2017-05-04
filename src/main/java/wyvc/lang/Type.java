@@ -2,11 +2,14 @@ package wyvc.lang;
 
 import static wyvc.lang.LexicalElement.stringFromStream;
 
+import java.util.Arrays;
+
 
 public abstract class Type implements LexicalElement {
 
 	public abstract boolean equals(Type other);
 
+	public abstract String getDefault();
 
 	@Override
 	public String toString(){
@@ -61,6 +64,11 @@ public abstract class Type implements LexicalElement {
 		public boolean equals(Type other) {
 			return other instanceof PrimitiveType && ((PrimitiveType)other).type == type;
 		}
+
+		@Override
+		public String getDefault() {
+			return "'X'";
+		}
 	}
 
 	public static final PrimitiveType Std_logic = new PrimitiveType(Primitive.P_STD_LOGIC);
@@ -72,7 +80,6 @@ public abstract class Type implements LexicalElement {
 		public final int end;
 
 		protected VectorType(int start, int end){
-			// TODO empêcher vecteur taille 1
 			this.start = start;
 			this.end = end;
 		}
@@ -104,6 +111,13 @@ public abstract class Type implements LexicalElement {
 						&& isSameVectorType(vectorType);
 			}
 			return  false;
+		}
+
+		@Override
+		public String getDefault() {
+			char[] a = new char[lenght()];
+			Arrays.fill(a, 'X');
+			return "\""+new String(a)+"\"";
 		}
 	}
 

@@ -1,10 +1,14 @@
 package wyvc.builder;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import wyvc.utils.Generator;
 import wyvc.utils.Pair;
+import wyvc.utils.Triple;
 import wyvc.utils.Utils;
 import wyvc.builder.LexicalElementTree.Tree;
 import wyvc.builder.CompilerLogger.CompilerError;
@@ -51,6 +55,7 @@ public class TypeCompiler {
 	public static interface TypeTree extends Tree<TypeTree,Type> {
 		@Override
 		public String toString();
+		public boolean equals(TypeTree other);
 	}
 
 	public static class PrimitiveType extends Primitive<TypeTree,Type> implements TypeTree {
@@ -61,6 +66,11 @@ public class TypeCompiler {
 		@Override
 		public String toString() {
 			return value.toString();
+		}
+
+		@Override
+		public boolean equals(TypeTree other) {
+			return other instanceof PrimitiveType && value.equals(other.getValue());
 		}
 	}
 
@@ -73,10 +83,70 @@ public class TypeCompiler {
 		public String toString() {
 			return "{"+String.join(",", Utils.convert(components, (Pair<String,TypeTree> c) -> c.first+":"+c.second.toString()))+"}";
 		}
+
+		@Override
+		public boolean equals(TypeTree other) {
+			return other instanceof UnionType && isStructuredAs(other) && Utils.isAll(
+				Utils.gather(components, other.getComponents()),
+				(Pair<Pair<String, TypeTree>, Pair<String, TypeTree>> p) -> p.first.second.equals(p.second.second));
+		}
 	}
 
 
+	public static class UnionType extends CompoundType {
+		public final static String FLAG_PREFIX = "is_t";
+		public final static String TYPE_PREFIX = "vl_t";
 
+		public UnionType(List<TypeTree> types) {
+			super(new Generator<Pair<String, TypeTree>>() {
+				@Override
+				protected void generate() throws InterruptedException {
+					int k=0;
+					for (TypeTree t : types){
+						yield(new Pair<String, TypeTree>(FLAG_PREFIX+k, new PrimitiveType(Type.Boolean)));
+						yield(new Pair<String, TypeTree>(TYPE_PREFIX+k++, t));
+					}}}.toList());
+		}
+
+		public List<TypeTree> getOptions() {
+			return new Generator<TypeTree>() {
+				@Override
+				protected void generate() throws InterruptedException {
+					boolean k = false;
+					for (Pair<String, TypeTree> p : getComponents()){
+						if (k)
+							yield(p.second);
+						k = !k;
+					}
+
+				}
+			}.toList();
+		}
+
+		public List<Triple<String,String,TypeTree>> getNamedOptions() {
+			return new Generator<Triple<String,String,TypeTree>>() {
+				@Override
+				protected void generate() throws InterruptedException {
+					boolean k = false;
+					String n = "";
+					for (Pair<String, TypeTree> p : getComponents()){
+						if (k)
+							yield(new Triple<>(n, p.first,p.second));
+						else
+							n = p.first;
+						k = !k;
+					}
+
+				}
+			}.toList();
+		}
+
+		@Override
+		public boolean equals(TypeTree other) {
+			return other instanceof UnionType && super.equals(other);
+		}
+
+	}
 
 	public static final PrimitiveType SIGNED 	= new PrimitiveType(new Type.Signed(31,0));
 	public static final PrimitiveType UNSIGNED 	= new PrimitiveType(new Type.Unsigned(31,0));
@@ -92,6 +162,8 @@ public class TypeCompiler {
 			return BOOL;
 		if (type == wyil.lang.Type.T_BYTE)
 			return BYTE;
+		if (type == wyil.lang.Type.T_NULL)
+			return new CompoundType(Collections.emptyList());
 		if (type instanceof wyil.lang.Type.Record) {
 			wyil.lang.Type.Record record = (wyil.lang.Type.Record) type;
 			ArrayList<Pair<String, TypeTree>> fields = new ArrayList<>(record.getFieldNames().length);
@@ -104,6 +176,12 @@ public class TypeCompiler {
 			if (!types.containsKey(t))
 				throw new CompilerException(new NominalTypeCompilerError(t));
 			return types.get(t);
+		}
+		if (type instanceof wyil.lang.Type.Union) {
+			wyil.lang.Type[] opts = ((wyil.lang.Type.Union) type).bounds();
+			return new UnionType(Utils.checkedConvert(
+					Arrays.asList(opts),
+					(wyil.lang.Type t) -> compileType(logger, t, types)));
 		}
 		throw new CompilerException(new UnsupportedTypeCompilerError(type));
 	}

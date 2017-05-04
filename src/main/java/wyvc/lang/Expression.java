@@ -4,6 +4,9 @@ package wyvc.lang;
 import wyvc.lang.TypedValue.Port;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.lang.TypedValue.PortError;
+
+import java.util.function.BiPredicate;
+
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.lang.Type.Signed;
 import wyvc.lang.Type.TypeError;
@@ -39,7 +42,8 @@ public interface Expression extends LexicalElement {
 		public static final int UNARY_SIGN 	= ADDITIVE_OP	+ 1;
 		public static final int MULTIPL_OP 	= UNARY_SIGN	+ 1;
 		public static final int UNARY_NOT 	= MULTIPL_OP	+ 1;
-		public static final int VAR_ACCESS 	= UNARY_NOT		+ 1;
+		public static final int SUB_VECTOR 	= UNARY_NOT		+ 1;
+		public static final int VAR_ACCESS 	= SUB_VECTOR	+ 1;
 
 	}
 
@@ -222,6 +226,21 @@ public interface Expression extends LexicalElement {
 	}
 
 
+	public static final class Mul extends BinaryOperation {
+
+		public Mul(Expression arg1, Expression arg2) throws CompilerException {
+			super(arg1, "*", arg2, Precedence.MULTIPL_OP, getType(arg1.getType(), arg2.getType()));
+		}
+
+
+		private static Type getType(Type t1, Type t2) throws CompilerException {
+			if (t1 instanceof Unsigned && t2 instanceof Unsigned)
+				return new Unsigned(((Unsigned)t1).lenght() + ((Unsigned)t2).lenght() - 1, 0);
+			if (t1 instanceof Signed && t2 instanceof Signed)
+				return new Signed(((Signed)t1).lenght() + ((Signed)t2).lenght() - 1, 0);
+			throw new CompilerException(new TypesMismatchException(Mul.class, t1, t2));
+		}
+	}
 /*
 	public static abstract class MultiplicativeBinaryOperation extends BinaryOperation {
 		public MultiplicativeBinaryOperation(Expression arg1, String op, Expression arg2, Type type) throws TypesMismatchException {
@@ -258,6 +277,57 @@ public interface Expression extends LexicalElement {
 
 	}
 */
+	public static class SubVectorTypeCompilerError extends TypeError {
+		private final int start, end;
+
+		public SubVectorTypeCompilerError(Type type, int start, int end) {
+			super(SubVector.class, type);
+		this.start = start;
+		this.end = end;
+		}
+
+		@Override
+		protected String typeExceptionDetails() {
+			return "Taking a "+start+" to "+end+" subvector impossible";
+		}
+
+	}
+
+	public static class SubVector extends TypedElement implements Expression {
+		private final Expression vector;
+		private final int start, end;
+
+		public SubVector(Expression vector, int start, int end) throws CompilerException {
+			super(getType(vector.getType(), start, end));
+			this.vector = vector;
+			this.start = start;
+			this.end = end;
+		}
+
+		private static Type getType(Type type, int start, int end) throws CompilerException {
+			if (!(type instanceof VectorType))
+				throw new CompilerException(new SubVectorTypeCompilerError(type, start, end));
+			VectorType vector = (VectorType) type;
+			BiPredicate<VectorType, Integer> in = (VectorType t, Integer i) -> Math.min(t.start, t.end) <= i && Math.max(t.start, t.end) >= end;
+			if (!in.test(vector, start) || !in.test(vector, end))
+				throw new CompilerException(new SubVectorTypeCompilerError(type, start, end));
+			return vector.cloneType(start, end);
+		}
+
+		@Override
+		public void addTokens(Token t) {
+			if (getPrecedence() > vector.getPrecedence())
+				t.n("(").n(vector).n(")");
+			else
+				t.n(vector);
+			t.n("(").n(start).n(end <= start ? " downto " : " to ").n(end).n(")");
+		}
+
+		@Override
+		public int getPrecedence() {
+			return Precedence.SUB_VECTOR;
+		}
+	}
 
 	public static class Access extends TypedElement implements Expression {
 		public final TypedValue value;

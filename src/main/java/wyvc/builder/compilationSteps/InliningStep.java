@@ -3,22 +3,19 @@ package wyvc.builder.compilationSteps;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.UnaryOperator;
 
 import wyvc.builder.CompilerLogger;
+import wyvc.builder.DataFlowGraph;
 import wyvc.io.GraphPrinter;
-import wyvc.builder.ControlFlowGraph.FuncCallNode;
-import wyvc.builder.ControlFlowGraph.WyilSection;
-import wyvc.builder.compilationSteps.CompileFunctionsStep.CompiledFunctions;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
 import wyvc.builder.compilationSteps.RecursionAnalysisStep.OrderedFunction;
 import wyvc.utils.Pair;
 
 public class InliningStep extends CompilationStep<OrderedFunction, InliningStep.SplittedFunctions> {
 	public static class SplittedFunctions extends CompiledTypes {
-		public final List<Pair<String, List<WyilSection>>> func;
+		public final List<Pair<String, List<DataFlowGraph>>> func;
 
-		public SplittedFunctions(CompiledTypes cmp, List<Pair<String, List<WyilSection>>> func) {
+		public SplittedFunctions(CompiledTypes cmp, List<Pair<String, List<DataFlowGraph>>> func) {
 			super(cmp);
 			this.func = func;
 		}
@@ -37,18 +34,18 @@ public class InliningStep extends CompilationStep<OrderedFunction, InliningStep.
 			return s;
 		};*/
 
-		List<Pair<String, List<WyilSection>>> func = new ArrayList<>();
-		for (Pair<String, WyilSection> p : data.func) {
-			GraphPrinter.print(logger, p.second.inputs, p.second.outputs, p.first);
+		List<Pair<String, List<DataFlowGraph>>> func = new ArrayList<>();
+		for (Pair<String, DataFlowGraph> p : data.func) {
+			GraphPrinter.print(logger, p.second, p.first);
 			//WyilSection se = inlining.apply(s);
 			//GraphPrinter.print(logger, se.inputs, se.outputs, n);
-			func.add(new Pair<String, List<WyilSection>>(p.first,  split(p.second)));
+			func.add(new Pair<String, List<DataFlowGraph>>(p.first,  split(p.second)));
 		};
 		return new SplittedFunctions(data, func);
 	}
 
 
-	private List<WyilSection> split(WyilSection s) {
+	private List<DataFlowGraph> split(DataFlowGraph s) {
 		return Collections.singletonList(s);
 	}
 }

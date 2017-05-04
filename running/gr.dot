@@ -1,0 +1,106 @@
+digraph {
+  inp [label="inputs",color=blue,shape=box];
+  n1 [label="t.a
+signed(31 downto 0)",shape="ellipse",color=green];
+  n2 [label="t2.b
+signed(31 downto 0)",shape="ellipse",color=green];
+  n3 [label="y
+signed(31 downto 0)",shape="ellipse",color=green];
+  n4 [label="add
+signed(31 downto 0)",shape="box",color=black];
+  n5 [label="t.b
+signed(31 downto 0)",shape="ellipse",color=green];
+  n6 [label="sub
+signed(31 downto 0)",shape="box",color=black];
+  n7 [label="t.a
+signed(31 downto 0)",shape="ellipse",color=green];
+  n8 [label="y
+signed(31 downto 0)",shape="ellipse",color=green];
+  n9 [label="out_0_0
+{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
+  n10 [label="t.a
+signed(31 downto 0)",shape="ellipse",color=green];
+  n11 [label="add
+signed(31 downto 0)",shape="box",color=black];
+  n12 [label="t.b
+signed(31 downto 0)",shape="ellipse",color=green];
+  n13 [label="e
+signed(31 downto 0)",shape="ellipse",color=green];
+  n14 [label="add
+signed(31 downto 0)",shape="box",color=black];
+  n15 [label="add
+signed(31 downto 0)",shape="box",color=black];
+  n16 [label="add
+signed(31 downto 0)",shape="box",color=black];
+  n17 [label="t
+{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
+  n18 [label="y
+signed(31 downto 0)",shape="ellipse",color=green];
+  n19 [label="x
+signed(31 downto 0)",shape="ellipse",color=green];
+  n20 [label="3
+signed(31 downto 0)",shape="box",color=black];
+  n21 [label="out_0
+{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
+  n22 [label="eq
+boolean",shape="box",color=black];
+  n23 [label="out_1
+{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
+  n24 [label="mul
+signed(31 downto 0)",shape="box",color=black];
+  n25 [label="t2.b
+signed(31 downto 0)",shape="ellipse",color=green];
+  n26 [label="t2.a
+signed(31 downto 0)",shape="ellipse",color=green];
+  n27 [label="If
+Untyped",shape="hexagon",color=yellow];
+  n28 [label="42
+signed(31 downto 0)",shape="box",color=black];
+  n29 [label="add
+signed(31 downto 0)",shape="box",color=black];
+  n30 [label="out_1_0
+{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
+  out [label="outputs",color=red,shape=box];
+
+  inp -> n17 [color=blue];
+  inp -> n13 [color=blue];
+  n1 -> n11[arrowhead="box",color=purple];
+  n1 -> n9[arrowhead="box",color=purple];
+  n2 -> n30[];
+  n3 -> n25[arrowhead="box",color=purple];
+  n4 -> n1[];
+  n5 -> n29[];
+  n6 -> n19[];
+  n7 -> n29[];
+  n7 -> n14[arrowhead="box",color=purple];
+  n8 -> n22[];
+  n8 -> n4[];
+  n9 -> n21[];
+  n10 -> n16[];
+  n11 -> n2[];
+  n12 -> n16[];
+  n12 -> n9[arrowhead="box",color=purple];
+  n13 -> n6[];
+  n14 -> n18[];
+  n15 -> n8[];
+  n16 -> n4[];
+  n17 -> n7[];
+  n17 -> n5[];
+  n18 -> n15[];
+  n19 -> n24[];
+  n19 -> n26[arrowhead="box",color=purple];
+  n19 -> n22[arrowhead="box",color=purple];
+  n20 -> n24[];
+  n22 -> n27[];
+  n24 -> n3[];
+  n25 -> n12[];
+  n25 -> n11[arrowhead="box",color=purple];
+  n26 -> n15[];
+  n26 -> n10[];
+  n26 -> n30[arrowhead="box",color=purple];
+  n28 -> n14[];
+  n29 -> n6[];
+  n30 -> n23[];
+  n21 -> out [color=red];
+  n23 -> out [color=red];
+}

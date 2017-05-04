@@ -20,6 +20,7 @@ public abstract class CompilationStep<T,U> {
 			}
 		}
 		catch (CompilerException e){
+			e.printStackTrace();
 			logger.addMessage(e.error);
 		}
 		logger.printMessages();

@@ -8,8 +8,8 @@ import java.util.Map;
 import wyvc.builder.CompilerLogger;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
-import wyvc.builder.ControlFlowGraph.FuncCallNode;
-import wyvc.builder.ControlFlowGraph.WyilSection;
+import wyvc.builder.DataFlowGraph;
+import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.compilationSteps.CompileFunctionsStep.CompiledFunctions;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
 import wyvc.utils.Pair;
@@ -17,9 +17,9 @@ import wyvc.utils.Utils;
 
 public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, RecursionAnalysisStep.OrderedFunction> {
 	public static class OrderedFunction extends CompiledTypes {
-		public final List<Pair<String, WyilSection>> func;
+		public final List<Pair<String, DataFlowGraph>> func;
 
-		public OrderedFunction(CompiledTypes cmp, List<Pair<String, WyilSection>> func) {
+		public OrderedFunction(CompiledTypes cmp, List<Pair<String, DataFlowGraph>> func) {
 			super(cmp);
 			this.func = func;
 		}
@@ -43,10 +43,10 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 	}
 
 	private static class FuncNode {
-		public final WyilSection data;
+		public final DataFlowGraph data;
 		public int rank = -1;
 
-		public FuncNode(WyilSection s) {
+		public FuncNode(DataFlowGraph s) {
 			this.data = s;
 		}
 
@@ -69,13 +69,13 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 	@Override
 	protected OrderedFunction compile(CompilerLogger logger, CompiledFunctions data) throws CompilerException {
 		Map<String, FuncNode> func = new HashMap<>();
-		data.func.forEach((String n, WyilSection s) -> func.put(n, new FuncNode(s)));
+		data.func.forEach((String n, DataFlowGraph s) -> func.put(n, new FuncNode(s)));
 		for (FuncNode c : func.values())
 			c.findRank(func);
 		List<Pair<String, FuncNode>> fcts = new ArrayList<>();
 		func.forEach((String s, FuncNode n) -> fcts.add(new Pair<String, FuncNode>(s, n)));
 		func.forEach((String s, FuncNode n) -> logger.debug(s+" rang "+n.rank));
 		fcts.sort((Pair<String, FuncNode> e1, Pair<String, FuncNode> e2) -> e1.second.rank - e2.second.rank);
-		return new OrderedFunction(data, Utils.convert(fcts, (Pair<String, FuncNode> p) -> new Pair<String, WyilSection>(p.first, p.second.data)));
+		return new OrderedFunction(data, Utils.convert(fcts, (Pair<String, FuncNode> p) -> new Pair<String, DataFlowGraph>(p.first, p.second.data)));
 	}
 }

@@ -12,4 +12,19 @@ public interface CheckedFunctionalInterface {
 		public U apply(S s, T t) throws E;
 	}
 
+	@FunctionalInterface
+	public interface CheckedConsumer<S,E extends Exception> {
+		public void apply(S s) throws E;
+	}
+
+	@FunctionalInterface
+	public interface CheckedBiConsumer<S,T,E extends Exception> {
+		public void apply(S s, T t) throws E;
+	}
+
+	@FunctionalInterface
+	public interface CheckedSupplier<S,E extends Exception> {
+		public S get() throws E;
+	}
+
 }

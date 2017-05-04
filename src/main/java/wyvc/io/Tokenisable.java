@@ -269,11 +269,11 @@ public interface Tokenisable {
 
 			@Override
 			public Token alignement(int pos, ArrayList<Integer> lengths, int index) {
-				if (index == lengths.size() -2)
-					lengths.add(0);
+				/*if (index == lengths.size() -2)
+					lengths.add(0);*/
 				if (index == lengths.size() -1)
 					lengths.add(0);
-				return super.alignement(0, lengths, index+2);
+				return super.alignement(0, lengths, Math.min(index+1, lengths.size()));
 			}
 		}
 
