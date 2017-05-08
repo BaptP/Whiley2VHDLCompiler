@@ -21,6 +21,7 @@ import wyvc.utils.CheckedFunctionalInterface.CheckedBiFunction;
 import wyvc.utils.CheckedFunctionalInterface.CheckedConsumer;
 import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
 import wyvc.utils.CheckedFunctionalInterface.CheckedSupplier;
+import wyvc.utils.Generator.StandardGenerator;
 
 public class Utils {
 	public static void printLocation(CompilerLogger logger, Location<?> a, String n) {
@@ -68,6 +69,7 @@ public class Utils {
 			n.add(p.second);
 		return n;
 	}
+
 
 	public static <S,T> List<T> convert(List<S> l, Function<? super S, ? extends T> f) {
 		ArrayList<T> m = new ArrayList<>(l.size());
@@ -117,7 +119,7 @@ public class Utils {
 
 	public static <S, T, E extends Exception> void checkedForEach(Map<S,T> m, CheckedBiConsumer<S,T,E> f) throws E {
 		for (S k : m.keySet())
-			f.apply(k, m.get(k));
+			f.accept(k, m.get(k));
 	}
 
 	public static <S> void forEach(Collection<S> c, BiConsumer<Integer, S> f) {
@@ -128,13 +130,13 @@ public class Utils {
 
 	public static <S, E extends Exception> void checkedForEach(Collection<S> c, CheckedConsumer<S, E> f) throws E {
 		for (S s : c)
-			f.apply(s);
+			f.accept(s);
 	}
 
 	public static <S, E extends Exception> void checkedForEach(Collection<S> c, CheckedBiConsumer<Integer, S, E> f) throws E {
 		int k = 0;
 		for (S s : c)
-			f.apply(k++, s);
+			f.accept(k++, s);
 	}
 
 	public static <S> void ignore(S s) {}
@@ -158,14 +160,4 @@ public class Utils {
 		return true;
 	}
 
-
-	public static <S,T> Generator<T> convert(Generator<S> s, Function<? super S, ? extends T> f) {
-		return new Generator<T>(){
-			@Override
-			protected void generate() throws InterruptedException, EndOfGeneratorException {
-				while (true)
-					yield(f.apply(s.next()));
-			}
-		};
-	}
 }

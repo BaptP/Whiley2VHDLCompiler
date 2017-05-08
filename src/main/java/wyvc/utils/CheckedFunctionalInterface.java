@@ -14,17 +14,22 @@ public interface CheckedFunctionalInterface {
 
 	@FunctionalInterface
 	public interface CheckedConsumer<S,E extends Exception> {
-		public void apply(S s) throws E;
+		public void accept(S s) throws E;
 	}
 
 	@FunctionalInterface
 	public interface CheckedBiConsumer<S,T,E extends Exception> {
-		public void apply(S s, T t) throws E;
+		public void accept(S s, T t) throws E;
 	}
 
 	@FunctionalInterface
 	public interface CheckedSupplier<S,E extends Exception> {
 		public S get() throws E;
+	}
+
+	@FunctionalInterface
+	public interface CheckedPredicate<S,E extends Exception> {
+		public boolean test(S s) throws E;
 	}
 
 }

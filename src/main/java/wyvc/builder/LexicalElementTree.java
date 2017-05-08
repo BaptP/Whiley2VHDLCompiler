@@ -6,6 +6,8 @@ import java.util.List;
 
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
+import wyvc.utils.Generator.StandardGenerator;
+import wyvc.utils.Generator.StandardPairGenerator;
 import wyvc.utils.Pair;
 
 public final class LexicalElementTree {
@@ -21,8 +23,8 @@ public final class LexicalElementTree {
 		@Override
 		public String info() {
 			return "Tree structures incoherent\n"+
-					" Expected :    *\n"+expected.toString("             ")+
-					" Encountered : *\n"+encountered.toString("             ");
+					" Expected :    *\n"+expected.toString("              ")+
+					" Encountered : *\n"+encountered.toString("              ");
 		}
 	}
 
@@ -46,6 +48,7 @@ public final class LexicalElementTree {
 		public V getValue();
 		public List<Pair<String,T>> getComponents();
 		public <S extends Tree<S,U>,U> boolean isStructuredAs(Tree<S,U> other);
+		public Structure<T,V> getStructure();
 		public default int getComponentNumber()	{
 			return getComponents().size();
 		}
@@ -115,14 +118,33 @@ public final class LexicalElementTree {
 		public <S extends Tree<S,U>,U> boolean isStructuredAs(Tree<S,U> other) {
 			return other instanceof Primitive;
 		}
+		@Override
+		public Structure<T, V> getStructure() {
+			return null;
+		}
 	}
 
-	public static class Compound<T extends Tree<T,V>,V> implements Tree<T,V> {
+
+	public static interface Structure<T extends Tree<T,V>,V> {
+		public StandardPairGenerator<String, T> getComponents();
+		//public <U extends Tree<U,W>,W> Structure<U,W> map(Function<? super T, ? extends U> f);
+
+		//public boolean equals(Structure<?,?> other);
+	}
+
+	public static class Compound<T extends Tree<T,V>,V, S extends Structure<T,V>> implements Tree<T,V> {
 		protected final List<Pair<String, T>> components;
 		protected T parent = null;
+		public final S structure;
 
-		public Compound(List<Pair<String, T>> components) {
-			this.components = components;
+//		public Compound(List<Pair<String, T>> components) {
+//			this.components = components;
+//			this.structure = null;
+//		}
+
+		public Compound(S structure) {
+			this.components = structure.getComponents().toList();
+			this.structure = structure;
 		}
 
 		@Override
@@ -134,15 +156,21 @@ public final class LexicalElementTree {
 			return components;
 		}
 		@Override
-		public <S extends Tree<S,U>,U> boolean isStructuredAs(Tree<S,U> other) {
+		public <R extends Tree<R,U>,U> boolean isStructuredAs(Tree<R,U> other) {
 			if (getComponentNumber() != other.getComponentNumber())
 				return false;
-			List<Pair<String, S>> otherComponents = other.getComponents();
+			List<Pair<String, R>> otherComponents = other.getComponents();
 			for (int k = 0; k < components.size(); ++k)
 				if (!components.get(k).first.equals(otherComponents.get(k).first) ||
 					!components.get(k).second.isStructuredAs(otherComponents.get(k).second))
 					return false;
 			return true;
 		}
+		@Override
+		public S getStructure() {
+			return structure;
+		}
 	}
+
+
 }
