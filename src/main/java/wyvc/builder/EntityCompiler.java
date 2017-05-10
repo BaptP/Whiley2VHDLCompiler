@@ -221,6 +221,7 @@ public class EntityCompiler {
 				return new Expression.And(e1, e2);
 			case BITWISEOR:
 			case OR:
+			case IS:
 				return new Expression.Or (e1, e2);
 			case BITWISEXOR:
 				return new Expression.Xor(e1, e2);

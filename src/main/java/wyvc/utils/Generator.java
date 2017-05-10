@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import wyvc.utils.CheckedFunctionalInterface.CheckedBiConsumer;
 import wyvc.utils.CheckedFunctionalInterface.CheckedBiFunction;
 import wyvc.utils.CheckedFunctionalInterface.CheckedConsumer;
 import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
@@ -137,7 +139,7 @@ public interface Generator {
 						yield(function.apply(This.next()));
 				}};
 		}
-		public <U> StandardGenerator<U> map(BiFunction<? super Integer, ? super T, ? extends U> function) {
+		public <U> StandardGenerator<U> enumMap(BiFunction<? super Integer, ? super T, ? extends U> function) {
 			StandardGenerator<T> This = this;
 			return new StandardGenerator<U>() {
 				@Override
@@ -148,7 +150,7 @@ public interface Generator {
 				}};
 		}
 
-		public <U, E extends Exception> CheckedGenerator<U, E> Map(CheckedFunction<? super T, ? extends U, ? extends E> function) {
+		public <U, E extends Exception> CheckedGenerator<U, E> Map(CheckedFunction<? super T, ? extends U, E> function) {
 			StandardGenerator<T> This = this;
 			return new CheckedGenerator<U, E>() {
 				@Override
@@ -158,7 +160,7 @@ public interface Generator {
 				}};
 		}
 
-		public <U, E extends Exception> CheckedGenerator<U, E> Map(CheckedBiFunction<? super Integer, ? super T, ? extends U, ? extends E> function) {
+		public <U, E extends Exception> CheckedGenerator<U, E> EnumMap(CheckedBiFunction<? super Integer, ? super T, ? extends U, E> function) {
 			StandardGenerator<T> This = this;
 			return new CheckedGenerator<U, E>() {
 				@Override
@@ -332,7 +334,7 @@ public interface Generator {
 			return init;
 		}
 
-		public <U> CheckedGenerator<U, E> map(CheckedFunction<? super T, ? extends U, ? extends E> function) {
+		public <U> CheckedGenerator<U, E> map(CheckedFunction<? super T, ? extends U, E> function) {
 			CheckedGenerator<T, E> This = this;
 			return new CheckedGenerator<U, E>() {
 				@Override
@@ -342,7 +344,7 @@ public interface Generator {
 				}};
 		}
 
-		public <U> CheckedGenerator<U, E> map(CheckedBiFunction<? super Integer, ? super T, ? extends U, ? extends E> function) {
+		public <U> CheckedGenerator<U, E> enumMap(CheckedBiFunction<? super Integer, ? super T, ? extends U, E> function) {
 			CheckedGenerator<T, E> This = this;
 			return new CheckedGenerator<U, E>() {
 				@Override
@@ -404,6 +406,22 @@ public interface Generator {
 		public StandardGenerator<T> takeSecond() {
 			return map((Pair<S,T> p) -> p.second);
 		}
+
+		public <U> StandardGenerator<U> map(BiFunction<? super S, ? super T, ? extends U> f) {
+			return map((Pair<S,T> p) -> f.apply(p.first, p.second));
+		}
+
+		public <U, E extends Exception> CheckedGenerator<U, E> Map(CheckedBiFunction<? super S, ? super T, ? extends U, E> f) {
+			return Map((Pair<S,T> p) -> f.apply(p.first, p.second));
+		}
+
+		public void forEach(BiConsumer<S, T> f) {
+			forEach((Pair<S,T> p) -> f.accept(p.first, p.second));
+		}
+
+		public <E extends Exception> void ForEach(CheckedBiConsumer<S, T, E> f) throws E {
+			ForEach((Pair<S,T> p) -> f.accept(p.first, p.second));
+		}
 	}
 
 	public static abstract class CheckedPairGenerator<S,T, E extends Exception> extends CheckedGenerator<Pair<S,T>, E> {
@@ -412,6 +430,14 @@ public interface Generator {
 		}
 		public CheckedGenerator<T, E> takeSecond() {
 			return map((Pair<S,T> p) -> p.second);
+		}
+
+		public <U> CheckedGenerator<U, E> map(CheckedBiFunction<? super S, ? super T, ? extends U, E> f) {
+			return map((Pair<S,T> p) -> f.apply(p.first, p.second));
+		}
+
+		public void ForEach(CheckedBiConsumer<? super S, ? super T, ? extends E> f) throws E {
+			ForEach((Pair<S,T> p) -> f.accept(p.first, p.second));
 		}
 	}
 

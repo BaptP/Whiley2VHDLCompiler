@@ -6,6 +6,7 @@ import java.util.List;
 
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
+import wyvc.builder.DataFlowGraphBuilder.NodeTree;
 import wyvc.utils.Generator.StandardGenerator;
 import wyvc.utils.Generator.StandardPairGenerator;
 import wyvc.utils.Pair;
@@ -49,6 +50,8 @@ public final class LexicalElementTree {
 		public List<Pair<String,T>> getComponents();
 		public <S extends Tree<S,U>,U> boolean isStructuredAs(Tree<S,U> other);
 		public Structure<T,V> getStructure();
+		public T getParent();
+		public void setParent(T parent);
 		public default int getComponentNumber()	{
 			return getComponents().size();
 		}
@@ -101,6 +104,7 @@ public final class LexicalElementTree {
 
 	public static class Primitive<T extends Tree<T,V>,V> implements Tree<T,V> {
 		protected V value;
+		private T parent = null;
 
 		public Primitive(V value) {
 			this.value = value;
@@ -122,6 +126,16 @@ public final class LexicalElementTree {
 		public Structure<T, V> getStructure() {
 			return null;
 		}
+
+		@Override
+		public T getParent() {
+			return parent;
+		}
+
+		@Override
+		public void setParent(T parent) {
+			this.parent = parent;
+		}
 	}
 
 
@@ -134,17 +148,19 @@ public final class LexicalElementTree {
 
 	public static class Compound<T extends Tree<T,V>,V, S extends Structure<T,V>> implements Tree<T,V> {
 		protected final List<Pair<String, T>> components;
-		protected T parent = null;
 		public final S structure;
+		private T parent = null;
 
 //		public Compound(List<Pair<String, T>> components) {
 //			this.components = components;
 //			this.structure = null;
 //		}
 
+		@SuppressWarnings("unchecked")
 		public Compound(S structure) {
 			this.components = structure.getComponents().toList();
 			this.structure = structure;
+			structure.getComponents().forEach((String s, T t) -> t.setParent((T)this));
 		}
 
 		@Override
@@ -169,6 +185,16 @@ public final class LexicalElementTree {
 		@Override
 		public S getStructure() {
 			return structure;
+		}
+
+		@Override
+		public T getParent() {
+			return parent;
+		}
+
+		@Override
+		public void setParent(T parent) {
+			this.parent = parent;
 		}
 	}
 

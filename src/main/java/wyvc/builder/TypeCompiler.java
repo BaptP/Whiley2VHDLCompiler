@@ -114,6 +114,10 @@ public class TypeCompiler {
 			return Generator.fromPairCollection(components);
 		}
 //
+		public int getComponentNumber() {
+			return components.size();
+		}
+
 //		@Override
 //		public <U extends Tree<U, W>, W> Structure<U, W> map(Function<? super T, ? extends U> f) {
 //			return new RecordStructure<>(getComponents().map(
@@ -154,6 +158,10 @@ public class TypeCompiler {
 
 		public StandardPairGenerator<T,T> getOptions() {
 			return Generator.fromPairCollection(options);
+		}
+
+		public int getOptionNumber() {
+			return options.size();
 		}
 
 //		@Override

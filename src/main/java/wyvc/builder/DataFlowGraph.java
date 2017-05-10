@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import wyil.lang.Bytecode;
+import wyil.lang.Bytecode.OperatorKind;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.io.GraphPrinter.PrintableGraph;
@@ -90,6 +91,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		public DataNode duplicate(List<DataNode> sources) {return null;}; // TODO was abstract
+		public abstract boolean isStaticallyKnown();
 	}
 
 	public static class HalfArrow {
@@ -127,6 +129,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			super(ident, node.node.type, Collections.singletonList(node));
 			this.mode = Mode.OUT;
 		}
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
 	}
 
 	public class InputNode extends InterfaceNode {
@@ -139,6 +145,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public DataNode duplicate(List<DataNode> sources) {
 			return null;
 		}
+
 	}
 
 	public class OutputNode extends InterfaceNode {
@@ -165,6 +172,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			fct.returns.add(this);
 		}
 
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
 	}
 
 	public abstract class WyilNode<T extends Bytecode> extends DataNode {
@@ -274,6 +285,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			super(decl, type, Collections.emptyList());
 		}
 
+		@Override
+		public boolean isStaticallyKnown() {
+			return true;
+		}
+
 //		@Override
 //		public DataNode duplicate(List<DataNode> sources) throws CompilerException {
 //			return new ConstNode(location);
@@ -283,6 +299,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	public class ExternConstNode extends DataNode {
 		public ExternConstNode(Type type, String value) {
 			super(value, type);
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return true;
 		}
 
 //		@Override
@@ -296,6 +317,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			super(type, type.getDefault());
 		}
 
+		@Override
+		public boolean isStaticallyKnown() {
+			return true;
+		}
 	}
 
 	public final ExternConstNode getTrue() {
@@ -311,6 +336,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public UnaOpNode(Location<Bytecode.Operator> binOp, Type type, HalfArrow op) {
 			super(binOp, type, Arrays.asList(op));
 			this.op = builtArrows.get(op);
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return op.from.isStaticallyKnown();
 		}
 //
 //		@Override
@@ -335,6 +365,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
 		}
 
+		@Override
+		public boolean isStaticallyKnown() {
+			return op1.from.isStaticallyKnown() && op2.from.isStaticallyKnown();
+		}
+
 //		@Override
 //		public DataNode duplicate(List<DataNode> sources) throws CompilerException {
 //			return new BinOpNode(location, sources.get(0), sources.get(1));
@@ -349,6 +384,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			super(call, null, args);
 			invokes.add(this);
 			funcName = call.getBytecode().name().name();
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
 		}
 
 		/*public void inline(WyilSection func) throws CompilerException {
@@ -408,6 +448,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
 		}
 
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;//TODO complex
+		}
+
 //		@Override
 //		public DataNode duplicate(List<DataNode> sources) {
 //			return new EndIfNode(sources.get(0), sources.get(1), sources.get(2));
@@ -427,7 +472,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	static private String toString(Bytecode b) {
 		if (b instanceof Bytecode.Operator)
-			return ((Bytecode.Operator) b).kind().toString();
+			return ((Bytecode.Operator) b).kind() == OperatorKind.IS ? "or" : ((Bytecode.Operator) b).kind().toString();
 		if (b instanceof Bytecode.Const)
 			return ((Bytecode.Const) b).constant().toString();
 		if (b instanceof Bytecode.If)
