@@ -12,17 +12,17 @@ import java.io.OutputStream;
  * The TextualOutputStream offers a smart text stream to write VHDL source code
  * using some modifiers.
  *
- * This class handles the management of indentation,  with the <c> indent </c>,
- * <c> dedent </c> and  <c> setIndentationLevel </c> methods.  The insertion of
- * is also made easy thanks to the <c>code</c> and <c>comment</x> output modes.
+ * This class handles the management of indentation,  with the <code> indent </code>,
+ * <code> dedent </code> and  <code> setIndentationLevel </code> methods.  The insertion of
+ * is also made easy thanks to the <code>code</code> and <code>comment</code> output modes.
  *
  * To avoid repetitive accesses to the stream and to improve the readability of
  * the resulting code,  each edition method returns a reference to it,  so that
  * outputs commands can be chained.
  * To strengthen stream API, {@link LexicalElement} can be send directly to the
- * stream that will then call their <c> write </c> method.
+ * stream that will then call their <code> write </code> method.
  *
- * To make the produced VHDL code more readable, the <c>fill</c> edition method
+ * To make the produced VHDL code more readable, the <code>fill</code> edition method
  * enables to align the major parts of the lines.
  *
  * @author Baptiste Pauget

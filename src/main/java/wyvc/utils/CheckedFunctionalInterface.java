@@ -1,7 +1,13 @@
 package wyvc.utils;
 
+/**
+ * Functional interfaces with checked exception handling.
+ *
+ * @author Baptiste Pauget
+ *
+ * See java.util.function
+ */
 public interface CheckedFunctionalInterface {
-
 	@FunctionalInterface
 	public interface CheckedFunction<S,T,E extends Exception> {
 		public T apply(S s) throws E;
@@ -32,4 +38,8 @@ public interface CheckedFunctionalInterface {
 		public boolean test(S s) throws E;
 	}
 
+	@FunctionalInterface
+	public interface CheckedBiPredicate<S,T,E extends Exception> {
+		public boolean test(S s, T t) throws E;
+	}
 }

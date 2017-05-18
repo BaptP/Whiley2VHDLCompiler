@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
 
 public class CompilerLogger {
@@ -19,7 +20,7 @@ public class CompilerLogger {
 	}
 
 	public static enum CompilerMessageType {
-		Error, Warning, Notice
+		Error, Warning, Notice, Debug
 	}
 
 	private static abstract class CompilerMessage {
@@ -47,6 +48,12 @@ public class CompilerLogger {
 	public static abstract class CompilerNotice extends CompilerMessage {
 		public CompilerNotice() {
 			super(CompilerMessageType.Notice);
+		}
+	}
+
+	public static abstract class CompilerDebug extends CompilerMessage {
+		public CompilerDebug() {
+			super(CompilerMessageType.Debug);
 		}
 	}
 
@@ -141,9 +148,41 @@ public class CompilerLogger {
 		public void debug(String message){
 			logger.debug(message);
 		}
+
+
+		protected String level = "";
+		protected Stack<String> block = new Stack<>();
+		protected void writeLevel(boolean open) {
+			String a = "──────────────────────────────────────────────────";
+			debug(level+(open ? "┌─" : "└─")+a.substring(0, Math.max(0, 30-level.length()))+" "+
+					block.lastElement()+" "+a.substring(0, Math.max(0, 35-block.lastElement().length())));
+		}
+		protected void openLevel(String n) {
+			block.push(n);
+			writeLevel(true);
+			level = level+"│ ";
+		}
+		public void debugLevel(String message){
+			debug(level+message);
+		}
+		protected void closeLevel() {
+			level = level.substring(0, Math.max(0,level.length()-2));
+			writeLevel(false);
+			block.pop();
+		}
+		protected <T> T end(T a) {
+/**/			closeLevel();
+			return a;
+		}
 	}
 
+	public static class LoggedContainer {
+		public final CompilerLogger logger;
 
+		public LoggedContainer(CompilerLogger logger) {
+			this.logger = logger;
+		}
+	}
 
 
 }

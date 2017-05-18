@@ -26,9 +26,10 @@ public class CompileFunctionsStep extends CompilationStep<CompiledTypes, Compile
 
 	@Override
 	protected CompiledFunctions compile(CompilerLogger logger, CompiledTypes data) throws CompilerException {
+		DataFlowGraphBuilder builder = new DataFlowGraphBuilder(logger, data.typeCompiler);
 		Map<String, DataFlowGraph> func = new HashMap<>();
 		for (FunctionOrMethod fct : data.file.functionOrMethods())
-			func.put(fct.name(), DataFlowGraphBuilder.buildGraph(logger, fct, data.types));
+			func.put(fct.name(), builder.buildGraph(fct));
 		return new CompiledFunctions(data, func);
 	}
 }

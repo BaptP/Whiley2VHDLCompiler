@@ -21,7 +21,6 @@ import wyvc.utils.CheckedFunctionalInterface.CheckedBiFunction;
 import wyvc.utils.CheckedFunctionalInterface.CheckedConsumer;
 import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
 import wyvc.utils.CheckedFunctionalInterface.CheckedSupplier;
-import wyvc.utils.Generator.StandardGenerator;
 
 public class Utils {
 	public static void printLocation(CompilerLogger logger, Location<?> a, String n) {

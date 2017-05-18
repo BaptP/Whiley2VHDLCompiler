@@ -1,35 +1,31 @@
 package wyvc.builder.compilationSteps;
 
-import java.util.HashMap;
-import java.util.Map;
 
-import wyil.lang.WyilFile;
 import wyvc.builder.CompilerLogger;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.TypeCompiler;
-import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.compilationSteps.ParsingStep.ParsedFile;
+import wyvc.utils.Generator;
 
 public class CompileTypesStep extends CompilationStep<ParsedFile, CompileTypesStep.CompiledTypes> {
 	public static class CompiledTypes extends ParsedFile {
-		public final Map<String, TypeTree> types;
+		public final TypeCompiler typeCompiler;
 
-		public CompiledTypes(ParsedFile cmp, Map<String, TypeTree> types) {
+		public CompiledTypes(ParsedFile cmp, TypeCompiler typeCompiler) {
 			super(cmp);
-			this.types = types;
+			this.typeCompiler = typeCompiler;
 		}
 		public CompiledTypes(CompiledTypes other) {
 			super(other);
-			types = other.types;
+			typeCompiler = other.typeCompiler;
 		}
 	}
 
 	@Override
 	protected CompiledTypes compile(CompilerLogger logger, ParsedFile data) throws CompilerException {
-		Map<String, TypeTree> types = new HashMap<>();
-		for (WyilFile.Type t  : data.file.types())
-			types.put(t.name(), TypeCompiler.compileType(logger, t.type(),types));
-		return new CompiledTypes(data, types);
+		TypeCompiler typeCompiler = new TypeCompiler(logger);
+		Generator.fromCollection(data.file.types()).ForEach(typeCompiler::addNominalType);
+		return new CompiledTypes(data, typeCompiler);
 	}
 
 }

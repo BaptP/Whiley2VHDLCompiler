@@ -13,24 +13,23 @@ public class  Pair<S,T> {
 		this.second = second;
 	}
 
-	public Pair<S,T> transformFirst(Function<S,S> f) {
-		first = f.apply(first);
-		return this;
+	public <U> Pair<U,T> transformFirst(Function<? super S, ? extends U> function) {
+		return new Pair<>(function.apply(first), second);
 	}
 
-	public Pair<S,T> transformSecond(Function<T,T> f) {
-		second = f.apply(second);
-		return this;
+	public <U> Pair<S,U> transformSecond(Function<? super T, ? extends U> function) {
+		return new Pair<>(first, function.apply(second));
 	}
 
-
-	public <E extends Exception> Pair<S,T> transformFirstChecked(CheckedFunction<S,S,E> f) throws E {
-		first = f.apply(first);
-		return this;
+	public <U, E extends Exception> Pair<U,T> transformFirstChecked(CheckedFunction<? super S, ? extends U, E> function) throws E {
+		return new Pair<>(function.apply(first), second);
 	}
 
-	public <E extends Exception> Pair<S,T> transformSecondChecked(CheckedFunction<T,T,E> f) throws E {
-		second = f.apply(second);
-		return this;
+	public <U, E extends Exception> Pair<S,U> transformSecondChecked(CheckedFunction<? super T, ? extends U, E> function) throws E{
+		return new Pair<>(first, function.apply(second));
+	}
+
+	public boolean equals(Pair<S,T> other) {
+		return first.equals(other.first) && second.equals(other.second);
 	}
 }

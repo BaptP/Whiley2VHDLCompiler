@@ -154,11 +154,11 @@ public class EntityCompiler {
 		 * @param name
 		 * @return
 		 */
-		private Signal getSignal(DataArrow source, String name) {
+		private Signal getSignal(DataArrow<?,?> source, String name) {
 			return Utils.addIfAbsent(created, source.from, () -> planCompilation(createSignal(name, source.from), source.from));
 		}
 
-		private Signal getSignal(NamedDataArrow source) {
+		private Signal getSignal(NamedDataArrow<?,?> source) {
 			return getSignal(source, source.ident);
 		}
 
@@ -171,13 +171,13 @@ public class EntityCompiler {
 
 
 
-		private Expression compileAcces(NamedDataArrow arrow) throws CompilerException {
+		private Expression compileAcces(NamedDataArrow<?,?> arrow) throws CompilerException {
 			return new Access(getSignal(arrow));
 		}
 
-		private Expression compileExpression(DataArrow arrow) throws CompilerException {
+		private Expression compileExpression(DataArrow<?,?> arrow) throws CompilerException {
 			if (arrow instanceof NamedDataArrow)
-				return compileAcces((NamedDataArrow) arrow);
+				return compileAcces((NamedDataArrow<?,?>) arrow);
 			return compileExpression(arrow.from);
 		}
 
@@ -260,7 +260,7 @@ public class EntityCompiler {
 			components.add(fct);
 			List<Signal> args = Utils.checkedConvert(
 				call.sources,
-				(DataArrow n, Integer k) -> getSignal(n, call.funcName+"_arg_"+k));
+				(DataArrow<?,?> n, Integer k) -> getSignal(n, call.funcName+"_arg_"+k));
 			List<Signal> rets = Utils.checkedConvert(
 				call.returns,
 				(FunctionReturnNode n) -> Utils.addIfAbsent(created, n, () -> createSignal(n.nodeIdent, n)));
@@ -273,7 +273,7 @@ public class EntityCompiler {
 				if (source.second instanceof EndIfNode)
 					return compileEndIf(source.first, (EndIfNode) source.second);
 				if (source.second instanceof FunctionReturnNode)
-					return compileInvoke(((FunctionReturnNode) source.second).fct);
+					return compileInvoke(((FunctionReturnNode) source.second).fct.from);
 				return new SignalAssignment(source.first, compileExpression(source.second));
 			}
 			throw new CompilerException(new UnsupportedDataNodeError(source.second));

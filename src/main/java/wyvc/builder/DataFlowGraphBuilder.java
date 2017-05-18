@@ -7,8 +7,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
 import wyil.lang.Bytecode;
 import wyil.lang.Constant;
@@ -25,6 +23,7 @@ import wyil.lang.SyntaxTree.Location;
 import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.FunctionOrMethod;
 import wyvc.builder.DataFlowGraph;
+import wyvc.builder.CompilerLogger.CompilerDebug;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.CompilerNotice;
@@ -34,43 +33,55 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.UndefConstNode;
+import wyvc.builder.LexicalElementTree;
 import wyvc.builder.LexicalElementTree.Compound;
 import wyvc.builder.LexicalElementTree.Primitive;
 import wyvc.builder.LexicalElementTree.Structure;
 import wyvc.builder.LexicalElementTree.Tree;
 import wyvc.builder.TypeCompiler.PrimitiveType;
 import wyvc.builder.TypeCompiler.RecordStructure;
+import wyvc.builder.TypeCompiler.RecordsUnionStructure;
 import wyvc.builder.TypeCompiler.CompoundType;
 import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.TypeCompiler.UnionStructure;
 import wyvc.lang.Type;
 import wyvc.utils.Generator;
-import wyvc.utils.Generator.CheckedGenerator;
 import wyvc.utils.Pair;
-import wyvc.utils.Triple;
 import wyvc.utils.Utils;
+import wyvc.utils.Generator.CheckedGenerator;
 
-public final class DataFlowGraphBuilder {
+public final class DataFlowGraphBuilder extends LexicalElementTree {
+	private final TypeCompiler typeCompiler;
 
 
-	public static interface NodeTree extends Tree<NodeTree, HalfArrow> {
+	public DataFlowGraphBuilder(CompilerLogger logger, TypeCompiler typeCompiler) {
+		super(logger);
+		this.typeCompiler = typeCompiler;
+	}
+
+
+
+
+
+
+	public static interface NodeTree extends Tree<NodeTree, HalfArrow<?>> {
 		public TypeTree getType();
 	}
 
-	public static class PrimitiveNode extends Primitive<NodeTree, HalfArrow> implements NodeTree {
+	public class PrimitiveNode extends Primitive<NodeTree, HalfArrow<?>> implements NodeTree {
 		private final TypeTree type;
 
-		public PrimitiveNode(DataNode decl) {
-			super(new HalfArrow(decl));
-			type = new PrimitiveType(decl.type);
+		public <T extends DataNode> PrimitiveNode(T decl) {
+			super(new HalfArrow<>(decl));
+			type = typeCompiler.new PrimitiveType(decl.type);
 		}
 
-		public PrimitiveNode(DataNode decl, String ident) {
-			super(new HalfArrow(decl, ident));
-			type = new PrimitiveType(decl.type);
+		public <T extends DataNode> PrimitiveNode(T decl, String ident) {
+			super(new HalfArrow<>(decl, ident));
+			type = typeCompiler.new PrimitiveType(decl.type);
 		}
 
-		public PrimitiveNode(HalfArrow decl, String ident) {
+		public <T extends DataNode> PrimitiveNode(HalfArrow<T> decl, String ident) {
 			this(decl.node, ident);
 		}
 
@@ -80,7 +91,7 @@ public final class DataFlowGraphBuilder {
 		}
 	}
 
-	public static class CompoundNode<S extends Structure<NodeTree, HalfArrow>> extends Compound<NodeTree, HalfArrow, S> implements NodeTree {
+	public class CompoundNode<S extends Structure<NodeTree, HalfArrow<?>>> extends Compound<NodeTree, HalfArrow<?>, S> implements NodeTree {
 		private final TypeTree type;
 		private NodeTree parent = null;
 
@@ -210,15 +221,15 @@ public final class DataFlowGraphBuilder {
 
 
 
-	private static final class Builder extends LoggedBuilder {
+	private final class Builder extends LoggedBuilder {
 		private class PartialReturn {
-			private final HalfArrow cond;
+			private final HalfArrow<?> cond;
 			private final Location<If> ifs;
 			private PartialReturn tPart;
 			private PartialReturn fPart;
 			private final List<NodeTree> ret;
 
-			public PartialReturn(Location<If> ifs, HalfArrow cond, PartialReturn tPart, PartialReturn fPart) {
+			public PartialReturn(Location<If> ifs, HalfArrow<?> cond, PartialReturn tPart, PartialReturn fPart) {
 				this.cond = cond;
 				this.ifs = ifs;
 				this.tPart = tPart;
@@ -274,34 +285,13 @@ public final class DataFlowGraphBuilder {
 		}
 
 
-		private final Map<String, TypeTree> types;
 		private Map<Integer, NodeTree> vars = new HashMap<>();
 		private PartialReturn partialReturn = null;
 		private final TypeTree[] returnTypes;
 		private final DataFlowGraph graph;
 		private Map<wyil.lang.Type, wyvc.lang.Type> compiledTypes = new HashMap<>();
 
-		private String level = "";
-		private Stack<String> block = new Stack<>();
-		private void writeLevel(boolean open) {
-			String a = "──────────────────────────────────────────────────";
-			debug(level+(open ? "┌─" : "└─")+a.substring(0, Math.max(0, 30-level.length()))+" "+
-					block.lastElement()+" "+a.substring(0, Math.max(0, 35-block.lastElement().length())));
-		}
-		private void openLevel(String n) {
-			block.push(n);
-			writeLevel(true);
-			level = level+"│ ";
-		}
-		private void closeLevel() {
-			level = level.substring(0, Math.max(0,level.length()-2));
-			writeLevel(false);
-			block.pop();
-		}
-		private <T> T end(T a) {
-/**/			closeLevel();
-			return a;
-		}
+
 
 		private Type isNodeType(TypeTree type) throws CompilerException {
 			if (type instanceof CompoundType)
@@ -321,13 +311,15 @@ public final class DataFlowGraphBuilder {
 
 
 		public TypeTree buildType(wyil.lang.Type type) throws CompilerException {
-			return TypeCompiler.compileType(logger, type, types);
+			return typeCompiler.compileType(type);
 		}
 
+
+
+
 		@SuppressWarnings("unchecked")
-		public Builder(CompilerLogger logger, Map<String, TypeTree> types, WyilFile.FunctionOrMethod func) throws CompilerException {
-			super(logger);
-			this.types = types;
+		public Builder(WyilFile.FunctionOrMethod func) throws CompilerException {
+			super(DataFlowGraphBuilder.this.logger);
 			graph = new DataFlowGraph();
 			Utils.checkedForEach(
 				Arrays.asList(func.type().params()),
@@ -345,6 +337,68 @@ public final class DataFlowGraphBuilder {
 				(Integer k, NodeTree r) -> buildReturnValue("ret_"+ k, r));
 		}
 
+
+
+
+		private UndefConstNode buildUndefinedValue(Type type) {
+			return graph.new UndefConstNode(type);
+		}
+
+		private Structure<NodeTree, HalfArrow<?>> buildUndefinedValue(Structure<TypeTree, Type> structure) throws CompilerException {
+			if (structure instanceof RecordStructure)
+				return new RecordStructure<>(((RecordStructure<TypeTree, Type>) structure).getComponents().Map(
+					(String s, TypeTree t) -> new Pair<>(s, buildUndefinedValue(t))));
+			if (structure instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<TypeTree, Type>) structure).getOptions().Map(
+					(TypeTree t,TypeTree v) -> new Pair<>(buildUndefinedValue(t),buildUndefinedValue(v))));
+			throw UnsupportedStructureConversionCompilerError.exception(structure);
+		}
+
+		private NodeTree buildUndefinedValue(TypeTree type) throws CompilerException {
+			return type instanceof PrimitiveType
+					? new PrimitiveNode(buildUndefinedValue(type.getValue()))
+					: new CompoundNode<>(buildUndefinedValue(type.getStructure()), type);
+		}
+		private RecordStructure<NodeTree, HalfArrow<?>> buildUnionValue(RecordStructure<TypeTree,Type> type, NodeTree value) throws CompilerException {
+			//if (type.getComponentNumber() != value.getComponentNumber() || )
+			// TODO Test ?
+			return new RecordStructure<>(type.getComponents().gather(value.getStructure().getComponents()).Map(
+				(Pair<Pair<String, TypeTree>, Pair<String,NodeTree>> p) ->
+				new Pair<>(p.first.first,buildTypedValue(p.second.second, p.first.second))));
+		}
+
+		private UnionStructure<NodeTree, HalfArrow<?>> buildUnionValue(UnionStructure<TypeTree,Type> type, NodeTree value) throws CompilerException {
+			List<Pair<TypeTree, Pair<NodeTree, NodeTree>>> cps =  value instanceof CompoundNode<?> && value.getStructure() instanceof UnionStructure<?,?>
+				? ((UnionStructure<NodeTree, HalfArrow<?>>) value.getStructure()).getOptions().map((Pair<NodeTree, NodeTree> p) -> new Pair<>(p.second.getType(), p)).toList()
+				: Collections.singletonList(new Pair<>(value.getType(), new Pair<>(new PrimitiveNode(graph.getTrue()),value)));
+			return new UnionStructure<>(type.getOptions().map(
+					(TypeTree t,TypeTree v) -> new Pair<>(v,Generator.fromPairCollection(cps).find(
+							(Pair<TypeTree, Pair<NodeTree, NodeTree>> c) -> c.first.equals(v)))).Map(
+					(Pair<TypeTree, Pair<TypeTree, Pair<NodeTree, NodeTree>>> p) -> p.second == null
+						? new Pair<>(new PrimitiveNode(graph.getFalse()),buildUndefinedValue(p.first))
+						: p.second.second));
+		}
+
+		private Structure<NodeTree, HalfArrow<?>> buildTypedValue(Structure<TypeTree, Type> type, NodeTree node) throws CompilerException {
+			if (type instanceof UnionStructure)
+				return buildUnionValue((UnionStructure<TypeTree,Type>) type, node);
+			if (type instanceof RecordStructure)
+				return buildUnionValue((RecordStructure<TypeTree,Type>) type, node);
+			throw UnsupportedStructureConversionCompilerError.exception(type);
+		}
+
+		private NodeTree buildTypedValue(NodeTree node, TypeTree type) throws CompilerException {
+//			debug("Val "+(node == null ? "NULL" : node.getType()));
+			if (node.getType().equals(type))
+				return node;
+			if (type instanceof CompoundType)
+				return new CompoundNode<>(buildTypedValue(type.getStructure(), node), type);
+			throw UnrelatedTypeCompilerError.exception(type, node);
+		}
+
+
+
+
 		private void buildReturnValue(String ident, NodeTree ret) {
 			if (ret instanceof PrimitiveNode)
 				graph.new OutputNode(ident, ret.getValue());
@@ -352,18 +406,66 @@ public final class DataFlowGraphBuilder {
 		}
 
 
+
+
+
+
+
+
+
+		private Structure<NodeTree, HalfArrow<?>> buildUnionNode(NodeTree is_t1, NodeTree vl_t1, NodeTree is_t2, NodeTree vl_t2) throws CompilerException {
+			return buildUnionNode(Generator.fromCollection(Arrays.asList(new Pair<>(is_t1,vl_t1), new Pair<>(is_t2,vl_t2))).toCheckedGenerator());
+		}
+
+		private Structure<NodeTree, HalfArrow<?>> buildUnionNode(CheckedGenerator<Pair<NodeTree, NodeTree>, CompilerException> options) throws CompilerException {
+			final List<Pair<NodeTree, NodeTree>> nodes = options.toList();
+//			if (nodes.isEmpty())
+//				throw EmptyUnionTypeCompilerError.exception();
+			if (nodes.size() == 1)
+				logger.addMessage(new CompilerDebug(){
+					@Override
+					public String info() {
+						return "Union node of one option should not exist here.";
+					}});
+			if (!Generator.fromCollection(nodes).forAll((Pair<NodeTree, NodeTree> p) -> p.second instanceof CompoundType && p.second.getStructure() instanceof RecordStructure))
+				return new UnionStructure<>(Generator.fromPairCollection(nodes));
+
+			List<CompoundType<RecordStructure<TypeTree,Type>>> recordTypes = Utils.convert(nodes);
+			final Map<String, TypeTree> cps0 = new HashMap<>();
+			final Map<String, TypeTree> cps1 = new HashMap<>();
+			recordTypes.get(0).getStructure().getFields().forEach((String n, TypeTree t) -> cps0.put(n, t));
+			for (int k = 1; k<recordTypes.size() && !cps0.isEmpty(); ++k) {
+				recordTypes.get(k).getStructure().getFields().ForEach((String n, TypeTree t) -> {
+					if(cps0.containsKey(n))
+						cps1.put(n, buildUnionNode(cps0.get(n), t));
+				});
+				cps0.clear();
+				cps0.putAll(cps1);
+				cps1.clear();
+			}
+			return new CompoundType<>(new RecordsUnionStructure<>(
+					Generator.fromCollection(cps0.entrySet()).map((Entry<String, TypeTree> e) -> new Pair<>(e.getKey(), e.getValue())),
+					Generator.fromCollection(nodes).map((TypeTree t) -> new Pair<>(getBoolean(), t))));
+		}
+
+
 		private DataNode buildParameter(String ident, Type type) {
 			return graph.new InputNode(ident, type);
 		}
-		private Structure<NodeTree, HalfArrow> buildParameter(String ident, Structure<TypeTree, Type> structure) throws CompilerException {
-			if (structure instanceof RecordStructure<?,?>)
+		private Structure<NodeTree, HalfArrow<?>> buildParameter(String ident, Structure<TypeTree, Type> structure) throws CompilerException {
+			if (structure instanceof RecordStructure)
 				return new RecordStructure<>(((RecordStructure<TypeTree, Type>) structure).getComponents().Map(
 					(String s, TypeTree t) -> new Pair<>(s, buildParameter(ident+"_"+s, t))));
-			if (structure instanceof UnionStructure<?,?>)
-				return new <CompilerException>UnionStructure<NodeTree, HalfArrow>(((UnionStructure<TypeTree, Type>) structure).getOptions().EnumMap(
+			if (structure instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<TypeTree, Type>) structure).getOptions().EnumMap(
 					(Integer k, Pair<TypeTree,TypeTree> p) -> new Pair<>(
-							buildParameter(ident+"_"+UnionStructure.FLG_PREFIX+k, p.first),
-							buildParameter(ident+"_"+UnionStructure.VAL_PREFIX+k, p.second))));
+							buildParameter(ident+"_"+EffectiveUnionStructure.FLG_PREFIX+k, p.first),
+							buildParameter(ident+"_"+EffectiveUnionStructure.VAL_PREFIX+k, p.second))));
+			if (structure instanceof EffectiveUnionStructure)
+				return buildUnionNode(((UnionStructure<TypeTree, Type>) structure).getOptions().EnumMap(
+					(Integer k, Pair<TypeTree,TypeTree> p) -> new Pair<>(
+							buildParameter(ident+"_"+EffectiveUnionStructure.FLG_PREFIX+k, p.first),
+							buildParameter(ident+"_"+EffectiveUnionStructure.VAL_PREFIX+k, p.second))));
 			throw UnsupportedStructureConversionCompilerError.exception(structure);
 		}
 		private NodeTree buildParameter(String ident, TypeTree type) throws CompilerException {
@@ -429,12 +531,12 @@ public final class DataFlowGraphBuilder {
 			throw WyilUnsupportedCompilerError.exception(field);
 		}
 
-		private Structure<NodeTree, HalfArrow> buildCopy(Structure<NodeTree, HalfArrow> structure) throws CompilerException {
-			if (structure instanceof RecordStructure<?, ?>)
-				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow>)structure).getComponents().Map(
+		private Structure<NodeTree, HalfArrow<?>> buildCopy(Structure<NodeTree, HalfArrow<?>> structure) throws CompilerException {
+			if (structure instanceof RecordStructure)
+				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow<?>>)structure).getComponents().Map(
 					(String s, NodeTree n) -> new Pair<>(s, buildCopy(n))));
-			if (structure instanceof UnionStructure<?, ?>)
-				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow>)structure).getOptions().Map(
+			if (structure instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow<?>>)structure).getOptions().Map(
 					(NodeTree t, NodeTree n) -> new Pair<>(buildCopy(t), buildCopy(n))));
 			throw UnsupportedStructureConversionCompilerError.exception(structure);
 		}
@@ -445,12 +547,12 @@ public final class DataFlowGraphBuilder {
 					: new CompoundNode<>(buildCopy(node.getStructure()), node.getType());
 		}
 
-		private Structure<NodeTree, HalfArrow> buildField(Structure<NodeTree, HalfArrow> struct, NodeTree current, NodeTree compo) throws CompilerException {
-			if (struct instanceof RecordStructure<?, ?>)
-				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow>)struct).getComponents().Map(
+		private Structure<NodeTree, HalfArrow<?>> buildField(Structure<NodeTree, HalfArrow<?>> struct, NodeTree current, NodeTree compo) throws CompilerException {
+			if (struct instanceof RecordStructure)
+				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow<?>>)struct).getComponents().Map(
 					(String s,NodeTree n) -> new Pair<>(s, n == current ? compo : buildCopy(n))));
-			if (struct instanceof UnionStructure<?, ?>)
-				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow>)struct).getOptions().Map(
+			if (struct instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow<?>>)struct).getOptions().Map(
 					(NodeTree test, NodeTree val) -> new Pair<>(
 							test == current ? compo : buildCopy(test),
 							val == current ? compo : buildCopy(val))));
@@ -480,12 +582,12 @@ public final class DataFlowGraphBuilder {
 		}
 
 
-		private Structure<NodeTree, HalfArrow> buildNamedHalfArrow(String ident, Structure<NodeTree, HalfArrow> structure) throws CompilerException {
-			if (structure instanceof RecordStructure<?,?>)
-				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow>) structure).getComponents().Map(
+		private Structure<NodeTree, HalfArrow<?>> buildNamedHalfArrow(String ident, Structure<NodeTree, HalfArrow<?>> structure) throws CompilerException {
+			if (structure instanceof RecordStructure)
+				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow<?>>) structure).getComponents().Map(
 					(String s, NodeTree n) -> new Pair<>(s, buildNamedHalfArrow(ident+"_"+s, n))));
-			if (structure instanceof UnionStructure<?,?>)
-				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow>) structure).getOptions().EnumMap(
+			if (structure instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow<?>>) structure).getOptions().EnumMap(
 					(Integer k, Pair<NodeTree,NodeTree> p) -> new Pair<>(
 							buildNamedHalfArrow(ident+"_"+UnionStructure.FLG_PREFIX+k, p.first),
 							buildNamedHalfArrow(ident+"_"+UnionStructure.VAL_PREFIX+k, p.second))));
@@ -515,62 +617,6 @@ public final class DataFlowGraphBuilder {
 			List<NodeTree> brhs = buildTuple(rhs);
 			for(int k = 0; k < lhs.length; ++k)
 				buildAssignValue(lhs[k], brhs.get(k));
-		}
-
-		private UndefConstNode buildUndefinedValue(Type type) {
-			return graph.new UndefConstNode(type);
-		}
-
-		private Structure<NodeTree, HalfArrow> buildUndefinedValue(Structure<TypeTree, Type> structure) throws CompilerException {
-			if (structure instanceof RecordStructure<?,?>)
-				return new RecordStructure<>(((RecordStructure<TypeTree, Type>) structure).getComponents().Map(
-					(String s, TypeTree t) -> new Pair<>(s, buildUndefinedValue(t))));
-			if (structure instanceof UnionStructure<?,?>)
-				return new UnionStructure<>(((UnionStructure<TypeTree, Type>) structure).getOptions().Map(
-					(TypeTree t,TypeTree v) -> new Pair<>(buildUndefinedValue(t),buildUndefinedValue(v))));
-			throw UnsupportedStructureConversionCompilerError.exception(structure);
-		}
-
-		private NodeTree buildUndefinedValue(TypeTree type) throws CompilerException {
-			return type instanceof PrimitiveType
-					? new PrimitiveNode(buildUndefinedValue(type.getValue()))
-					: new CompoundNode<>(buildUndefinedValue(type.getStructure()), type);
-		}
-		private RecordStructure<NodeTree, HalfArrow> buildUnionValue(RecordStructure<TypeTree,Type> type, NodeTree value) throws CompilerException {
-			//if (type.getComponentNumber() != value.getComponentNumber() || )
-			// TODO Test ?
-			return new <CompilerException>RecordStructure<NodeTree, HalfArrow>(type.getComponents().gather(value.getStructure().getComponents()).Map(
-				(Pair<Pair<String, TypeTree>, Pair<String,NodeTree>> p) ->
-				new Pair<>(p.first.first,buildTypedValue(p.second.second, p.first.second))));
-		}
-
-		private UnionStructure<NodeTree, HalfArrow> buildUnionValue(UnionStructure<TypeTree,Type> type, NodeTree value) throws CompilerException {
-			List<Pair<TypeTree, Pair<NodeTree, NodeTree>>> cps =  value instanceof CompoundNode<?> && value.getStructure() instanceof UnionStructure<?,?>
-				? ((UnionStructure<NodeTree, HalfArrow>) value.getStructure()).getOptions().map((Pair<NodeTree, NodeTree> p) -> new Pair<>(p.second.getType(), p)).toList()
-				: Collections.singletonList(new Pair<>(value.getType(), new Pair<>(new PrimitiveNode(graph.getTrue()),value)));
-			return new UnionStructure<>(type.getOptions().map(
-					(TypeTree t,TypeTree v) -> new Pair<>(v,Generator.fromPairCollection(cps).find(
-							(Pair<TypeTree, Pair<NodeTree, NodeTree>> c) -> c.first.equals(v)))).Map(
-					(Pair<TypeTree, Pair<TypeTree, Pair<NodeTree, NodeTree>>> p) -> p.second == null
-						? new Pair<>(new PrimitiveNode(graph.getFalse()),buildUndefinedValue(p.first))
-						: p.second.second));
-		}
-
-		private Structure<NodeTree, HalfArrow> buildTypedValue(Structure<TypeTree, Type> type, NodeTree node) throws CompilerException {
-			if (type instanceof UnionStructure<?,?>)
-				return buildUnionValue((UnionStructure<TypeTree,Type>) type, node);
-			if (type instanceof RecordStructure<?,?>)
-				return buildUnionValue((RecordStructure<TypeTree,Type>) type, node);
-			throw UnsupportedStructureConversionCompilerError.exception(type);
-		}
-
-		private NodeTree buildTypedValue(NodeTree node, TypeTree type) throws CompilerException {
-//			debug("Val "+(node == null ? "NULL" : node.getType()));
-			if (node.getType().equals(type))
-				return node;
-			if (type instanceof CompoundType<?>)
-				return new CompoundNode<>(buildTypedValue(type.getStructure(), node), type);
-			throw UnrelatedTypeCompilerError.exception(type, node);
 		}
 
 		private void buildReturn(Location<Bytecode.Return> ret) throws CompilerException {
@@ -615,17 +661,17 @@ public final class DataFlowGraphBuilder {
 			debug("IS "+value.getType()+" -> "+type);
 			if (!(value instanceof CompoundNode) || !(value.getStructure() instanceof UnionStructure))
 				return new PrimitiveNode(value.getType().equals(type) ? graph.getTrue() : graph.getFalse());
-			List<TypeTree> types = (type instanceof CompoundType<?> && type.getStructure() instanceof UnionStructure<?,?>)
+			List<TypeTree> types = (type instanceof CompoundType && type.getStructure() instanceof UnionStructure)
 					? ((UnionStructure<TypeTree, Type>) type.getStructure()).getOptions().takeSecond().toList() : Collections.singletonList(type);
 			debug("Il y a " + types.size() +" cas");
-			DataNode cond = ((UnionStructure<NodeTree, HalfArrow>) value.getStructure()).getOptions().fold(
+			DataNode cond = ((UnionStructure<NodeTree, HalfArrow<?>>) value.getStructure()).getOptions().fold(
 				(DataNode d, Pair<NodeTree,NodeTree> p) -> {
 					debug("Cas "+ p.second.getType());
 					for (TypeTree t : types)
 						if (t.equals(p.second.getType()))
 							return d == null
 								? p.first.getValue().node
-								: graph.new BinOpNode(is, Type.Boolean, new HalfArrow(d), p.first.getValue());
+								: graph.new BinOpNode(is, Type.Boolean, new HalfArrow<>(d), p.first.getValue());
 					debug("  ---- abandonné");
 					return d;
 
@@ -639,7 +685,7 @@ public final class DataFlowGraphBuilder {
 //			debug("Operator "+a);
 //			a.printStructure(logger, "  ");
 			if (op.getBytecode().kind() == OperatorKind.RECORDCONSTRUCTOR)
-				return new CompoundNode<>(new <CompilerException>RecordStructure<NodeTree, HalfArrow>(
+				return new CompoundNode<>(new <CompilerException>RecordStructure<NodeTree, HalfArrow<?>>(
 						Generator.fromCollection(((wyil.lang.Type.EffectiveRecord)op.getType()).getFieldNames()).gather(
 							Generator.fromCollection(op.getOperands())).Map((Pair<String, Location<?>> p) -> new Pair<>(p.first, buildExpression(p.second)))),
 						buildType(op.getType()));
@@ -682,14 +728,14 @@ public final class DataFlowGraphBuilder {
 			if (bytecode instanceof AliasDeclaration) {
 				TypeTree type = buildType(var.getType());
 				NodeTree node = buildVariableAccess(var.getOperand(0));
-				if (!(node instanceof CompoundNode<?>))
+				if (!(node instanceof CompoundNode))
 					return node;
-				List<TypeTree> types = (type instanceof CompoundType<?> && type.getStructure() instanceof UnionStructure<?,?>)
+				List<TypeTree> types = type.getStructure() instanceof UnionStructure
 						? ((UnionStructure<TypeTree, Type>) type.getStructure()).getOptions().takeSecond().toList()
 						: Collections.singletonList(type);
 //				debug("union "+node);
 //				node.printStructure(logger, "  ");
-				List<Pair<NodeTree, NodeTree>> newOpt = ((UnionStructure<NodeTree, HalfArrow>) node.getStructure()).getOptions().Map(
+				List<Pair<NodeTree, NodeTree>> newOpt = ((UnionStructure<NodeTree, HalfArrow<?>>) node.getStructure()).getOptions().Map(
 					(NodeTree p, NodeTree v) -> {
 						for (TypeTree t : types)
 							if (t.equals(v.getType()))
@@ -697,20 +743,20 @@ public final class DataFlowGraphBuilder {
 						return null;}).remove(null).toList();
 				return newOpt.size() == 1
 						? newOpt.get(0).second
-						: new CompoundNode<>(new UnionStructure<>(newOpt),type);
+						: new CompoundNode<>(new UnionStructure<>(Generator.fromCollection(newOpt)),type);
 			}
 			throw WyilUnsupportedCompilerError.exception(var);
 		}
 
 
 		private DataNode buildCallReturn(String ident, Type type, FuncCallNode func) {
-			return graph.new FunctionReturnNode(ident, type, func);
+			return graph.new FunctionReturnNode(ident, type, new HalfArrow<>(func));
 		}
-		private Structure<NodeTree, HalfArrow> buildCallReturn(String ident, Structure<TypeTree, Type> structure, FuncCallNode func) throws CompilerException {
-			if (structure instanceof RecordStructure<?,?>)
+		private Structure<NodeTree, HalfArrow<?>> buildCallReturn(String ident, Structure<TypeTree, Type> structure, FuncCallNode func) throws CompilerException {
+			if (structure instanceof RecordStructure)
 				return new RecordStructure<>(((RecordStructure<TypeTree, Type>) structure).getComponents().Map(
 					(String s, TypeTree t) -> new Pair<>(s, buildCallReturn(ident+"_"+s, t, func))));
-			if (structure instanceof UnionStructure<?,?>)
+			if (structure instanceof UnionStructure)
 				return new UnionStructure<>(((UnionStructure<TypeTree, Type>) structure).getOptions().EnumMap(
 					(Integer k, Pair<TypeTree,TypeTree> p) -> new Pair<>(
 							buildCallReturn(ident+"_"+UnionStructure.FLG_PREFIX+k, p.first, func),
@@ -732,23 +778,23 @@ public final class DataFlowGraphBuilder {
 		}
 
 
-		private  DataNode buildEndIf(Location<If> ifs, HalfArrow ifn, HalfArrow trueLab, HalfArrow falseLab) {
+		private  DataNode buildEndIf(Location<If> ifs, HalfArrow<?> ifn, HalfArrow<?> trueLab, HalfArrow<?> falseLab) {
 			return trueLab.node == falseLab.node ? trueLab.node : graph.new EndIfNode(ifs, ifn, trueLab, falseLab);
 		}
-		private  Structure<NodeTree, HalfArrow> buildEndIf(Location<If> ifs, HalfArrow ifn, Structure<NodeTree, HalfArrow> trueLab, Structure<NodeTree, HalfArrow> falseLab) throws CompilerException {
-			if (trueLab instanceof RecordStructure<?,?> && falseLab instanceof RecordStructure<?,?>)
-				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow>) trueLab).getComponents().gather(
-					((RecordStructure<NodeTree, HalfArrow>) falseLab).getComponents()).Map(
+		private  Structure<NodeTree, HalfArrow<?>> buildEndIf(Location<If> ifs, HalfArrow<?> ifn, Structure<NodeTree, HalfArrow<?>> trueLab, Structure<NodeTree, HalfArrow<?>> falseLab) throws CompilerException {
+			if (trueLab instanceof RecordStructure && falseLab instanceof RecordStructure)
+				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow<?>>) trueLab).getComponents().gather(
+					((RecordStructure<NodeTree, HalfArrow<?>>) falseLab).getComponents()).Map(
 					(Pair<String, NodeTree> p1,Pair<String, NodeTree> p2) -> new Pair<>(p1.first, buildEndIf(ifs, ifn, p1.second, p2.second))));
-			if (trueLab instanceof UnionStructure<?,?> && falseLab instanceof UnionStructure<?,?>)
-				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow>) trueLab).getOptions().gather(
-					((UnionStructure<NodeTree, HalfArrow>) falseLab).getOptions()).Map(
+			if (trueLab instanceof UnionStructure && falseLab instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow<?>>) trueLab).getOptions().gather(
+					((UnionStructure<NodeTree, HalfArrow<?>>) falseLab).getOptions()).Map(
 					(Pair<NodeTree,NodeTree> p1,Pair<NodeTree,NodeTree> p2) -> new Pair<>(
 							buildEndIf(ifs, ifn, p1.first, p2.first),
 							buildEndIf(ifs, ifn, p1.second, p2.second))));
 			throw UncompatibleStructuresCompilerError.exception(trueLab, falseLab);
 		}
-		private  NodeTree buildEndIf(Location<If> ifs, HalfArrow ifn, NodeTree trueLab, NodeTree falseLab) throws CompilerException {
+		private  NodeTree buildEndIf(Location<If> ifs, HalfArrow<?> ifn, NodeTree trueLab, NodeTree falseLab) throws CompilerException {
 			trueLab.checkIdenticalStructure(falseLab); // Test Type
 			return trueLab instanceof PrimitiveNode
 					? new PrimitiveNode(buildEndIf(ifs, ifn, trueLab.getValue(), falseLab.getValue()))
@@ -757,14 +803,14 @@ public final class DataFlowGraphBuilder {
 
 
 
-		private Structure<NodeTree, HalfArrow> copyNamedHalfArrow(Structure<NodeTree, HalfArrow> name, Structure<NodeTree, HalfArrow> structure) throws CompilerException {
-			if (structure instanceof RecordStructure<?,?> && name instanceof RecordStructure<?,?>)
-				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow>) name).getComponents().gather(
-					((RecordStructure<NodeTree, HalfArrow>) structure).getComponents()).Map(
+		private Structure<NodeTree, HalfArrow<?>> copyNamedHalfArrow(Structure<NodeTree, HalfArrow<?>> name, Structure<NodeTree, HalfArrow<?>> structure) throws CompilerException {
+			if (structure instanceof RecordStructure && name instanceof RecordStructure)
+				return new RecordStructure<>(((RecordStructure<NodeTree, HalfArrow<?>>) name).getComponents().gather(
+					((RecordStructure<NodeTree, HalfArrow<?>>) structure).getComponents()).Map(
 					(Pair<String, NodeTree> p1,Pair<String, NodeTree> p2) -> new Pair<>(p1.first, copyNamedHalfArrow(p1.second, p2.second))));
-			if (structure instanceof UnionStructure<?,?> && name instanceof UnionStructure<?,?>)
-				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow>) name).getOptions().gather(
-					((UnionStructure<NodeTree, HalfArrow>) structure).getOptions()).Map(
+			if (structure instanceof UnionStructure && name instanceof UnionStructure)
+				return new UnionStructure<>(((UnionStructure<NodeTree, HalfArrow<?>>) name).getOptions().gather(
+					((UnionStructure<NodeTree, HalfArrow<?>>) structure).getOptions()).Map(
 					(Pair<NodeTree,NodeTree> p1,Pair<NodeTree,NodeTree> p2) -> new Pair<>(
 							copyNamedHalfArrow(p1.first, p2.first),
 							copyNamedHalfArrow(p1.second, p2.second))));
@@ -781,7 +827,7 @@ public final class DataFlowGraphBuilder {
 		private void buildIf(Location<If> ifs) throws CompilerException {
 			NodeTree cond = buildExpression(ifs.getOperand(0));
 
-			HalfArrow ifn = cond.getValue(); // TODO verif bool primitif.
+			HalfArrow<?> ifn = cond.getValue(); // TODO verif bool primitif.
 
 			HashMap<Integer, NodeTree> state = new HashMap<>();
 			vars.forEach((Integer i, NodeTree t) -> state.put(i, t));
@@ -822,7 +868,7 @@ public final class DataFlowGraphBuilder {
 
 
 
-	public static DataFlowGraph buildGraph(CompilerLogger logger, FunctionOrMethod func, Map<String, TypeTree> types) throws CompilerException {
-		return new Builder(logger, types, func).getGraph();
+	public DataFlowGraph buildGraph(FunctionOrMethod func) throws CompilerException {
+		return new Builder(func).getGraph();
 	}
 }
