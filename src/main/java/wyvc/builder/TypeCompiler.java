@@ -1,12 +1,10 @@
 package wyvc.builder;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 
 import wyil.lang.WyilFile;
@@ -15,10 +13,10 @@ import wyvc.utils.Generator.CheckedGenerator;
 import wyvc.utils.Generator.StandardGenerator;
 import wyvc.utils.Generator.StandardPairGenerator;
 import wyvc.utils.Pair;
-import wyvc.utils.Utils;
 import wyvc.builder.CompilerLogger.CompilerDebug;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
+import wyvc.builder.CompilerLogger.CompilerNotice;
 import wyvc.lang.Type;
 
 public class TypeCompiler extends LexicalElementTree {
@@ -37,39 +35,43 @@ public class TypeCompiler extends LexicalElementTree {
 			Greater,
 			Equal,
 			Lesser,
-			Unordered,
 			Disjointed,
-			Unknown;
+			Unknown,
+			DisGreater,
+			DisEqual,
+			DisLesser;
 
 			/** A/B => B/A **/
 			private static final Order[] Opposite =
-				{	Lesser, 	Equal, 		Greater,	Unordered,	Disjointed,	Unknown		};
+				{	Lesser, 	Equal, 		Greater,	Disjointed,	Unknown,	DisLesser,	DisEqual,	DisGreater	};
 			public Order opposite() {
 				return Opposite[ordinal()];
 			}
 
 			/** A/B => (!A)/(!B) **/
 			private static final Order[] Negation =
-				{	Lesser, 	Equal, 		Greater, 	Unordered, 	Unordered, 	Unknown		};
+				{	Lesser, 	Equal, 		Greater, 	Unknown, 	Unknown,	Lesser, 	Equal, 		Greater		};
 			public Order negation() {
 				return Negation[ordinal()];
 			}
 
 			/** A/B => (!A)/B **/
 			private static final Order[] SemiNegation =
-				{	Disjointed,	Disjointed,	Unordered,	Unordered,	Greater,	Unknown		};
+				{	Disjointed,	Disjointed,	Unknown,	Greater,	Unknown,	DisGreater,	Greater,	Greater		};
 			public Order semiNegation() {
 				return SemiNegation[ordinal()];
 			}
 
 			/** A/C && B/D => (A,B)/(C,D) **/
 			private static final Order[][] Conjunction = {
-				{	Greater,	Greater, 	Disjointed,	Unordered, 	Disjointed,	Unknown		},
-				{	Greater,	Equal, 		Lesser, 	Unordered, 	Disjointed,	Unknown		},
-				{	Disjointed,	Lesser,		Lesser,		Unordered, 	Disjointed,	Unknown		},
-				{	Unordered,	Unordered,	Unordered, 	Unordered, 	Disjointed,	Unknown		},
-				{	Disjointed,	Disjointed,	Disjointed, Disjointed, Disjointed,	Disjointed	},
-				{	Unknown, 	Unknown,	Unknown, 	Unknown, 	Disjointed,	Unknown		}
+				{	Greater,	Greater, 	Unknown,	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
+				{	Greater,	Equal, 		Lesser, 	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
+				{	Unknown,	Lesser,		Lesser,		Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
+				{	Disjointed,	Disjointed,	Disjointed, Disjointed,	Disjointed,	DisGreater,	DisEqual,	DisLesser	},
+				{	Unknown, 	Unknown,	Unknown, 	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
+				{	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisEqual,	DisEqual	},
+				{	DisEqual, 	DisEqual,	DisEqual, 	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual	},
+				{	DisLesser, 	DisLesser,	DisLesser, 	DisLesser,	DisLesser,	DisEqual,	DisEqual,	DisLesser	}
 			};
 			public Order conjunction(Order other) {
 				return Conjunction[ordinal()][other.ordinal()];
@@ -77,12 +79,14 @@ public class TypeCompiler extends LexicalElementTree {
 
 			/** A/C && B/C => (A|B)/C **/
 			private static final Order[][] Union = {
-				{	Greater, 	Greater, 	Greater, 	Greater,	Greater,	Greater		},
-				{	Greater, 	Equal, 		Equal, 		Greater,	Greater,	Greater		},
-				{	Greater, 	Equal, 		Lesser, 	Unknown,	Unordered,	Unknown		},
-				{	Greater, 	Greater, 	Unknown, 	Unknown,	Unordered,	Unknown		},
-				{	Greater, 	Greater, 	Unordered,	Unordered,	Disjointed,	Unknown		},
-				{	Greater, 	Greater, 	Unknown, 	Unknown,	Unknown,	Unknown		}
+				{	Greater, 	Greater, 	Greater, 	Greater,	Greater,	DisGreater,	DisGreater,	Greater		},
+				{	Greater, 	Equal, 		Equal, 		Greater,	Greater,	DisGreater,	DisEqual,	Equal		},
+				{	Greater, 	Equal, 		Lesser, 	Unknown,	Unknown,	DisGreater,	DisEqual,	Lesser		},
+				{	Greater, 	Greater, 	Unknown,	Disjointed,	Unknown,	DisGreater,	DisGreater,	Disjointed	},
+				{	Greater, 	Greater, 	Unknown, 	Unknown,	Unknown,	DisGreater,	DisGreater,	Unknown		},
+				{	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisGreater,	DisGreater	},
+				{	DisGreater,	DisEqual,	DisEqual,	DisGreater,	DisGreater,	DisGreater,	DisEqual,	DisEqual	},
+				{	Greater, 	Equal, 		Lesser, 	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	}
 			};
 			public Order union(Order other) {
 				return Union[ordinal()][other.ordinal()];
@@ -90,12 +94,14 @@ public class TypeCompiler extends LexicalElementTree {
 
 			/** A/C && B/C => (A&B)/C **/
 			private static final Order[][] Intersection = {
-				{	Greater, 	Equal, 		Lesser,		Unordered,	Disjointed,	Unknown		},
-				{	Equal, 		Equal, 		Lesser, 	Lesser,		Lesser,		Lesser		},
-				{	Lesser, 	Lesser, 	Lesser, 	Lesser,		Lesser,		Lesser		},
-				{	Unordered, 	Lesser, 	Lesser, 	Unknown,	Disjointed,	Unknown		},
-				{	Disjointed,	Lesser,		Lesser,		Disjointed,	Disjointed,	Disjointed	},
-				{	Unknown, 	Lesser, 	Lesser, 	Unknown,	Disjointed,	Unknown		}
+				{	Greater, 	Equal, 		Lesser,		Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
+				{	Equal, 		Equal, 		Lesser, 	Lesser,		Lesser,		DisEqual,	DisEqual,	DisLesser	},
+				{	Lesser, 	Lesser, 	Lesser, 	Lesser,		Lesser,		DisEqual,	DisEqual,	DisLesser	},
+				{	Disjointed,	Lesser,		Lesser,		Disjointed,	Disjointed,	DisGreater,	DisEqual,	DisLesser	},
+				{	Unknown, 	Lesser, 	Lesser, 	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
+				{	DisGreater,	DisEqual,	DisEqual,	DisGreater,	DisGreater,	DisGreater,	DisEqual,	DisEqual	},
+				{	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual	},
+				{	DisLesser,	DisLesser,	DisLesser,	DisLesser,	DisLesser,	DisEqual,	DisEqual,	DisLesser	}
 			};
 			public Order intersection(Order other) {
 				return Intersection[ordinal()][other.ordinal()];
@@ -103,12 +109,14 @@ public class TypeCompiler extends LexicalElementTree {
 
 			/** A/B && B/A => A/B **/
 			private static final Order[][] Precise = {
-				{	Greater, 	Equal,		Equal,		Greater,	Unknown,	Greater		},
-				{	Equal, 		Equal, 		Equal, 		Equal,		Unknown,	Equal		},
-				{	Equal, 		Equal, 		Lesser, 	Lesser,		Disjointed,	Lesser		},
-				{	Greater, 	Equal, 		Lesser, 	Unordered,	Disjointed,	Unordered	},
-				{	Unknown,	Unknown,	Disjointed,	Disjointed,	Disjointed,	Disjointed	},
-				{	Greater, 	Equal, 		Lesser, 	Unordered,	Disjointed,	Unknown		}
+				{	Equal, 		Equal,		Greater,	DisGreater,	Greater,	DisEqual,	DisEqual,	DisGreater	},
+				{	Equal, 		Equal, 		Equal, 		DisEqual,	Equal,		DisEqual,	DisEqual,	DisEqual	},
+				{	Lesser, 	Equal, 		Equal, 		Disjointed,	Lesser,		DisLesser,	DisEqual,	DisEqual	},
+				{	DisLesser,	DisEqual,	Disjointed,	Disjointed,	Disjointed,	DisLesser,	DisEqual,	DisGreater	},
+				{	Lesser, 	Equal, 		Greater, 	Disjointed,	Unknown,	DisLesser,	DisEqual,	DisGreater	},
+				{	DisEqual,	DisEqual,	DisGreater,	DisGreater,	DisGreater,	DisEqual,	DisEqual,	DisGreater	},
+				{	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual	},
+				{	DisLesser,	DisEqual,	DisEqual,	DisLesser,	DisLesser,	DisLesser,	DisEqual,	DisEqual	}
 			};
 			public Order precise(Order other) {
 				return Precise[ordinal()][other.ordinal()];
@@ -175,7 +183,7 @@ public class TypeCompiler extends LexicalElementTree {
 			if (other == Any)
 				return Order.Lesser;
 			if (other == Void)
-				return Order.Greater;
+				return Order.DisGreater;
 			if (other instanceof Union || other instanceof Intersection || other instanceof Negation)
 				return other.compareWith(this).opposite();
 			return Order.Disjointed;
@@ -232,8 +240,8 @@ public class TypeCompiler extends LexicalElementTree {
 		@Override
 		public Order compareWith(AbstractType other) {
 			if (other == this)
-				return Order.Equal;
-			return Order.Lesser;
+				return Order.DisEqual;
+			return Order.DisLesser;
 		}
 	};
 
@@ -357,7 +365,7 @@ public class TypeCompiler extends LexicalElementTree {
 
 		@Override
 		public Order compareWith(AbstractType other) {
-			return getOptions().map(other::dualCompareWith).map(Order::opposite).fold(Order::union, Order.Lesser);
+			return getOptions().map(other::dualCompareWith).map(Order::opposite).fold(Order::union, Order.DisLesser);
 		}
 
 	}
@@ -389,18 +397,21 @@ public class TypeCompiler extends LexicalElementTree {
 					return Void;
 				for (int i = k+1; i < noo; ++i) {
 					AbstractType u = options.get(i);
-					if (utils.contains(u))
+					if (utils.contains(u)){
 						switch (t.dualCompareWith(u)) {
 						case Lesser:
+						case DisLesser:
 							utils.remove(t);
 							break;
 						case Equal:
 						case Greater:
+						case DisEqual:
+						case DisGreater:
 							utils.remove(u);
 							break;
 						default:
 							break;
-						}
+						}}
 				}
 			}
 			if (utils.isEmpty())
@@ -453,7 +464,7 @@ public class TypeCompiler extends LexicalElementTree {
 
 		@Override
 		public Order compareWith(AbstractType other) {
-			return getOptions().map(other::dualCompareWith).map(Order::opposite).fold(Order::intersection, Order.Equal);
+			return getOptions().map(other::dualCompareWith).map(Order::opposite).fold(Order::intersection, Order.Greater);
 		}
 	}
 
@@ -486,10 +497,13 @@ public class TypeCompiler extends LexicalElementTree {
 					if (utils.contains(u))
 						switch (t.dualCompareWith(u)) {
 						case Lesser:
+						case DisLesser:
 							utils.remove(u);
 							break;
 						case Equal:
 						case Greater:
+						case DisEqual:
+						case DisGreater:
 							utils.remove(t);
 							break;
 						case Disjointed:
@@ -539,7 +553,7 @@ public class TypeCompiler extends LexicalElementTree {
 
 		@Override
 		public Order compareWith(AbstractType other) {
-			return other instanceof Negation ? ((Negation<?>)other).type.dualCompareWith(type).negation()
+			return other instanceof Negation ? type.dualCompareWith(((Negation<?>)other).type).negation()
 			                                 : type.compareWith(other).semiNegation();
 		}
 	}
@@ -596,7 +610,54 @@ public class TypeCompiler extends LexicalElementTree {
 
 	/*------- Abstract Type Compilation -------*/
 
-	Map<String, TypeTree> nominalTypes = new HashMap<>();
+
+	public static interface TypeTree extends Tree {
+
+	}
+
+	public class TypeLeaf extends Leaf<Type> implements TypeTree {
+		public TypeLeaf(Type value) {
+			super(value);
+		}
+	}
+
+	public class TypeRecord extends RecordNode<TypeTree> implements TypeTree {
+		public TypeRecord(StandardGenerator<Pair<String, TypeTree>> fields) {
+			super(fields);
+		}
+		public <E extends Exception> TypeRecord(CheckedGenerator<Pair<String, TypeTree>, E> fields) throws E {
+			super(fields);
+		}
+	}
+
+	public class SimpleTypeUnion extends UnionNode<TypeTree, TypeLeaf, TypeTree> implements TypeTree {
+		public SimpleTypeUnion(StandardGenerator<Pair<TypeLeaf, TypeTree>> options) {
+			super(options);
+		}
+
+		@Override
+		protected StandardPairGenerator<TypeTree, TypeTree> getTypedOptions() {
+			return getOptions().map((TypeLeaf a) -> a, (TypeTree b) -> b);
+		}
+	}
+
+	public class TypeRecordUnion extends RecordUnionNode<TypeTree, TypeLeaf, TypeRecord> implements TypeTree {
+		public TypeRecordUnion(StandardGenerator<Pair<TypeLeaf, TypeRecord>> options) {
+			super(options);
+		}
+
+		@Override
+		protected StandardPairGenerator<TypeTree, TypeTree> getTypedOptions() {
+			return getOptions().map((TypeLeaf a) -> a, (TypeRecord b) -> b);
+		}
+	}
+
+
+
+
+
+
+	//Map<String, TypeTree> nominalTypes = new HashMap<>();
 	Map<String, AbstractType> nominalAbstractTypes = new HashMap<>();
 
 	public TypeCompiler(CompilerLogger logger) {
@@ -619,6 +680,57 @@ public class TypeCompiler extends LexicalElementTree {
 
 		public static CompilerException exception(wyil.lang.Type type) {
 			return new CompilerException(new UnsupportedTypeCompilerError(type));
+		}
+	}
+
+	public static class UnsupportedAbstractTypeCompilerError extends CompilerError {
+		private final AbstractType type;
+
+		public UnsupportedAbstractTypeCompilerError(AbstractType type) {
+			this.type = type;
+		}
+
+		@Override
+		public String info() {
+			return "Unsupported compilation of the abstract type\n"+type.toString("");
+		}
+
+		public static CompilerException exception(AbstractType type) {
+			return new CompilerException(new UnsupportedAbstractTypeCompilerError(type));
+		}
+	}
+
+	public static class UnresolvedTypeCompilerError extends CompilerError {
+		private final wyil.lang.Type type;
+		private final AbstractType sType;
+
+		public UnresolvedTypeCompilerError(wyil.lang.Type type, AbstractType sType) {
+			this.type = type;
+			this.sType = sType;
+		}
+
+		@Override
+		public String info() {
+			return "The type \""+type.toString()+"\"\nwas resolved to the non-synthetizable type\n"+sType.toString("  ");
+		}
+
+		public static CompilerException exception(wyil.lang.Type type, AbstractType sType) {
+			return new CompilerException(new UnresolvedTypeCompilerError(type, sType));
+		}
+	}
+
+	public static class UnresolvedTypeCompileNotice extends CompilerNotice {
+		private final String type;
+		private final AbstractType sType;
+
+		public UnresolvedTypeCompileNotice(String type, AbstractType sType) {
+			this.type = type;
+			this.sType = sType;
+		}
+
+		@Override
+		public String info() {
+			return "The Nominal type \""+type+"\" was resolved to the non-synthetizable type\n"+sType.toString("  ");
 		}
 	}
 
@@ -652,239 +764,7 @@ public class TypeCompiler extends LexicalElementTree {
 
 
 
-	///////////////////////////////////////////////////////////////////////
-	//                             Types                                 //
-	///////////////////////////////////////////////////////////////////////
 
-	public static interface TypeTree extends Tree<TypeTree,Type> {
-		@Override
-		public String toString();
-		public boolean equals(TypeTree other);
-	}
-
-	public class PrimitiveType extends Primitive<TypeTree,Type> implements TypeTree {
-		public PrimitiveType(Type value) {
-			super(value);
-		}
-
-		@Override
-		public String toString() {
-			return value.toString();
-		}
-
-		@Override
-		public boolean equals(TypeTree other) {
-			return other instanceof PrimitiveType && value.equals(other.getValue());
-		}
-	}
-
-	public class CompoundType<S extends Structure<TypeTree, Type>> extends Compound<TypeTree,Type, S> implements TypeTree {
-		public CompoundType(S structure) {
-			super(structure);
-		}
-
-		@Override
-		public String toString() {
-			return "{"+String.join(", ", structure.getComponents().map((String s, TypeTree t) -> s+":"+t.toString()).toList())+"}";
-		}
-
-		@Override
-		public boolean equals(TypeTree other) {
-			return isStructuredAs(other) && structure.getComponents().takeSecond().gather(other.getStructure().getComponents().takeSecond()).fold(
-				(Boolean b, Pair<TypeTree,TypeTree> p) -> b && p.first.equals(p.second), true);
-		}
-	}
-
-	public static class RecordStructure<T extends Tree<T,V>,V> implements EffectiveRecordStructure<T,V> {
-		private final List<Pair<String, T>> components;
-
-		public RecordStructure(StandardGenerator<Pair<String, T>> components) {
-			this.components = components.toList();
-		}
-
-		public <E extends Exception> RecordStructure(CheckedGenerator<Pair<String, T>, E> components) throws E {
-			this.components = components.toList();
-		}
-
-//		public RecordStructure(List<Pair<String, T>> components) {
-//			this.components = components;
-//		}
-
-		public StandardPairGenerator<String, T> getFields() {
-			return Generator.fromPairCollection(components);
-		}
-		public int getNumberOfFields() {
-			return components.size();
-		}
-
-		@Override
-		public String toString(String prefix) {
-			final int l = getNumberOfFields();
-			return getFields().enumerate().fold(
-				(String s, Pair<Integer, Pair<String, T>> c)
-					-> s+prefix + (c.first+1 == l ? " └─ " : " ├─ ") + c.second.first+"\n"+c.second.second.toString(prefix + " │ "),
-				"");
-		}
-
-		@Override
-		public boolean isStructureAs(Structure<?, ?> other) {
-			if (other instanceof RecordStructure)
-				return getNumberOfFields() == ((RecordStructure<?,?>)other).getNumberOfFields() && getFields().takeFirst().gather(
-					((RecordStructure<?,?>)other).getFields().takeFirst()).forAll((String s1, String s2) -> s1.equals(s2));
-			return false;
-		}
-
-		@Override
-		public StandardPairGenerator<String, T> getComponents() {
-			return getFields();
-		}
-
-		@Override
-		public int getNumberOfComponents() {
-			return components.size();
-		}
-
-	}
-
-	public static class UnionStructure<T extends Tree<T,V>,V> implements EffectiveUnionStructure<T,V> {
-		public final List<Pair<T,T>> options;
-
-		public UnionStructure(StandardGenerator<Pair<T,T>> options) {
-			this.options = options.toList();
-		}
-
-		public <E extends Exception> UnionStructure(CheckedGenerator<Pair<T,T>, E> options) throws E {
-			this.options = options.toList();
-		}
-
-		@Override
-		public StandardPairGenerator<String, T> getComponents() {
-			return new StandardPairGenerator<String,T>(){
-				@Override
-				protected void generate() throws InterruptedException, wyvc.utils.Generator.EndOfGenerationException {
-					int k = 0;
-					for (Pair<T,T> p : options) {
-						yield(new Pair<>(FLG_PREFIX + k, p.first));
-						yield(new Pair<>(VAL_PREFIX + k++, p.second));
-					}
-				}};
-		}
-
-		public StandardPairGenerator<T,T> getOptions() {
-			return Generator.fromPairCollection(options);
-		}
-
-		public int getNumberOfOptions() {
-			return options.size();
-		}
-
-		@Override
-		public String toString(String prefix) {
-			final int l = getNumberOfOptions();
-			return getOptions().enumerate().fold(
-				(String s, Pair<Integer, Pair<T, T>> c) -> s+
-				prefix + (c.first+1 == l ? " └┰ " : " ├┰ ") + FLG_PREFIX + c.first +"\n"+c.second.first.toString(prefix + " │  ") +
-				prefix + (c.first+1 == l ? "  ┖ " : " │┖ ") + VAL_PREFIX + c.first+"\n"+c.second.second.toString(prefix + (c.first+1 == l ? "    " : " │  ")),
-				"");
-		}
-
-		public <U extends Tree<U,W>,W> boolean isStructureAsHelper(Structure<U, W> other) {
-			if (other instanceof UnionStructure)
-				return getNumberOfOptions() == ((UnionStructure<U,W>)other).getNumberOfOptions() && getOptions().takeSecond().gather(
-					((UnionStructure<U,W>)other).getOptions().takeSecond()).forAll((T t, U u) -> t.isStructuredAs(u));
-			return false;
-		}
-		@Override
-		public boolean isStructureAs(Structure<?, ?> other) {
-			return isStructureAsHelper(other);
-		}
-
-		@Override
-		public int getNumberOfComponents() {
-			return 2*options.size();
-		}
-
-	}
-
-
-	public static class RecordsUnionStructure<T extends Tree<T,V>,V> implements EffectiveUnionStructure<T,V>, EffectiveRecordStructure<T,V> {
-		private final List<Pair<String,T>> components;
-		private final List<Pair<T,T>> options;
-
-		public RecordsUnionStructure(StandardGenerator<Pair<String, T>> components, StandardGenerator<Pair<T,T>> options) {
-			this.components = components.toList();
-			this.options = options.toList();
-		}
-
-		@Override
-		public int getNumberOfComponents() {
-			return 2*options.size();
-		}
-
-		@Override
-		public StandardPairGenerator<String, T> getComponents() {
-			return new StandardPairGenerator<String,T>(){
-				@Override
-				protected void generate() throws InterruptedException, wyvc.utils.Generator.EndOfGenerationException {
-					int k = 0;
-					for (Pair<T,T> p : options) {
-						yield(new Pair<>(FLG_PREFIX + k, p.first));
-						yield(new Pair<>(VAL_PREFIX + k++, p.second));
-					}
-				}};
-		}
-
-		@Override
-		public String toString(String prefix) {
-			final int l = getNumberOfFields();
-			final int m = getNumberOfOptions();
-			return getFields().enumerate().fold(
-				(String s, Pair<Integer, Pair<String, T>> c)
-					-> s+prefix + (c.first+1 == l+m ? " └─ " : " ├─ ") + c.second.first+"\n"+c.second.second.toString(prefix + " │ "),
-				"") + getOptions().enumerate().fold(
-				(String s, Pair<Integer, Pair<T, T>> c) -> s+
-				prefix + (c.first+1 == m ? " └┰ " : " ├┰ ") + FLG_PREFIX + c.first +"\n"+c.second.first.toString(prefix + " │  ") +
-				prefix + (c.first+1 == m ? "  ┖ " : " │┖ ") + VAL_PREFIX + c.first+"\n"+c.second.second.toString(prefix + (c.first+1 == l ? "    " : " │  ")),
-				"");
-		}
-
-		public <U extends Tree<U,W>,W> boolean isStructureAsHelper(Structure<U, W> other) {
-			if (other instanceof RecordsUnionStructure)
-				return getNumberOfOptions() == ((RecordsUnionStructure<U,W>)other).getNumberOfOptions() && getOptions().takeSecond().gather(
-					((RecordsUnionStructure<U,W>)other).getOptions().takeSecond()).forAll((T t, U u) -> t.isStructuredAs(u));
-			return false;
-		}
-
-		@Override
-		public boolean isStructureAs(Structure<?, ?> other) {
-			return isStructureAsHelper(other);
-		}
-
-		@Override
-		public int getNumberOfFields() {
-			return components.size();
-		}
-
-		@Override
-		public StandardPairGenerator<String, T> getFields() {
-			return Generator.fromPairCollection(components);
-		}
-
-		@Override
-		public int getNumberOfOptions() {
-			return options.size();
-		}
-
-		@Override
-		public StandardPairGenerator<T, T> getOptions() {
-			return Generator.fromPairCollection(options);
-		}
-	}
-
-
-	private TypeTree compileUnion(TypeTree vl_t1, TypeTree vl_t2) throws CompilerException {
-		return compileUnion(Generator.fromCollection(Arrays.asList(vl_t1, vl_t2)).toCheckedGenerator());
-	}
 
 	private TypeTree compileUnion(CheckedGenerator<TypeTree, CompilerException> options) throws CompilerException {
 		final List<TypeTree> types = options.toList();
@@ -898,75 +778,51 @@ public class TypeCompiler extends LexicalElementTree {
 				}});
 			return types.get(0);
 		}
-		if (!Generator.fromCollection(types).forAll((TypeTree t) -> t instanceof CompoundType && t.getStructure() instanceof RecordStructure))
-			return new CompoundType<>(new UnionStructure<>(Generator.fromCollection(types).map((TypeTree t) -> new Pair<>(getBoolean(), t))));
-
-		List<CompoundType<RecordStructure<TypeTree,Type>>> recordTypes = Utils.convert(types);
-		final Map<String, TypeTree> cps0 = new HashMap<>();
-		final Map<String, TypeTree> cps1 = new HashMap<>();
-		recordTypes.get(0).getStructure().getFields().forEach((String n, TypeTree t) -> cps0.put(n, t));
-		for (int k = 1; k<recordTypes.size() && !cps0.isEmpty(); ++k) {
-			recordTypes.get(k).getStructure().getFields().ForEach((String n, TypeTree t) -> {
-				if(cps0.containsKey(n))
-					cps1.put(n, compileUnion(cps0.get(n), t));
-			});
-			cps0.clear();
-			cps0.putAll(cps1);
-			cps1.clear();
-		}
-		return new CompoundType<>(new RecordsUnionStructure<>(
-				Generator.fromCollection(cps0.entrySet()).map((Entry<String, TypeTree> e) -> new Pair<>(e.getKey(), e.getValue())),
-				Generator.fromCollection(types).map((TypeTree t) -> new Pair<>(getBoolean(), t))));
-	}
-
-	private TypeTree compileIntersection(CheckedGenerator<TypeTree, CompilerException> options) throws CompilerException {
-		throw UnsupportedTypeCompilerError.exception(null);
+		if (!Generator.fromCollection(types).forAll((TypeTree t) -> t instanceof RecordNode))
+			return new SimpleTypeUnion(Generator.fromCollection(types).map((TypeTree t) -> new Pair<>(getBoolean(), t)));
+		return new TypeRecordUnion(Generator.fromCollection(types).map((TypeTree t) -> new Pair<>(getBoolean(), (TypeRecord)t)));
 	}
 
 
 	public void addNominalType(WyilFile.Type type) throws CompilerException {
 		AbstractType t = constructRepresentation(type.type());
-		debug(t.toString(type.name() +" : "));
-		debug(t.toCanonicalForm().toString(type.name() +" ? "));
-		debug(t.toCanonicalForm().simplify().toString(type.name() +" # "));
+//		debug(t.toString(type.name() +" : "));
+		t = t.toCanonicalForm().simplify();
+//		debug(t.toString(type.name() +" # "));
+		if (!t.isFinite())
+			logger.addMessage(new UnresolvedTypeCompileNotice(type.name(), t));
 		nominalAbstractTypes.put(type.name(), t);
 		//nominalTypes.put(type.name(), compileType(type.type()));
 	}
 
-	public PrimitiveType getBoolean() {
-		return new PrimitiveType(Type.Boolean);
+	public TypeLeaf getBoolean() {
+		return new TypeLeaf(Type.Boolean);
 	}
-	public PrimitiveType getByte() {
-		return new PrimitiveType(new Type.Std_logic_vector(7,0));
+	public TypeLeaf getByte() {
+		return new TypeLeaf(new Type.Std_logic_vector(7,0));
+	}
+
+	private TypeTree compileType(AbstractType type) throws CompilerException {
+		if (type == Int)
+			return new TypeLeaf(new Type.Signed(31,0));
+		if (type == Bool)
+			return getBoolean();
+		if (type == Byte)
+			return getByte();
+		if (type == Null)
+			return new TypeRecord(Generator.emptyGenerator());
+		if (type instanceof Record)
+			return new TypeRecord(((Record<?>)type).getFields().MapSecond(this::compileType));
+		if (type instanceof Union)
+			return compileUnion(((Union<?>)type).getOptions().Map(this::compileType));
+		throw new CompilerException(new UnsupportedAbstractTypeCompilerError(type));
+
 	}
 
 	public TypeTree compileType(wyil.lang.Type type) throws CompilerException {
-		debug(constructRepresentation(type).toString("", ""));
-		//debug("Compiling "+type.toString());
-		if (type instanceof wyil.lang.Type.Nominal) {
-			final String t = ((wyil.lang.Type.Nominal) type).name().name();
-			if (!nominalTypes.containsKey(t))
-				throw new CompilerException(new NominalTypeCompilerError(t));
-			return nominalTypes.get(t);
-		}
-		if (type == wyil.lang.Type.T_INT)
-			return new PrimitiveType(new Type.Signed(31,0));
-		if (type == wyil.lang.Type.T_BOOL)
-			return getBoolean();
-		if (type == wyil.lang.Type.T_BYTE)
-			return getByte();
-		if (type == wyil.lang.Type.T_NULL)
-			return new CompoundType<>(new RecordStructure<>(Generator.emptyGenerator()));
-		if (type instanceof wyil.lang.Type.Record)
-			return new CompoundType<>(new RecordStructure<>(Generator.fromCollection(((wyil.lang.Type.Record) type).getFieldNames()).Map(
-				(String f) -> new Pair<>(f, compileType(((wyil.lang.Type.Record) type).getField(f))))));
-		if (type instanceof wyil.lang.Type.Union)
-			return compileUnion(Generator.fromCollection(((wyil.lang.Type.Union) type).bounds()).Map(this::compileType));
-		if (type instanceof wyil.lang.Type.Intersection)
-			return compileIntersection(Generator.fromCollection(((wyil.lang.Type.Union) type).bounds()).Map(this::compileType));
-		throw new CompilerException(new UnsupportedTypeCompilerError(type));
+		AbstractType sType = constructRepresentation(type).toCanonicalForm().simplify();
+		if (!sType.isFinite())
+			throw UnresolvedTypeCompilerError.exception(type, sType);
+		return compileType(sType);
 	}
-
-
-
 }

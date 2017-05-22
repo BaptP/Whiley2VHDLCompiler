@@ -11,6 +11,10 @@ public interface CheckedFunctionalInterface {
 	@FunctionalInterface
 	public interface CheckedFunction<S,T,E extends Exception> {
 		public T apply(S s) throws E;
+
+		public default void compose(){
+
+		}
 	}
 
 	@FunctionalInterface

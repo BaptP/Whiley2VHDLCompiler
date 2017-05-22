@@ -450,6 +450,18 @@ public abstract class Generator<T> extends Thread {
 				}};
 		}
 
+		public <U,V> StandardPairGenerator<U,V> biMap(Function<? super T, ? extends U> function1, Function<? super T, ? extends V> function2) {
+			StandardGenerator<T> This = this;
+			return new StandardPairGenerator<U,V>(this) {
+				@Override
+				protected void generate() throws InterruptedException, EndOfGenerationException {
+					while (true){
+						final T t = This.next();
+						yield(new Pair<>(function1.apply(t), function2.apply(t)));
+					}
+				}};
+		}
+
 		/**
 		 * <p>Transforms each value of the generator.</p>
 		 *
@@ -982,7 +994,7 @@ public abstract class Generator<T> extends Thread {
 				@Override
 				protected void generate() throws InterruptedException, EndOfGenerationException, E {
 					while (true)
-						yield(new Pair<>(This.next(), generator.next()));
+						yield(This.next(), generator.next());
 				}};
 		}
 
@@ -1133,7 +1145,7 @@ public abstract class Generator<T> extends Thread {
 				protected void generate() throws InterruptedException, EndOfGenerationException, E {
 					int k = 0;
 					while (true)
-						yield(new Pair<>(k++, This.next()));
+						yield(k++, This.next());
 				}};
 		}
 
@@ -1146,6 +1158,10 @@ public abstract class Generator<T> extends Thread {
 		 */
 		public boolean forAll(CheckedPredicate<? super T, E> test) throws E {
 			return fold((Boolean b, T t) -> b && test.test(t), true);
+		}
+
+		public StandardGenerator<T> check() throws E {
+			return Generator.fromCollection(toList());
 		}
 	}
 
@@ -1179,6 +1195,10 @@ public abstract class Generator<T> extends Thread {
 			super(parent);
 		}
 
+		public void yield(S s, T t) throws InterruptedException {
+			yield(new Pair<>(s,t));
+		}
+
 		/**
 		 * Provides the first component of each value
 		 *
@@ -1209,6 +1229,11 @@ public abstract class Generator<T> extends Thread {
 			return map((Pair<S,T> p) -> function.apply(p.first, p.second));
 		}
 
+		public <U,V> StandardPairGenerator<U,V> map(
+				Function<? super S, ? extends U> firstMap, Function<? super T, ? extends V> secondMap) {
+			return Generator.toPairGenerator(map((Pair<S,T> p) -> new Pair<>(firstMap.apply(p.first), secondMap.apply(p.second))));
+		}
+
 		/**
 		 * <p>Transforms each value of the generator.</p>
 		 *
@@ -1220,8 +1245,14 @@ public abstract class Generator<T> extends Thread {
 		 *
 		 * @see CheckedBiFunction
 		 */
-		public <U, E extends Exception> CheckedGenerator<U, E> Map(CheckedBiFunction<? super S, ? super T, ? extends U, E> function) {
+		public <U, E extends Exception> CheckedGenerator<U, E> Map(
+				CheckedBiFunction<? super S, ? super T, ? extends U, E> function) {
 			return Map((Pair<S,T> p) -> function.apply(p.first, p.second));
+		}
+		public <U,V, E extends Exception> CheckedPairGenerator<U,V,E> Map(
+				CheckedFunction<? super S, ? extends U, E> firstMap,
+				CheckedFunction<? super T, ? extends V, E> secondMap) {
+			return Generator.toPairGenerator(Map((Pair<S,T> p) -> new Pair<>(firstMap.apply(p.first), secondMap.apply(p.second))));
 		}
 
 		/**
@@ -1378,6 +1409,10 @@ public abstract class Generator<T> extends Thread {
 			super(parent);
 		}
 
+		public void yield(S s, T t) throws InterruptedException {
+			yield(new Pair<>(s,t));
+		}
+
 		/**
 		 * Provides the first component of each value
 		 *
@@ -1446,6 +1481,12 @@ public abstract class Generator<T> extends Thread {
 			return map((Pair<S,T> p) -> function.apply(p.first, p.second));
 		}
 
+		public <U,V> CheckedPairGenerator<U,V,E> map(
+				CheckedFunction<? super S, ? extends U, E> firstMap,
+				CheckedFunction<? super T, ? extends V, E> secondMap) {
+			return Generator.toPairGenerator(map((Pair<S,T> p) -> new Pair<>(firstMap.apply(p.first), secondMap.apply(p.second))));
+		}
+
 		/**
 		 * <p>Applies a function to each value of the generator</p>.
 		 *
@@ -1468,6 +1509,10 @@ public abstract class Generator<T> extends Thread {
 		public boolean forAll(CheckedBiPredicate<? super S, ? super T, E> test) throws E {
 			return fold((Boolean b, Pair<S,T> p) -> b && test.test(p.first, p.second), true);
 		}
+
+		public StandardPairGenerator<S,T> check() throws E {
+			return Generator.fromPairCollection(toList());
+		}
 	}
 
 
@@ -1481,7 +1526,10 @@ public abstract class Generator<T> extends Thread {
 	 * @param generator			The {@link StandardGenerator} to convert
 	 * @return					A {@link StandardPairGenerator} generating the same values
 	 */
+	@SuppressWarnings("unchecked")
 	public static <S,T> StandardPairGenerator<S,T> toPairGenerator(StandardGenerator<Pair<S,T>> generator) {
+		if (generator instanceof StandardPairGenerator)
+			return (StandardPairGenerator<S,T>) generator;
 		return new StandardPairGenerator<S, T>(generator) {
 			@Override
 			protected void generate() throws InterruptedException, EndOfGenerationException {
@@ -1500,7 +1548,10 @@ public abstract class Generator<T> extends Thread {
 	 * @param generator			The {@link CheckedGenerator} to convert
 	 * @return					A {@link CheckedPairGenerator} generating the same values
 	 */
+	@SuppressWarnings("unchecked")
 	public static <S,T, E extends Exception> CheckedPairGenerator<S,T,E> toPairGenerator(CheckedGenerator<Pair<S,T>,E> generator) {
+		if (generator instanceof CheckedPairGenerator)
+			return (CheckedPairGenerator<S,T,E>) generator;
 		return new CheckedPairGenerator<S, T, E>(generator) {
 			@Override
 			protected void generate() throws InterruptedException, EndOfGenerationException, E {
@@ -1523,7 +1574,7 @@ public abstract class Generator<T> extends Thread {
 			protected void generate() throws InterruptedException {
 				int k = 0;
 				for (S s : c)
-					yield(new Pair<>(k++,s));
+					yield(k++,s);
 			}};
 	}
 
@@ -1599,6 +1650,14 @@ public abstract class Generator<T> extends Thread {
 			@Override
 			protected void generate() throws InterruptedException, EndOfGenerationException {
 				yield(s);
+			}};
+	}
+
+	public static <S, T> StandardPairGenerator<S, T> fromPairSingleton(S s, T t) {
+		return new StandardPairGenerator<S, T>() {
+			@Override
+			protected void generate() throws InterruptedException, EndOfGenerationException {
+				yield(s,t);
 			}};
 	}
 
