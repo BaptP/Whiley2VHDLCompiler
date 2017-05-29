@@ -7,15 +7,27 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 
 import wycc.util.Logger;
 import wyil.lang.WyilFile;
 import wyvc.utils.FunctionalInterfaces.BiFunction;
+<<<<<<< HEAD
 import wyvc.utils.FunctionalInterfaces.Function;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
+=======
+import wyvc.utils.FunctionalInterfaces.Consumer;
+import wyvc.utils.FunctionalInterfaces.Function;
+import wyvc.utils.FunctionalInterfaces.Predicate;
+import wyvc.utils.Generators;
+import wyvc.utils.Generators.Generator_;
+import wyvc.utils.Generators.PairGenerator;
+import wyvc.utils.Generators.CustomPairGenerator;
+import wyvc.utils.Generators.EndOfGenerationException;
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Pair;
 import wyvc.builder.CompilerLogger.CompilerDebug;
@@ -101,8 +113,13 @@ public class TypeCompiler extends LexicalElementTree {
 			private static final Order[][] Intersection = {
 				{	Greater, 	Equal, 		Lesser,		Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
 				{	Equal, 		Equal, 		Lesser, 	DisLesser,	Lesser,		DisEqual,	DisEqual,	DisLesser	},
+<<<<<<< HEAD
 				{	Lesser, 	Lesser, 	Lesser, 	Lesser,		Lesser,		DisEqual,	DisEqual,	DisLesser	},
 				{	Disjointed,	DisLesser,	Lesser,		Disjointed,	Disjointed,	DisGreater,	DisEqual,	DisLesser	},
+=======
+				{	Lesser, 	Lesser, 	Lesser, 	DisLesser,	Lesser,		DisEqual,	DisEqual,	DisLesser	},
+				{	Disjointed,	DisLesser,	DisLesser,	Disjointed,	Disjointed,	DisGreater,	DisEqual,	DisLesser	},
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 				{	Unknown, 	Lesser, 	Lesser, 	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
 				{	DisGreater,	DisEqual,	DisEqual,	DisGreater,	DisGreater,	DisGreater,	DisEqual,	DisEqual	},
 				{	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual	},
@@ -140,8 +157,49 @@ public class TypeCompiler extends LexicalElementTree {
 			public int information(Order other) {
 				return Information[ordinal()][other.ordinal()];
 			}
+<<<<<<< HEAD
+=======
 
 
+			private static String formatR(String s) {
+				return ("          "+s).substring(s.length());
+			}
+			private static String formatR(Order o) {
+				return formatR(o.name());
+			}
+			private static String formatL(String s) {
+				return (s+"          ").substring(0, 10);
+			}
+			private static String formatL(Order o) {
+				return formatL(o.name());
+			}
+
+			private static Generator<Order> enumerate() {
+				return Generators.fromCollection(values());
+			}
+			private static PairGenerator<Order,Order> enumeratePair() {
+				return enumerate().cartesianProduct(enumerate());
+			}
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
+
+			private static String orderInfo(Pair<Order,Order> p) {
+				switch (p.first.information(p.second)) {
+				case -2:
+					return " >> ";
+				case -1:
+					return " >- ";
+				case 0:
+					return " >< ";
+				case 1:
+					return " -< ";
+				case 2:
+					return " << ";
+				default:
+					return " ?? ";
+				}
+			}
+
+<<<<<<< HEAD
 			private static String formatR(String s) {
 				return ("          "+s).substring(s.length());
 			}
@@ -179,6 +237,8 @@ public class TypeCompiler extends LexicalElementTree {
 				}
 			}
 
+=======
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 			private static boolean check(CompilerLogger logger, String s, Function<Order,Order> f1, Function<Order,Order> f2) {
 				List<Pair<Order,Pair<Order,Order>>> failed = new ArrayList<>();
 				enumerate().forEach((Order o) -> {
@@ -248,7 +308,12 @@ public class TypeCompiler extends LexicalElementTree {
 				print(logger, getGenerator().map((Integer x) -> x+1).map((Integer x) -> x+1));
 				print(logger, getGenerator().map((Integer x) -> x).map((Integer x) -> {if (x%5 == 1) throw new RuntimeException();return x;}).
 						map_((Integer x) -> {if (x%5 == 2) throw new Exception();return x;}).
+<<<<<<< HEAD
 						map((Integer x) -> {if (x%5 == 3) throw new RuntimeException();return x;}));*/
+=======
+						map((Integer x) -> {if (x%5 == 3) throw new RuntimeException();return x;}));
+				logger.debug("Debut");
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 				boolean test = true;
 				test &= check(logger, "reflexivity of Opposite",
 					(Order o) -> o,
@@ -269,17 +334,33 @@ public class TypeCompiler extends LexicalElementTree {
 				test &= check(logger, "Symmetry of Precise",
 					(Order o, Order p) -> o.precise(p),
 					(Order o, Order p) -> p.precise(o));
+<<<<<<< HEAD
 				test &= check(logger, "Correlation between Negation, Union and Intersection",
 					(Order o, Order p) -> o.intersection(p),
 					//(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation().precise(o.negation().union(p.negation()).negation()));
 					(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation());
 					//(Order o, Order p) -> o.negation().union(p.negation()).negation());
+=======
+				test &= check(logger, "Idempotence of Precise",
+					(Order o, Order p) -> o.precise(p),
+					(Order o, Order p) -> o.precise(p).precise(p));
+				test &= check(logger, "Correlation between SemiNegation, Union and Intersection",
+					(Order o, Order p) -> o.intersection(p),
+					//(Order o, Order p) -> o.negation().union(p.negation()).negation().precise(p.negation().union(o.negation()).negation()));
+					(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation().precise(p.semiNegation().union(o.semiNegation()).semiNegation()));
+					//(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation());
+					//(Order o, Order p) -> p.semiNegation().union(o.semiNegation()).semiNegation());
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 				if (test)
 					logger.addMessage(new CompilerDebug() {
 						@Override
 						public String info() {
 							return "Order comparison tests successful";
+<<<<<<< HEAD
 						}});
+=======
+						}});*/
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 			}
 
 		}
@@ -304,17 +385,26 @@ public class TypeCompiler extends LexicalElementTree {
 	}
 
 	private static interface CanonicalTypeOrNegation extends CanonicalType {
-
+		boolean isNegation();
+		CanonicalTypeOrRecord getUnderlyingType();
 	}
 
 	private static interface CanonicalTypeOrRecord extends CanonicalTypeOrNegation {
+		@Override
+		default boolean isNegation() {
+			return false;
+		}
+		@Override
+		default CanonicalTypeOrRecord getUnderlyingType() {
+			return this;
+		}
 
 	}
 
-	private abstract class SimpleTypes implements AbstractType,  CanonicalTypeOrRecord {
+	private abstract class SimpleType implements AbstractType,  CanonicalTypeOrRecord {
 		public final String name;
 
-		public SimpleTypes(String name) {
+		public SimpleType(String name) {
 			this.name = name;
 		}
 
@@ -347,7 +437,7 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
-	private final SimpleTypes Any = new SimpleTypes("Any"){
+	private final SimpleType Any = new SimpleType("Any"){
 		@Override
 		public boolean isFinite() {
 			return false;
@@ -360,35 +450,35 @@ public class TypeCompiler extends LexicalElementTree {
 			return Order.Greater;
 		}
 	};
-	private final SimpleTypes Null = new SimpleTypes("Null"){
+	private final SimpleType Null = new SimpleType("Null"){
 		@Override
 		public boolean isFinite() {
 			return true;
 		}
 	};
 
-	private final SimpleTypes Bool = new SimpleTypes("Bool"){
+	private final SimpleType Bool = new SimpleType("Bool"){
 		@Override
 		public boolean isFinite() {
 			return true;
 		}
 	};
 
-	private final SimpleTypes Byte = new SimpleTypes("Byte"){
+	private final SimpleType Byte = new SimpleType("Byte"){
 		@Override
 		public boolean isFinite() {
 			return true;
 		}
 	};
 
-	private final SimpleTypes Int = new SimpleTypes("Int"){
+	private final SimpleType Int = new SimpleType("Int"){
 		@Override
 		public boolean isFinite() {
 			return true;
 		}
 	};
 
-	private final SimpleTypes Void = new SimpleTypes("Void"){
+	private final SimpleType Void = new SimpleType("Void"){
 		@Override
 		public boolean isFinite() {
 			return true;
@@ -430,6 +520,13 @@ public class TypeCompiler extends LexicalElementTree {
 
 		PairGenerator<String, T> getFields() {
 			return Generators.fromPairCollection(this.fields);
+<<<<<<< HEAD
+=======
+		}
+
+		boolean hasSameFields(Record<?> other) {
+			return getNumberOfComponents() == other.getNumberOfComponents() && getFields().takeFirst().gather(other.getFields().takeFirst()).forAll(String::equals);
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 
 		@Override
@@ -438,10 +535,39 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 
 		@Override
-		public CanonicalUnion toCanonicalForm() {
-			return new CanonicalUnion(new CanonicalIntersection(new CanonicalRecord(getFields().mapSecond(AbstractType::toCanonicalForm))));
+		public CanonicalUnion toCanonicalForm() {/*
+			return new CanonicalUnion( Generators.cartesianProduct(getFields().mapSecond(AbstractType::toCanonicalForm).
+				map(Generators::constant, CanonicalUnion::getOptions).map(Generator<String>::<CanonicalIntersection>gather)).
+				map(Generators::toPairGenerator).map((PairGenerator<String, CanonicalIntersection> i) -> Generators.cartesianProduct(i.
+					map(Generators::constant,CanonicalIntersection::getOptions).map(Generator<String>::<CanonicalTypeOrNegation>gather)).
+					map(Generators::toPairGenerator)).map((Generator<PairGenerator<String,CanonicalTypeOrNegation>> i) -> i.map(
+						(PairGenerator<String,CanonicalTypeOrNegation> r) -> {
+							final List<Pair<String, CanonicalTypeOrNegation>> chs = r.toList();
+							return Generators.fromPairCollection(chs).mapFirst((String a) -> Generators.fromPairCollection(chs).
+								mapSecond(CanonicalTypeOrNegation::getUnderlyingType).map(
+									(String g, CanonicalTypeOrRecord h) -> new Pair<>(g,g.equals(a) ? h : Any))).mapFirst(CanonicalRecord::new).
+									map((CanonicalRecord s, CanonicalTypeOrNegation t) ->  t.isNegation() ? new CanonicalNegation(s) : s);
+							})).map(Generators::concat).map(CanonicalIntersection::new));
+			/*/
+			// { | & ! }
+			Generator<PairGenerator<String, CanonicalIntersection>> fi = Generators.cartesianProduct(getFields().mapSecond(AbstractType::toCanonicalForm).
+					map(Generators::constant, CanonicalUnion::getOptions).map(Generator<String>::<CanonicalIntersection>gather)).map(Generators::toPairGenerator);
+			// | { & ! }
+			Generator<Generator<PairGenerator<String,CanonicalTypeOrNegation>>> fie =
+					fi.map((PairGenerator<String, CanonicalIntersection> i) -> Generators.cartesianProduct(i.map(Generators::constant,CanonicalIntersection::getOptions).
+				map(Generator<String>::<CanonicalTypeOrNegation>gather)).map(Generators::toPairGenerator));
+			// | & { ! }
+			Generator<Generator<Generator<CanonicalTypeOrNegation>>> fiel =
+					fie.map((Generator<PairGenerator<String,CanonicalTypeOrNegation>> i) -> i.map((PairGenerator<String,CanonicalTypeOrNegation> r) -> {
+						final List<Pair<String, CanonicalTypeOrNegation>> chs = r.toList();
+						return Generators.fromPairCollection(chs).mapFirst((String a) -> Generators.fromPairCollection(chs).
+							mapSecond(CanonicalTypeOrNegation::getUnderlyingType).map((String g, CanonicalTypeOrRecord h) -> new Pair<>(g,g.equals(a) ? h : Any)))
+								.mapFirst(CanonicalRecord::new).
+								map((CanonicalRecord s, CanonicalTypeOrNegation t) ->  t.isNegation() ? new CanonicalNegation(s) : s);
+					}));
+			// | & ! { }
+			return new CanonicalUnion(fiel.map(Generators::concat).map(CanonicalIntersection::new));//*/
 		}
-
 		@Override
 		protected int getNumberOfComponents() {
 			return fields.size();
@@ -467,17 +593,28 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
+<<<<<<< HEAD
 	private class CanonicalRecord extends Record<CanonicalUnion> implements CanonicalTypeOrRecord {
 		public CanonicalRecord(Generator<Pair<String,CanonicalUnion>> fields) {
+=======
+	private class CanonicalRecord extends Record<CanonicalTypeOrRecord> implements CanonicalTypeOrRecord {
+		public CanonicalRecord(Generator<Pair<String,CanonicalTypeOrRecord>> fields) {
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 			super(fields);
 		}
 
 		@Override
 		public AbstractType simplify() {
+<<<<<<< HEAD
 			List<Pair<String, AbstractType>> fields = getFields().mapSecond(CanonicalType::simplify).toList();
 			if (Generators.fromPairCollection(fields).takeSecond().find(Void) != null)
 				return Void;
 			return new Record<>(Generators.fromCollection(fields));
+=======
+			if (Generators.fromPairCollection(fields).takeSecond().find(Void) != null)
+				return Void;
+			return this;
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 	}
 
@@ -541,7 +678,7 @@ public class TypeCompiler extends LexicalElementTree {
 		@Override
 		public AbstractType simplify() {
 			List<AbstractType> options = getOptions().map(CanonicalType::simplify).toList();
-			Set<AbstractType> utils = new HashSet<>();
+			List<AbstractType> utils = new ArrayList<>(options.size());
 			utils.addAll(options);
 			if (options.isEmpty())
 				return Void;
@@ -551,31 +688,43 @@ public class TypeCompiler extends LexicalElementTree {
 			for (int k = 0; k < noo; ++k)	{
 				AbstractType t = options.get(k);
 				if (t.equals(Void))
-					return Void;
-				for (int i = k+1; i < noo; ++i) {
-					AbstractType u = options.get(i);
-					if (utils.contains(u)){
-						switch (t.dualCompareWith(u)) {
-						case Lesser:
-						case DisLesser:
-							utils.remove(t);
-							break;
-						case Equal:
-						case Greater:
-						case DisEqual:
-						case DisGreater:
-							utils.remove(u);
-							break;
-						default:
-							break;
-						}}
-				}
+					utils.set(k, null);
+				else
+					for (int i = k+1; i < noo; ++i) {
+						AbstractType u = options.get(i);
+						if (utils.get(i) != null){
+							switch (t.dualCompareWith(u)) {
+							case Lesser:
+							case DisLesser:
+								utils.set(k, null);
+								break;
+							case Equal:
+							case Greater:
+							case DisEqual:
+							case DisGreater:
+								utils.set(i, null);
+								break;
+							default:
+								break;
+							}}
+					}
 			}
-			if (utils.isEmpty())
+			// TODO better
+			List<AbstractType> utils2 = new ArrayList<>();
+			for (AbstractType t : utils)
+				if (t != null)
+					utils2.add(t);
+			if (utils2.isEmpty())
 				return Void;
+<<<<<<< HEAD
 			if (utils.size() == 1)
 				return utils.iterator().next();
 			return new Union<>(Generators.fromCollection(utils));
+=======
+			if (utils2.size() == 1)
+				return utils2.iterator().next();
+			return new Union<>(Generators.fromCollection(utils2));
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 	}
 
@@ -638,7 +787,7 @@ public class TypeCompiler extends LexicalElementTree {
 		@Override
 		public AbstractType simplify() {
 			List<AbstractType> options = getOptions().map(CanonicalType::simplify).toList();
-			Set<AbstractType> utils = new HashSet<>();
+			List<AbstractType> utils = new ArrayList<>(options.size());
 			utils.addAll(options);
 			if (options.isEmpty())
 				return Void;
@@ -651,30 +800,73 @@ public class TypeCompiler extends LexicalElementTree {
 					return Void;
 				for (int i = k+1; i < noo; ++i) {
 					AbstractType u = options.get(i);
-					if (utils.contains(u))
+					if (utils.get(i) != null)
 						switch (t.dualCompareWith(u)) {
 						case Lesser:
 						case DisLesser:
-							utils.remove(u);
+							utils.set(i, null);
 							break;
 						case Equal:
 						case Greater:
 						case DisEqual:
 						case DisGreater:
-							utils.remove(t);
+							utils.set(k, null);
 							break;
 						case Disjointed:
 							return Void;
+						case Unknown:
 						default:
 							break;
 						}
 				}
 			}
-			if (utils.isEmpty())
+//			if (utils.isEmpty())
+//				return Void;
+//			if (utils.size() == 1)
+//				return utils.iterator().next();
+
+			Map<String, List<CanonicalRecord>> records = new HashMap<>();
+			List<AbstractType> nonRecords = new ArrayList();
+			for (AbstractType t : utils) {
+				if (t == null);
+				else
+				if (t instanceof CanonicalRecord) {
+					String f = ((CanonicalRecord) t).getFields().takeFirst().<String>fold((String s, String u) -> s+"#"+u, "").substring(1);
+					if (!records.containsKey(f))
+						records.put(f, new ArrayList<>());
+					records.get(f).add((CanonicalRecord)t);
+				}
+				else
+					nonRecords.add(t);
+			}
+			for (Entry<String, List<CanonicalRecord>> e : records.entrySet()){
+				String[] f = e.getKey().split("#");
+				List<Generator<CanonicalTypeOrRecord>> l = Generators.fromCollection(e.getValue()).
+						map(CanonicalRecord::getFields).map(PairGenerator::takeSecond).toList();
+
+				nonRecords.add(new Record<>(new CustomPairGenerator<String, CanonicalIntersection>(){
+					@Override
+					protected void generate() throws InterruptedException, EndOfGenerationException {
+						for (String g : f)
+							yield(g,new CanonicalIntersection(Generators.fromCollection(l).<CanonicalTypeOrNegation>map((Generator<CanonicalTypeOrRecord> a) -> {
+								try {return a.next();}
+								catch (EndOfGenerationException e) {}
+								catch (InterruptedException e) {}
+								return null;
+							})));
+					}}.mapSecond(CanonicalIntersection::simplify)));
+			}
+			if (nonRecords.isEmpty())
 				return Void;
+<<<<<<< HEAD
 			if (utils.size() == 1)
 				return utils.iterator().next();
 			return new Intersection<>(Generators.fromCollection(utils));
+=======
+			if (nonRecords.size() == 1)
+				return nonRecords.iterator().next();
+			return new Intersection<>(Generators.fromCollection(nonRecords));
+>>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 	}
 
@@ -721,6 +913,11 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 
 		@Override
+		public boolean isNegation() {
+			return true;
+		}
+
+		@Override
 		public AbstractType simplify() {
 			AbstractType type = this.type.simplify();
 			if (type.equals(Any))
@@ -728,6 +925,11 @@ public class TypeCompiler extends LexicalElementTree {
 			if (type.equals(Void))
 				return Any;
 			return new Negation<>(type);
+		}
+
+		@Override
+		public CanonicalTypeOrRecord getUnderlyingType() {
+			return type;
 		}
 	}
 
@@ -944,9 +1146,10 @@ public class TypeCompiler extends LexicalElementTree {
 
 	public void addNominalType(WyilFile.Type type) throws CompilerException {
 		AbstractType t = constructRepresentation(type.type());
-//		debug(t.toString(type.name() +" : "));
+		debug(t.toString(type.name() +" : "));
+		debug(t.toCanonicalForm().toString(type.name() +" ? "));
 		t = t.toCanonicalForm().simplify();
-//		debug(t.toString(type.name() +" # "));
+		debug(t.toString(type.name() +" # "));
 		if (!t.isFinite())
 			logger.addMessage(new UnresolvedTypeCompileNotice(type.name(), t));
 		nominalAbstractTypes.put(type.name(), t);

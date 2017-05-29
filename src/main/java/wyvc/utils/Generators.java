@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import wyvc.utils.FunctionalInterfaces.BiConsumer;
 import wyvc.utils.FunctionalInterfaces.BiConsumer_;
@@ -18,7 +20,7 @@ import wyvc.utils.FunctionalInterfaces.Function;
 import wyvc.utils.FunctionalInterfaces.Function_;
 import wyvc.utils.FunctionalInterfaces.Predicate;
 import wyvc.utils.FunctionalInterfaces.Predicate_;
-import wyvc.utils.GeneratorsA.Generator;
+import wyvc.utils.FunctionalInterfaces.Supplier;
 
 public class Generators {
 
@@ -43,7 +45,7 @@ public class Generators {
 		<U> PairGenerator<T,U> cartesianProduct(Generator<U> generator);
 		<U> PairGenerator<T,U> gather(Generator<U> generator);
 		Generator<T> filter(Predicate<? super T> test);
-		Generator<T> append(Generator<? extends T> other);		
+		Generator<T> append(Generator<? extends T> other);
 		T find(Predicate<? super T> test);
 		T find(T t);
 
@@ -87,7 +89,7 @@ public class Generators {
 		<U> PairGenerator_<T,U,E> cartesianProduct(Generator_<U,E> generator);
 		<U> PairGenerator_<T,U,E> gather(Generator_<U,E> generator);
 		Generator_<T,E> filter(Predicate_<? super T,E> test);
-		Generator_<T,E> append(Generator_<? extends T,E> other);		
+		Generator_<T,E> append(Generator_<? extends T,E> other);
 		T find(Predicate_<? super T, E> test) throws E;
 		T find(T t) throws E;
 
@@ -140,11 +142,12 @@ public class Generators {
 		<U> PairGenerator<U,T> mapFirst(Function<? super S, ? extends U> function);
 		<U> PairGenerator<S,U> mapSecond(Function<? super T, ? extends U> function);
 		<U,V> PairGenerator<U,V> map(
-				Function<? super S, ? extends U> firstMap, 
+				Function<? super S, ? extends U> firstMap,
 				Function<? super T, ? extends V> secondMap);
 		<U> Generator<U> map(BiFunction<? super S, ? super T, ? extends U> function);
 		void forEach(BiConsumer<? super S, ? super T> function);
 		boolean forAll(BiPredicate<? super S, ? super T> test);
+//		Generator<Pair<S,T>> replace(BiPredicate<? super S, ? super T> test, Supplier<Pair<S,T>> with);
 		
 		/*------ With exceptions ------*/
 		default <U, E extends Exception> PairGenerator_<U,T,E> mapFirst_(Function_<? super S, ? extends U,E> function) {
@@ -154,7 +157,7 @@ public class Generators {
 			return this.<E>toChecked().mapSecond(function);
 		}
 		default <U,V, E extends Exception> PairGenerator_<U,V,E> map_(
-				Function_<? super S, ? extends U,E> firstMap, 
+				Function_<? super S, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap) {
 			return this.<E>toChecked().map(firstMap, secondMap);
 		}
@@ -170,12 +173,6 @@ public class Generators {
 
 		/*------ Conversion ------*/
 		<E extends Exception> PairGenerator_<S,T,E> toChecked();
-		
-		
-
-
-
-
 	}
 
 	public static interface PairGenerator_<S,T, E extends Exception> extends Generator_<Pair<S,T>,E> {
@@ -189,10 +186,8 @@ public class Generators {
 		<U> PairGenerator_<U,T,E> mapFirst(Function_<? super S, ? extends U,E> function);
 		<U> PairGenerator_<S,U,E> mapSecond(Function_<? super T, ? extends U,E> function);
 		<U,V> PairGenerator_<U,V,E> map(
-				Function_<? super S, ? extends U,E> firstMap, 
+				Function_<? super S, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap);
-		
-
 		<U> Generator_<U,E> map(BiFunction_<? super S, ? super T, ? extends U, E> function);
 		void forEach(BiConsumer_<? super S,? super T,E> function) throws E;
 		boolean forAll(BiPredicate_<? super S,? super T,E> test) throws E;
@@ -210,14 +205,11 @@ public class Generators {
 		/*------ Specific ------*/
 		Function_<? super S, ? extends T, E> getFirstMap();
 		Function_<? super S, ? extends U, E> getSecondMap();
-
 	}
-	
 	
 	
 	/*------ Default Implementation ------*/
 	
-
 	public static interface DefaultGenerator<T> extends Generator<T> {
 		@Override
 		default List<T> toList() {
@@ -233,19 +225,18 @@ public class Generators {
 		default <E extends Exception> Generator_<T,E> toChecked() {
 			return new WrappedGenerator_<>(this);
 		}
-		
 
 
 		@Override
 		default <U> Generator<U> map(Function<? super T, ? extends U> function) {
 			return new FirstMapper<>(this, function);
 		}
-		
+
 		@Override
 		default <U,V> PairGenerator<U,V> biMap(Function<? super T, ? extends U> firstMap, Function<? super T, ? extends V> secondMap) {
 			return new FirstPairMapper<>(this, firstMap, secondMap);
 		}
-		
+
 		@Override
 		default PairGenerator<Integer,T> enumerate() {
 			final Generator<T> This = this;
@@ -308,7 +299,7 @@ public class Generators {
 				}
 			};
 		}
-		
+
 
 		@Override
 		default <U> PairGenerator<T,U> cartesianProduct(Generator<U> generator) {
@@ -369,12 +360,12 @@ public class Generators {
 		default <U> Generator_<U,E> map(Function_<? super T, ? extends U, E> function) {
 			return new FirstMapper_<>(this, function);
 		}
-		
+
 		@Override
 		default <U,V> PairGenerator_<U,V,E> biMap(Function_<? super T, ? extends U,E> firstMap, Function_<? super T, ? extends V,E> secondMap) {
 			return new FirstPairMapper_<>(this, firstMap, secondMap);
 		}
-		
+
 		@Override
 		default PairGenerator_<Integer,T,E> enumerate() {
 			final Generator_<T,E> This = this;
@@ -440,12 +431,12 @@ public class Generators {
 				}
 			};
 		}
-		
+
 
 		@Override
 		default <U> PairGenerator_<T,U,E> cartesianProduct(Generator_<U,E> generator) {
 			List<T> values;
-			try {values = toList();} 
+			try {values = toList();}
 			catch (Exception e) {return Generators.<T,U>emptyPairGenerator().toChecked();}
 			return new CustomPairGenerator_<T,U,E>(generator) {
 				@Override
@@ -486,21 +477,40 @@ public class Generators {
 	}
 
 	public static interface DefaultMapper<S,P,T> extends Mapper<S,P,T>, DefaultGenerator<T> {
-		
+
+		@Override
+		default <U> Generator<U> map(Function<? super T, ? extends U> function) {
+			return new FollowingMapper<>(this, function);
+		}
+
+		@Override
+		default <U, E extends Exception> Generator_<U, E> map_(Function_<? super T, ? extends U, E> function) {
+			return new FollowingMapper_<>(this, function);
+		}
 	}
-	
+
 	private static interface DefaultMapper_<S,P,T, E extends Exception> extends Mapper_<S,P,T,E>, DefaultGenerator_<T,E> {
-		
+
+
+		@Override
+		default <U> Generator_<U,E> map(Function_<? super T, ? extends U, E> function) {
+			return new FollowingMapper_<>(this, function);
+		}
+
+		@Override
+		default <U,V> PairGenerator_<U,V,E> biMap(Function_<? super T, ? extends U,E> firstMap, Function_<? super T, ? extends V,E> secondMap) {
+			return new FollowingPairMapper_<>(this, firstMap, secondMap);
+		}
 	}
-	
+
 	public static interface DefaultPairGenerator<S,T> extends PairGenerator<S,T>, DefaultGenerator<Pair<S,T>> {
 		@Override
 		default <U,V> PairGenerator<U,V> map(
-				Function<? super S, ? extends U> firstMap, 
+				Function<? super S, ? extends U> firstMap,
 				Function<? super T, ? extends V> secondMap) {
 			return this.<U>mapFirst(firstMap).mapSecond(secondMap);
 		}
-		
+
 		@Override
 		default Generator<S> takeFirst() {
 			return new FirstMapper<>(this, Pair::getFirst);
@@ -517,7 +527,7 @@ public class Generators {
 		default PairGenerator<T,S> swap() {
 			return new FirstPairMapper<>(this, Pair::getSecond, Pair::getFirst);
 		}
-		
+
 		@Override
 		default <U> PairGenerator<U, T> mapFirst(Function<? super S, ? extends U> function) {
 			return new FirstPairPairMapper<>(this, function, (T t) -> t);
@@ -527,13 +537,13 @@ public class Generators {
 		default <U> PairGenerator<S, U> mapSecond(Function<? super T, ? extends U> function) {
 			return new FirstPairPairMapper<>(this, (S s) -> s, function);
 		}
-		
+
 		@Override
 		default <E extends Exception> PairGenerator_<S,T,E> toChecked() {
 			return new WrappedPairGenerator_<>(this);
 		}
 		
-		@Override 
+		@Override
 		default <U> Generator<U> map(BiFunction<? super S, ? super T, ? extends U> function) {
 			return map((Pair<S,T> p) -> function.apply(p.first, p.second));
 		}
@@ -552,9 +562,7 @@ public class Generators {
 		}
 
 	}
-	
-	
-	
+
 	public static interface DefaultPairGenerator_<S,T, E extends Exception> extends PairGenerator_<S,T,E>, DefaultGenerator_<Pair<S,T>,E> {
 
 		@Override
@@ -569,28 +577,26 @@ public class Generators {
 		default PairGenerator_<T, S, E> swap() {
 			return new FirstPairMapper_<>(this, Pair::getSecond, Pair::getFirst);
 		}
-
 		@Override
-		default 
+		default
 		<U> PairGenerator_<U,T,E> mapFirst(Function_<? super S, ? extends U,E> function) {
 			return new FirstPairPairMapper_<>(this, function, (T t) -> t);
 		}
 
-		@Override
-		default 
+		default
 		<U> PairGenerator_<S,U,E> mapSecond(Function_<? super T, ? extends U,E> function) {
 			return new FirstPairPairMapper_<>(this, (S s) -> s, function);
 		}
 
 		@Override
-		default 
+		default
 		<U,V> PairGenerator_<U,V,E> map(
-				Function_<? super S, ? extends U,E> firstMap, 
+				Function_<? super S, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap) {
 			return this.<U>mapFirst(firstMap).mapSecond(secondMap);
 		}
-		
-		@Override 
+
+		@Override
 		default <U> Generator_<U,E> map(BiFunction_<? super S, ? super T, ? extends U,E> function) {
 			return map((Pair<S,T> p) -> function.apply(p.first, p.second));
 		}
@@ -656,27 +662,24 @@ public class Generators {
 		}
 
 		@Override
-		default 
-		<V> PairGenerator_<V,U,E> mapFirst(Function_<? super T, ? extends V,E> function) {
+		default <V> PairGenerator_<V,U,E> mapFirst(Function_<? super T, ? extends V,E> function) {
 			return new FollowingPairPairMapper_<>(this, function, (U u) -> u);
 		}
 
 		@Override
-		default 
-		<V> PairGenerator_<T,V,E> mapSecond(Function_<? super U, ? extends V,E> function) {
+		default <V> PairGenerator_<T,V,E> mapSecond(Function_<? super U, ? extends V,E> function) {
 			return new FollowingPairPairMapper_<>(this, (T t) -> t, function);
 		}
 
 		@Override
-		default 
+		default
 		<V,W> PairGenerator_<V,W,E> map(
-				Function_<? super T, ? extends V,E> firstMap, 
+				Function_<? super T, ? extends V,E> firstMap,
 				Function_<? super U, ? extends W,E> secondMap) {
 			return this.<V>mapFirst(firstMap).mapSecond(secondMap);
 		}
 	}
-	
-	
+
 	/*------ Implementation ------*/
 
 	private static class StoppingException extends RuntimeException {
@@ -704,7 +707,7 @@ public class Generators {
 			this.value = value;
 			ready = true;
 			while (ready) {
-				Thread.sleep(3);
+				Thread.sleep(0,100);
 				if (stopGenerationRequest)
 					throw new StoppingException();
 			}
@@ -772,6 +775,7 @@ public class Generators {
 		}
 
 		protected final T getValue() throws EndOfGenerationException, InterruptedException {
+//			System.out.println("Read value "+this);
 			T t = readValue();
 			ready = false;
 			return t;
@@ -780,10 +784,13 @@ public class Generators {
 
 	private static abstract class AbstractThreadGenerator<T> extends DefaultAbstractGenerator<T> {
 		private final Thread thread = new Thread(this);
+//		private final static ExecutorService executor = Executors.newCachedThreadPool();
 
 		public AbstractThreadGenerator(AbstractGenerator<?> parent) {
 			super(parent);
+//			System.out.println("New Thread "+thread);
 			thread.start();
+//			executor.execute(this);
 		}
 		public AbstractThreadGenerator() {
 			this(null);
@@ -793,12 +800,12 @@ public class Generators {
 			thread.interrupt();
 		}
 	}
-	
-	
-	
+
+
+
 	private static abstract class DefaultThreadGenerator<T> extends AbstractThreadGenerator<T> implements DefaultGenerator<T> {
 		protected abstract void generate() throws InterruptedException, EndOfGenerationException;
-		
+
 		public DefaultThreadGenerator(AbstractGenerator<?> parent) {
 			super(parent);
 			initializationFinished();
@@ -825,7 +832,7 @@ public class Generators {
 			return getValue();
 		}
 	}
-	
+
 
 	public static abstract class CustomGenerator<T> extends DefaultThreadGenerator<T> {
 
@@ -837,23 +844,22 @@ public class Generators {
 		}
 		public CustomGenerator() {}
 	}
-	
-	
-	
-	
+
+
+
 	private static class WrappedGenerator_<T,E extends Exception> implements DefaultGenerator_<T,E> {
 		private final Generator<T> generator;
-		
+
 		public WrappedGenerator_(Generator<T> generator) {
 			this.generator = generator;
 		}
-		
+
 		@Override
 		public final void stopGeneration() {
 			generator.stopGeneration();
-			
+
 		}
-		
+
 		@Override
 		public final T next() throws EndOfGenerationException, InterruptedException, E {
 			return generator.next();
@@ -864,7 +870,7 @@ public class Generators {
 			return generator.isEmpty();
 		}
 	}
-	
+
 	private static abstract class DefaultThreadGenerator_<T,E extends Exception> extends AbstractThreadGenerator<T> implements DefaultGenerator_<T,E> {
 		private volatile E exception = null;
 
@@ -883,7 +889,7 @@ public class Generators {
 			if (init)
 				initializationFinished();
 		}
-		
+
 		@SuppressWarnings("unchecked")
 		@Override
 		protected final void generateValues() throws EndOfGenerationException, InterruptedException {
@@ -1001,21 +1007,22 @@ public class Generators {
 				Function<? super T, ? extends V> secondMap) {
 			return new FollowingPairMapper<>(this, firstMap, secondMap);
 		}
-		
+
 		@Override
 		public final <U,V, E extends Exception> PairGenerator_<U,V,E> biMap_(Function_<? super T, ? extends U,E> firstMap, Function_<? super T, ? extends V,E> secondMap) {
 			return new FirstPairMapper_<>(this, firstMap, secondMap);
 		}
-		
+
+
 	}
-	
+
 	private static class WrappedMapper_<S,P,T,E extends Exception> implements DefaultMapper_<S,P,T,E> {
 		private final Mapper<S,P,T> mapper;
-		
+
 		public WrappedMapper_(Mapper<S,P,T> mapper) {
 			this.mapper = mapper;
 		}
-		
+
 		@Override
 		public final T next() throws EndOfGenerationException, InterruptedException, E {
 			return mapper.next();
@@ -1024,7 +1031,7 @@ public class Generators {
 		@Override
 		public final void stopGeneration() {
 			mapper.stopGeneration();
-			
+
 		}
 
 		@Override
@@ -1051,7 +1058,6 @@ public class Generators {
 		public final boolean isEmpty() {
 			return mapper.isEmpty();
 		}
-		
 	}
 
 	private static class FirstMapper_<S,T,E extends Exception> extends DefaultThreadGenerator_<T,E> implements DefaultMapper_<S,S,T,E> {
@@ -1066,7 +1072,7 @@ public class Generators {
 			this.map = map;
 			initializationFinished();
 		}
-		
+
 		@Override
 		public final void moveGenerationTo(FollowingMapper_<S, T, ?, ? super E> next) {
 			try {waitValue();}
@@ -1076,7 +1082,7 @@ public class Generators {
 				next.run();
 			else
 				stopGeneration();
-			
+
 		}
 
 		@Override
@@ -1116,31 +1122,18 @@ public class Generators {
 			catch (InterruptedException e) {throw e;}
 			catch (Exception e) {exception = (E) e;}
 		}
-
-		@Override
-		public final <U> Generator_<U, E> map(Function_<? super T, ? extends U, E> function) {
-			return new FollowingMapper_<>(this, function);
-		}
-
-		@Override
-		public final <U, V> PairGenerator_<U, V, E> biMap(Function_<? super T, ? extends U, E> firstMap,
-				Function_<? super T, ? extends V, E> secondMap) {
-			return new FollowingPairMapper_<>(this, firstMap, secondMap);
-		}
-
-
 	}
 
 
 	private static abstract class AbstractFollowingMapper<S,P,T>  extends DefaultAbstractGenerator<T> {
 		private volatile AbstractFollowingMapper<S, T, ?> next = null;
-		
+
 		public AbstractFollowingMapper(AbstractGenerator<?> parent) {
 			super(parent);
 		}
-		
+
 		protected abstract void generate() throws InterruptedException, EndOfGenerationException;
-		
+
 		protected final void moveTo(AbstractFollowingMapper<S, T, ?> next) {
 			try {waitValue();}
 			catch (InterruptedException e){}
@@ -1154,7 +1147,8 @@ public class Generators {
 		public final void moveGenerationTo(FollowingMapper<S, T, ?> next) {
 			moveTo(next);
 		}
-		
+
+
 		@Override
 		protected final void generateValues() throws EndOfGenerationException, InterruptedException {
 			try {
@@ -1192,16 +1186,6 @@ public class Generators {
 			waitValue();
 //			System.out.println("Next "+this);
 			return getValue();
-		}
-
-		@Override
-		public final <U> Generator<U> map(Function<? super T, ? extends U> function) {
-			return new FollowingMapper<>(this, function);
-		}
-
-		@Override
-		public final <U, E extends Exception> Generator_<U, E> map_(Function_<? super T, ? extends U, E> function) {
-			return new FollowingMapper_<>(this, function);
 		}
 
 		@Override
@@ -1262,8 +1246,7 @@ public class Generators {
 			this(new WrappedMapper_<>(previous), step);
 		}
 
-		
-		
+
 		@Override
 		public final T next() throws EndOfGenerationException, InterruptedException, E {
 			waitValue();
@@ -1281,7 +1264,7 @@ public class Generators {
 		public final void moveGenerationTo(FollowingMapper_<S, T, ?, ? super E> next) {
 			moveTo(next);
 		}
-		
+
 		@SuppressWarnings("unchecked")
 		@Override
 		protected void generate() throws EndOfGenerationException, InterruptedException {
@@ -1331,14 +1314,14 @@ public class Generators {
 			super(parent);
 		}
 		public CustomPairGenerator() {}
-		
+
 		protected final void yield(S s, T t) throws InterruptedException {
 			yield(new Pair<>(s,t));
 		}
 	}
 	private static class WrappedPairGenerator_<S,T,E extends Exception> implements DefaultPairGenerator_<S,T,E> {
 		private final PairGenerator<S,T> generator;
-		
+
 		public WrappedPairGenerator_(PairGenerator<S,T> generator) {
 			this.generator = generator;
 		}
@@ -1356,7 +1339,7 @@ public class Generators {
 		@Override
 		public void stopGeneration() {
 			generator.stopGeneration();
-			
+
 		}
 	}
 
@@ -1376,7 +1359,7 @@ public class Generators {
 	private static class FirstPairMapper<S,T,U> extends FirstMapper<S,Pair<T,U>> implements DefaultPairMapper<S,S,T,U> {
 		private final Function<? super S, ? extends T> firstMap;
 		private final Function<? super S, ? extends U> secondMap;
-		
+
 		public FirstPairMapper(Generator<S> source, Function<? super S, ? extends T> firstMap, Function<? super S, ? extends U> secondMap) {
 			super(source, (S s) -> new Pair<>(firstMap.apply(s), secondMap.apply(s)));
 			this.firstMap = firstMap;
@@ -1391,7 +1374,6 @@ public class Generators {
 		public final Function<? super S, ? extends U> getSecondMap() {
 			return secondMap;
 		}
-		
 	}
 	private static class FirstPairPairMapper<P,Q,T,U> extends FirstPairMapper<Pair<P,Q>,T,U> {
 		public FirstPairPairMapper(PairGenerator<P,Q> source, Function<? super P, ? extends T> firstStep, Function<? super Q, ? extends U> secondStep) {
@@ -1403,18 +1385,17 @@ public class Generators {
 		private final Function_<? super S, ? extends T, E> firstMap;
 		private final Function_<? super S, ? extends U, E> secondMap;
 
-		
+
 		public FirstPairMapper_(Generator_<S,? extends E> source, Function_<? super S, ? extends T,E> firstMap, Function_<? super S, ? extends U,E> secondMap) {
 			super(source, (S s) -> new Pair<>(firstMap.apply(s), secondMap.apply(s)));
 			this.firstMap = firstMap;
 			this.secondMap = secondMap;
 		}
-		
+
 		public FirstPairMapper_(Generator<S> source, Function_<? super S, ? extends T,E> firstMap, Function_<? super S, ? extends U,E> secondMap) {
 			this(new WrappedGenerator_<>(source), firstMap, secondMap);
 		}
-		
-		
+
 		@Override
 		public final Function_<? super S, ? extends T, E> getFirstMap() {
 			return firstMap;
@@ -1424,11 +1405,12 @@ public class Generators {
 			return secondMap;
 		}
 	}
-	
+
+
 	private static class FirstPairPairMapper_<P,Q,T,U, E extends Exception> extends FirstPairMapper_<Pair<P,Q>,T,U,E> {
 		public FirstPairPairMapper_(
-				PairGenerator_<P,Q, ? extends E> source, 
-				Function_<? super P, ? extends T, E> firstStep, 
+				PairGenerator_<P,Q, ? extends E> source,
+				Function_<? super P, ? extends T, E> firstStep,
 				Function_<? super Q, ? extends U, E> secondStep) {
 			super(source, firstStep.p(Pair::getFirst), secondStep.p(Pair::getSecond));
 		}
@@ -1438,8 +1420,8 @@ public class Generators {
 		private final Function<? super S, ? extends T> firstMap;
 		private final Function<? super S, ? extends U> secondMap;
 
-		public FollowingPairMapper(Mapper<S,?,P> previous, 
-				Function<? super S, ? extends T> firstMap, Function<? super P, ? extends T> firstStep, 
+		public FollowingPairMapper(Mapper<S,?,P> previous,
+				Function<? super S, ? extends T> firstMap, Function<? super P, ? extends T> firstStep,
 				Function<? super S, ? extends U> secondMap, Function<? super P, ? extends U> secondStep) {
 			super(previous, (S s) -> new Pair<>(firstMap.apply(s), secondMap.apply(s)), (P p) -> new Pair<>(firstStep.apply(p), secondStep.apply(p)));
 			this.firstMap = firstMap;
@@ -1460,24 +1442,24 @@ public class Generators {
 	}
 	private static class FollowingPairPairMapper<S,P,Q,T,U> extends FollowingPairMapper<S,Pair<P,Q>,T,U> {
 		public FollowingPairPairMapper(PairMapper<S,?,P,Q> previous, Function<? super P, ? extends T> firstStep, Function<? super Q, ? extends U> secondStep) {
-			super(previous, 
-					previous.getFirstMap().o(firstStep), firstStep.p(Pair::getFirst), 
+			super(previous,
+					previous.getFirstMap().o(firstStep), firstStep.p(Pair::getFirst),
 					previous.getSecondMap().o(secondStep), secondStep.p(Pair::getSecond));
 		}
 	}
-	 
+
 	private static class FollowingPairMapper_<S,P,T,U,E extends Exception> extends FollowingMapper_<S,P,Pair<T,U>,E> implements DefaultPairMapper_<S,P,T,U,E> {
 		private final Function_<? super S, ? extends T, E> firstMap;
 		private final Function_<? super S, ? extends U, E> secondMap;
-		public FollowingPairMapper_(Mapper_<S,?,P, ? extends E> previous, 
-				Function_<? super S, ? extends T, E> firstMap, Function_<? super P, ? extends T, E> firstStep, 
+		public FollowingPairMapper_(Mapper_<S,?,P, ? extends E> previous,
+				Function_<? super S, ? extends T, E> firstMap, Function_<? super P, ? extends T, E> firstStep,
 				Function_<? super S, ? extends U, E> secondMap, Function_<? super P, ? extends U, E> secondStep) {
 			super(previous, (S s) -> new Pair<>(firstMap.apply(s), secondMap.apply(s)), (P p) -> new Pair<>(firstStep.apply(p), secondStep.apply(p)));
 			this.firstMap = firstMap;
 			this.secondMap = secondMap;
 		}
-		public FollowingPairMapper_(Mapper_<S,?,P, ? extends E> previous, 
-				Function_<? super P, ? extends T, E> firstStep, 
+		public FollowingPairMapper_(Mapper_<S,?,P, ? extends E> previous,
+				Function_<? super P, ? extends T, E> firstStep,
 				Function_<? super P, ? extends U, E> secondStep) {
 			this(previous, firstStep.p(previous.getMap()), firstStep, secondStep.p(previous.getMap()), secondStep);
 		}
@@ -1490,26 +1472,48 @@ public class Generators {
 		public final Function_<? super S, ? extends U, E> getSecondMap() {
 			return secondMap;
 		}
-		
+
 	}
 	private static class FollowingPairPairMapper_<S,P,Q,T,U, E extends Exception> extends FollowingPairMapper_<S,Pair<P,Q>,T,U,E> {
 		public FollowingPairPairMapper_(
-				PairMapper_<S,?,P,Q, ? extends E> previous, 
-				Function_<? super P, ? extends T, E> firstStep, 
+				PairMapper_<S,?,P,Q, ? extends E> previous,
+				Function_<? super P, ? extends T, E> firstStep,
 				Function_<? super Q, ? extends U, E> secondStep) {
-			super(previous, 
-					firstStep.p(previous.getFirstMap()), firstStep.p(Pair::getFirst), 
+			super(previous,
+					firstStep.p(previous.getFirstMap()), firstStep.p(Pair::getFirst),
 					secondStep.p(previous.getSecondMap()), secondStep.p(Pair::getSecond));
 		}
 	}
+	
+	public static interface GeneratorGenerator<T> extends Generator<Generator<T>> {
+		GeneratorGenerator<T> cartesianProduct();
+		Generator<T> concat();
+		<U> Generator<Generator<U>> mapE(Function<? super T, ? extends U> function);
+	}
 
-	
-	
-	
-	
-	
-	
-	
+	public static interface DefaultGeneratorGenerator<T> extends DefaultGenerator<Generator<T>>, GeneratorGenerator<T> {
+		default GeneratorGenerator<T> cartesianProduct() {
+			return Generators.cartesianProduct(this);
+		}
+		default Generator<T> concat() {
+			return fold((Generator<T> g, Generator<T> t) -> g.append(t), emptyGenerator());
+		}
+		default <U> Generator<Generator<U>> mapE(Function<? super T, ? extends U> function) {
+			return null;
+		}
+	}
+
+
+	public abstract static class CustomGeneratorGenerator<T> extends CustomGenerator<Generator<T>> implements DefaultGeneratorGenerator<T> {
+		public CustomGeneratorGenerator(Generator<?> parent) {
+			super(parent);
+		}
+		public CustomGeneratorGenerator(Generator_<?,?> parent) {
+			super(parent);
+		}
+		public CustomGeneratorGenerator() {}
+	}
+
 
 
 	/**
@@ -1587,7 +1591,7 @@ public class Generators {
 	public static <S> Generator<S> fromCollection(S[] a) {
 		return fromCollection(Arrays.asList(a));
 	}
-	
+
 	/**
 	 * Builds a {@link StandardPairGenerator} that produce the values of a {@link Collection} of pairs.
 	 *
@@ -1639,10 +1643,7 @@ public class Generators {
 	 * @return A {@link Generator} that produce no value
 	 */
 	public static <S> Generator<S> emptyGenerator() {
-		return new CustomGenerator<S>() {
-			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
-			}};
+		return new CustomGenerator<S>() {@Override protected void generate() {}};
 	}
 
 	/**
@@ -1654,9 +1655,20 @@ public class Generators {
 	 * @return A {@link StandardPairGenerator} that produce no value
 	 */
 	public static <S,T> PairGenerator<S,T> emptyPairGenerator() {
-		return new CustomPairGenerator<S,T>() {
+		return new CustomPairGenerator<S,T>() {@Override protected void generate() {}};
+	}
+
+	public static <S> GeneratorGenerator<S> emptyGeneratorGenerator() {
+		return new CustomGeneratorGenerator<S>() {@Override protected void generate() {}};
+	}
+
+
+	public static <S> Generator<S> constant(S s) {
+		return new CustomGenerator<S>() {
 			@Override
 			protected void generate() throws InterruptedException, EndOfGenerationException {
+				while (true)
+					yield(s);
 			}};
 	}
 
@@ -1672,25 +1684,26 @@ public class Generators {
 	}
 
 
-	public static <S> Generator<Generator<S>> cartesianProduct(Generator<Generator<S>> generators) {
+	public static <S> GeneratorGenerator<S> cartesianProduct(Generator<Generator<S>> generators) {
 		final List<List<S>> values = generators.map(Generator::toList).toList();
 		final int noc = values.size();
-		return noc == 0 ? emptyGenerator() : new CustomGenerator<Generator<S>>() {
+		return noc == 0 ? emptyGeneratorGenerator() : new CustomGeneratorGenerator<S>() {
 			@Override
 			protected void generate() throws InterruptedException, EndOfGenerationException {
 				int[] index = new int[noc];
 				Arrays.fill(index, 0);
 				int[] lenghts = new int[noc];
-				GeneratorsA.fromCollection(values).enumerate().forEach((Integer k, List<S> l) -> lenghts[k] = l.size());
+				Generators.fromCollection(values).enumerate().forEach((Integer k, List<S> l) -> lenghts[k] = l.size());
 				for (int j : lenghts)
 					if (j == 0)
 						return;
 				while(index[0] != lenghts[0]) {
 					yield(new CustomGenerator<S>() {
+						private int[] pIndex = index.clone();
 						@Override
 						protected void generate() throws InterruptedException, EndOfGenerationException {
 							int k = 0;
-							for (int i : index)
+							for (int i : pIndex)
 								yield(values.get(k++).get(i));
 							}});
 					int k = noc -1;
