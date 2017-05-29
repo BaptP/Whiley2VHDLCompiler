@@ -13,12 +13,6 @@ import java.util.Set;
 import wycc.util.Logger;
 import wyil.lang.WyilFile;
 import wyvc.utils.FunctionalInterfaces.BiFunction;
-<<<<<<< HEAD
-import wyvc.utils.FunctionalInterfaces.Function;
-import wyvc.utils.Generators;
-import wyvc.utils.Generators.Generator_;
-import wyvc.utils.Generators.PairGenerator;
-=======
 import wyvc.utils.FunctionalInterfaces.Consumer;
 import wyvc.utils.FunctionalInterfaces.Function;
 import wyvc.utils.FunctionalInterfaces.Predicate;
@@ -27,7 +21,6 @@ import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
 import wyvc.utils.Generators.CustomPairGenerator;
 import wyvc.utils.Generators.EndOfGenerationException;
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Pair;
 import wyvc.builder.CompilerLogger.CompilerDebug;
@@ -113,13 +106,8 @@ public class TypeCompiler extends LexicalElementTree {
 			private static final Order[][] Intersection = {
 				{	Greater, 	Equal, 		Lesser,		Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
 				{	Equal, 		Equal, 		Lesser, 	DisLesser,	Lesser,		DisEqual,	DisEqual,	DisLesser	},
-<<<<<<< HEAD
-				{	Lesser, 	Lesser, 	Lesser, 	Lesser,		Lesser,		DisEqual,	DisEqual,	DisLesser	},
-				{	Disjointed,	DisLesser,	Lesser,		Disjointed,	Disjointed,	DisGreater,	DisEqual,	DisLesser	},
-=======
 				{	Lesser, 	Lesser, 	Lesser, 	DisLesser,	Lesser,		DisEqual,	DisEqual,	DisLesser	},
 				{	Disjointed,	DisLesser,	DisLesser,	Disjointed,	Disjointed,	DisGreater,	DisEqual,	DisLesser	},
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 				{	Unknown, 	Lesser, 	Lesser, 	Disjointed,	Unknown,	DisGreater,	DisEqual,	DisLesser	},
 				{	DisGreater,	DisEqual,	DisEqual,	DisGreater,	DisGreater,	DisGreater,	DisEqual,	DisEqual	},
 				{	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual,	DisEqual	},
@@ -157,49 +145,8 @@ public class TypeCompiler extends LexicalElementTree {
 			public int information(Order other) {
 				return Information[ordinal()][other.ordinal()];
 			}
-<<<<<<< HEAD
-=======
 
 
-			private static String formatR(String s) {
-				return ("          "+s).substring(s.length());
-			}
-			private static String formatR(Order o) {
-				return formatR(o.name());
-			}
-			private static String formatL(String s) {
-				return (s+"          ").substring(0, 10);
-			}
-			private static String formatL(Order o) {
-				return formatL(o.name());
-			}
-
-			private static Generator<Order> enumerate() {
-				return Generators.fromCollection(values());
-			}
-			private static PairGenerator<Order,Order> enumeratePair() {
-				return enumerate().cartesianProduct(enumerate());
-			}
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
-
-			private static String orderInfo(Pair<Order,Order> p) {
-				switch (p.first.information(p.second)) {
-				case -2:
-					return " >> ";
-				case -1:
-					return " >- ";
-				case 0:
-					return " >< ";
-				case 1:
-					return " -< ";
-				case 2:
-					return " << ";
-				default:
-					return " ?? ";
-				}
-			}
-
-<<<<<<< HEAD
 			private static String formatR(String s) {
 				return ("          "+s).substring(s.length());
 			}
@@ -222,23 +169,21 @@ public class TypeCompiler extends LexicalElementTree {
 
 			private static String orderInfo(Pair<Order,Order> p) {
 				switch (p.first.information(p.second)) {
-				case 2:
+				case -2:
 					return " >> ";
-				case 1:
+				case -1:
 					return " >- ";
 				case 0:
 					return " >< ";
-				case -1:
+				case 1:
 					return " -< ";
-				case -2:
+				case 2:
 					return " << ";
 				default:
 					return " ?? ";
 				}
 			}
 
-=======
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 			private static boolean check(CompilerLogger logger, String s, Function<Order,Order> f1, Function<Order,Order> f2) {
 				List<Pair<Order,Pair<Order,Order>>> failed = new ArrayList<>();
 				enumerate().forEach((Order o) -> {
@@ -308,12 +253,8 @@ public class TypeCompiler extends LexicalElementTree {
 				print(logger, getGenerator().map((Integer x) -> x+1).map((Integer x) -> x+1));
 				print(logger, getGenerator().map((Integer x) -> x).map((Integer x) -> {if (x%5 == 1) throw new RuntimeException();return x;}).
 						map_((Integer x) -> {if (x%5 == 2) throw new Exception();return x;}).
-<<<<<<< HEAD
-						map((Integer x) -> {if (x%5 == 3) throw new RuntimeException();return x;}));*/
-=======
 						map((Integer x) -> {if (x%5 == 3) throw new RuntimeException();return x;}));
 				logger.debug("Debut");
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 				boolean test = true;
 				test &= check(logger, "reflexivity of Opposite",
 					(Order o) -> o,
@@ -334,13 +275,6 @@ public class TypeCompiler extends LexicalElementTree {
 				test &= check(logger, "Symmetry of Precise",
 					(Order o, Order p) -> o.precise(p),
 					(Order o, Order p) -> p.precise(o));
-<<<<<<< HEAD
-				test &= check(logger, "Correlation between Negation, Union and Intersection",
-					(Order o, Order p) -> o.intersection(p),
-					//(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation().precise(o.negation().union(p.negation()).negation()));
-					(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation());
-					//(Order o, Order p) -> o.negation().union(p.negation()).negation());
-=======
 				test &= check(logger, "Idempotence of Precise",
 					(Order o, Order p) -> o.precise(p),
 					(Order o, Order p) -> o.precise(p).precise(p));
@@ -350,17 +284,12 @@ public class TypeCompiler extends LexicalElementTree {
 					(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation().precise(p.semiNegation().union(o.semiNegation()).semiNegation()));
 					//(Order o, Order p) -> o.semiNegation().union(p.semiNegation()).semiNegation());
 					//(Order o, Order p) -> p.semiNegation().union(o.semiNegation()).semiNegation());
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 				if (test)
 					logger.addMessage(new CompilerDebug() {
 						@Override
 						public String info() {
 							return "Order comparison tests successful";
-<<<<<<< HEAD
-						}});
-=======
 						}});*/
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 			}
 
 		}
@@ -520,13 +449,10 @@ public class TypeCompiler extends LexicalElementTree {
 
 		PairGenerator<String, T> getFields() {
 			return Generators.fromPairCollection(this.fields);
-<<<<<<< HEAD
-=======
 		}
 
 		boolean hasSameFields(Record<?> other) {
 			return getNumberOfComponents() == other.getNumberOfComponents() && getFields().takeFirst().gather(other.getFields().takeFirst()).forAll(String::equals);
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 
 		@Override
@@ -593,28 +519,16 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
-<<<<<<< HEAD
-	private class CanonicalRecord extends Record<CanonicalUnion> implements CanonicalTypeOrRecord {
-		public CanonicalRecord(Generator<Pair<String,CanonicalUnion>> fields) {
-=======
 	private class CanonicalRecord extends Record<CanonicalTypeOrRecord> implements CanonicalTypeOrRecord {
 		public CanonicalRecord(Generator<Pair<String,CanonicalTypeOrRecord>> fields) {
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 			super(fields);
 		}
 
 		@Override
 		public AbstractType simplify() {
-<<<<<<< HEAD
-			List<Pair<String, AbstractType>> fields = getFields().mapSecond(CanonicalType::simplify).toList();
-			if (Generators.fromPairCollection(fields).takeSecond().find(Void) != null)
-				return Void;
-			return new Record<>(Generators.fromCollection(fields));
-=======
 			if (Generators.fromPairCollection(fields).takeSecond().find(Void) != null)
 				return Void;
 			return this;
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 	}
 
@@ -716,15 +630,9 @@ public class TypeCompiler extends LexicalElementTree {
 					utils2.add(t);
 			if (utils2.isEmpty())
 				return Void;
-<<<<<<< HEAD
-			if (utils.size() == 1)
-				return utils.iterator().next();
-			return new Union<>(Generators.fromCollection(utils));
-=======
 			if (utils2.size() == 1)
 				return utils2.iterator().next();
 			return new Union<>(Generators.fromCollection(utils2));
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 	}
 
@@ -858,15 +766,9 @@ public class TypeCompiler extends LexicalElementTree {
 			}
 			if (nonRecords.isEmpty())
 				return Void;
-<<<<<<< HEAD
-			if (utils.size() == 1)
-				return utils.iterator().next();
-			return new Intersection<>(Generators.fromCollection(utils));
-=======
 			if (nonRecords.size() == 1)
 				return nonRecords.iterator().next();
 			return new Intersection<>(Generators.fromCollection(nonRecords));
->>>>>>> 1997b33a656d521e9df6387c180f2dec9f22bb9e
 		}
 	}
 
