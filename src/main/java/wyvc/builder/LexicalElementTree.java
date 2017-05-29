@@ -308,7 +308,7 @@ public class LexicalElementTree extends LoggedBuilder {
 			PairGenerator<T,T> opts = getTypedOptions();
 			return new CustomPairGenerator<String, T>(opts) {
 				@Override
-				protected void generate() throws InterruptedException, EndOfGenerationException {
+				protected void generate() throws EndOfGenerationException {
 					opts.enumerate().forEach_((Integer k, Pair<T,T> o) -> {
 						yield(FLG_PREFIX + k, o.first);
 						yield(VAL_PREFIX + k++, o.second);

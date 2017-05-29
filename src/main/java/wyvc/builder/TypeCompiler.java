@@ -754,12 +754,11 @@ public class TypeCompiler extends LexicalElementTree {
 
 				nonRecords.add(new Record<>(new CustomPairGenerator<String, CanonicalIntersection>(){
 					@Override
-					protected void generate() throws InterruptedException, EndOfGenerationException {
+					protected void generate() throws EndOfGenerationException {
 						for (String g : f)
 							yield(g,new CanonicalIntersection(Generators.fromCollection(l).<CanonicalTypeOrNegation>map((Generator<CanonicalTypeOrRecord> a) -> {
 								try {return a.next();}
 								catch (EndOfGenerationException e) {}
-								catch (InterruptedException e) {}
 								return null;
 							})));
 					}}.mapSecond(CanonicalIntersection::simplify)));

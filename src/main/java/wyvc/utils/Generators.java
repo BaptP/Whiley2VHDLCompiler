@@ -34,12 +34,12 @@ public class Generators {
 	/*------ Interfaces ------*/
 	private static interface AbstractGenerator<T> {
 		boolean isEmpty();
-		void stopGeneration();
+		void stopGeneration(); // TODO Salut ?
 	}
 
 	public static interface Generator<T> extends AbstractGenerator<T> {
 		/*------ Specific ------*/
-		T next() throws EndOfGenerationException, InterruptedException;
+		T next() throws EndOfGenerationException;
 		List<T> toList();
 		PairGenerator<Integer,T> enumerate();
 		<U> PairGenerator<T,U> cartesianProduct(Generator<U> generator);
@@ -83,7 +83,7 @@ public class Generators {
 
 	public static interface Generator_<T, E extends Exception> extends AbstractGenerator<T> {
 		/*------ Specific ------*/
-		T next() throws EndOfGenerationException, InterruptedException, E;
+		T next() throws EndOfGenerationException, E;
 		List<T> toList() throws E;
 		PairGenerator_<Integer,T,E> enumerate();
 		<U> PairGenerator_<T,U,E> cartesianProduct(Generator_<U,E> generator);
@@ -110,7 +110,7 @@ public class Generators {
 	private static interface Mapper<S,P,T> extends AbstractMapper<S,P,T>, Generator<T> {
 		/*------ Specific ------*/
 		Function<? super S,? extends T> getMap();
-		T readLastValue() throws InterruptedException, EndOfGenerationException;
+		T readLastValue() throws EndOfGenerationException;
 		Generator<S> getSource();
 
 		/*------ Without exceptions ------*/
@@ -219,7 +219,6 @@ public class Generators {
 					l.add(next());
 			}
 			catch (EndOfGenerationException e) {}
-			catch (InterruptedException e) {}
 			return l;
 		}
 		default <E extends Exception> Generator_<T,E> toChecked() {
@@ -242,7 +241,7 @@ public class Generators {
 			final Generator<T> This = this;
 			return new CustomPairGenerator<Integer,T>(this) {
 				@Override
-				protected void generate() throws InterruptedException, EndOfGenerationException {
+				protected void generate() throws EndOfGenerationException {
 					int k = 0;
 					while (true)
 						yield(k++,This.next());
@@ -256,7 +255,6 @@ public class Generators {
 					init = function.apply(init, next());
 			}
 			catch (EndOfGenerationException e) {return init;}
-			catch (InterruptedException e) {return null;} // TODO ok ?
 		}
 		@Override
 		default void forEach(Consumer<? super T> function) {
@@ -265,7 +263,6 @@ public class Generators {
 					function.accept(next());
 			}
 			catch (EndOfGenerationException e) {}
-			catch (InterruptedException e) {} // TODO ok ?
 			return;
 		}
 		@Override
@@ -287,13 +284,12 @@ public class Generators {
 			Generator<T> This = this;
 			return new CustomGenerator<T>() { // TODO ?? qui le parent
 				@Override
-				protected void generate() throws InterruptedException, EndOfGenerationException {
+				protected void generate() throws EndOfGenerationException {
 					try {
 						while (true)
 							yield(This.next());
 					}
 					catch (EndOfGenerationException e) {}
-					catch (InterruptedException e) {}
 					while (true)
 						yield(other.next());
 				}
@@ -306,7 +302,7 @@ public class Generators {
 			List<T> values = toList();
 			return new CustomPairGenerator<T,U>(generator) {
 				@Override
-				protected void generate() throws InterruptedException, EndOfGenerationException {
+				protected void generate() throws EndOfGenerationException {
 					while (true) {
 						U u = generator.next();
 						for (T t : values)
@@ -321,7 +317,7 @@ public class Generators {
 			Generator<T> This = this;
 			return new CustomPairGenerator<T,U>(generator) {
 				@Override
-				protected void generate() throws InterruptedException, EndOfGenerationException {
+				protected void generate() throws EndOfGenerationException {
 					while (true)
 						yield(This.next(), generator.next());
 				}};
@@ -332,7 +328,7 @@ public class Generators {
 			Generator<T> This = this;
 			return new CustomGenerator<T>(this) {
 				@Override
-				protected void generate() throws InterruptedException, EndOfGenerationException {
+				protected void generate() throws EndOfGenerationException {
 					while (true) {
 						T t = This.next();
 						if (test.test(t))
@@ -351,7 +347,6 @@ public class Generators {
 					l.add(next());
 			}
 			catch (EndOfGenerationException e) {}
-			catch (InterruptedException e) {}
 			return l;
 		}
 
@@ -385,7 +380,6 @@ public class Generators {
 					init = function.apply(init, next());
 			}
 			catch (EndOfGenerationException e) {return init;}
-			catch (InterruptedException e) {return null;} // TODO ok ?
 		}
 
 		@Override
@@ -395,7 +389,6 @@ public class Generators {
 					function.accept(next());
 			}
 			catch (EndOfGenerationException e) {}
-			catch (InterruptedException e) {} // TODO ok ?
 			return;
 		}
 
@@ -425,7 +418,6 @@ public class Generators {
 							yield(This.next());
 					}
 					catch (EndOfGenerationException e) {}
-					catch (InterruptedException e) {}
 					while (true)
 						yield(other.next());
 				}
@@ -693,21 +685,21 @@ public class Generators {
 		private volatile boolean done = false;
 		private volatile boolean stopGenerationRequest = false;
 		private volatile RuntimeException exception = null;
-		private volatile InterruptedException interruption = null;
 		private final AbstractGenerator<?> parent;
 
 		public DefaultAbstractGenerator(AbstractGenerator<?> parent) {
 			this.parent = parent;
 		}
 
-		protected abstract void generateValues() throws EndOfGenerationException, InterruptedException;
+		protected abstract void generateValues() throws EndOfGenerationException;
 
-		protected final void yield(T value) throws InterruptedException {
+		protected final void yield(T value) {
 //			System.out.println(">> Yield début "+this);
 			this.value = value;
 			ready = true;
 			while (ready) {
-				Thread.sleep(0,100);
+				try {Thread.sleep(0,300);} 
+				catch (InterruptedException e) {}
 				if (stopGenerationRequest)
 					throw new StoppingException();
 			}
@@ -741,7 +733,6 @@ public class Generators {
 			catch (StoppingException e) {}
 			catch (RuntimeException e) {exception = e;}
 			catch (EndOfGenerationException e) {}
-			catch (InterruptedException e) {interruption = e;}
 //			System.out.println("Sortie ");
 //			System.out.println("Je meurs "+this);
 			endGeneration();
@@ -754,27 +745,26 @@ public class Generators {
 			while (!done);
 		}
 
-		protected final void waitValue() throws InterruptedException {
+		protected final void waitValue() {
 //			System.out.println(">> Wait début "+this);
 			if (done)
 				return;
 			while (!ready)
-				Thread.sleep(3);
+				try {Thread.sleep(0,300);}
+			catch (InterruptedException e) {}
 //			System.out.println(">> Wait fin   "+this);
 		}
 
-		protected final T readValue() throws EndOfGenerationException, InterruptedException {
+		protected final T readValue() throws EndOfGenerationException {
 //			System.out.println("Read "+this+" "+exception);
 			if (exception != null)
 				throw exception;
-			if (interruption != null)
-				throw interruption;
 			if (done)
 				throw new EndOfGenerationException();
 			return value;
 		}
 
-		protected final T getValue() throws EndOfGenerationException, InterruptedException {
+		protected final T getValue() throws EndOfGenerationException {
 //			System.out.println("Read value "+this);
 			T t = readValue();
 			ready = false;
@@ -804,7 +794,7 @@ public class Generators {
 
 
 	private static abstract class DefaultThreadGenerator<T> extends AbstractThreadGenerator<T> implements DefaultGenerator<T> {
-		protected abstract void generate() throws InterruptedException, EndOfGenerationException;
+		protected abstract void generate() throws EndOfGenerationException;
 
 		public DefaultThreadGenerator(AbstractGenerator<?> parent) {
 			super(parent);
@@ -821,11 +811,11 @@ public class Generators {
 		}
 
 		@Override
-		protected final void generateValues() throws EndOfGenerationException, InterruptedException {
+		protected final void generateValues() throws EndOfGenerationException {
 			generate();
 		}
 		@Override
-		public final T next() throws EndOfGenerationException, InterruptedException {
+		public final T next() throws EndOfGenerationException {
 //			System.out.println("Next début "+this);
 			waitValue();
 //			System.out.println("Next fin   "+this);
@@ -861,7 +851,7 @@ public class Generators {
 		}
 
 		@Override
-		public final T next() throws EndOfGenerationException, InterruptedException, E {
+		public final T next() throws EndOfGenerationException, E {
 			return generator.next();
 		}
 
@@ -892,16 +882,15 @@ public class Generators {
 
 		@SuppressWarnings("unchecked")
 		@Override
-		protected final void generateValues() throws EndOfGenerationException, InterruptedException {
+		protected final void generateValues() throws EndOfGenerationException {
 			try {generate();}
 			catch (RuntimeException e) {throw e;}
 			catch (EndOfGenerationException e) {throw e;}
-			catch (InterruptedException e) {throw e;}
 			catch (Exception e) {exception = (E)e;}
 		}
 
 		@Override
-		public final T next() throws EndOfGenerationException, InterruptedException, E {
+		public final T next() throws EndOfGenerationException, E {
 			waitValue();
 			if (exception != null)
 				throw exception;
@@ -924,6 +913,64 @@ public class Generators {
 		}
 	}
 
+	
+	
+	private static class MMapper<S,T> implements DefaultGenerator<T> {
+		private final Generator<S> source;
+		private final Function<? super S,? extends T> map;
+		
+		public MMapper(Generator<S> source, Function<? super S,? extends T> map) {
+			this.source = source;
+			this.map = map;
+		}
+		@Override
+		public boolean isEmpty() {
+			return source.isEmpty();
+		}
+
+		@Override
+		public void stopGeneration() {
+			source.stopGeneration();
+		}
+
+		@Override
+		public T next() throws EndOfGenerationException {
+			return map.apply(source.next());
+		}
+
+		@Override
+		public <E extends Exception> Generator_<T, E> toChecked() {
+			return new MMapper_<>(source.toChecked(), map.toChecked());
+		}
+	}
+
+	private static class MMapper_<S,T,E extends Exception> implements DefaultGenerator_<T,E> {
+		private final Generator_<S,E> source;
+		private final Function_<? super S,? extends T,E> map;
+		
+		public MMapper_(Generator_<S,E> source, Function_<? super S,? extends T,E> map) {
+			this.source = source;
+			this.map = map;
+		}
+		@Override
+		public boolean isEmpty() {
+			return source.isEmpty();
+		}
+
+		@Override
+		public void stopGeneration() {
+			source.stopGeneration();
+		}
+
+		@Override
+		public T next() throws EndOfGenerationException, E {
+			return map.apply(source.next());
+		}
+	}
+	
+	
+	
+	
 	private static class FirstMapper<S,T> extends DefaultThreadGenerator<T> implements DefaultMapper<S,S,T> {
 		private final Generator<S> source;
 		private final Function<? super S,? extends T> map;
@@ -950,8 +997,7 @@ public class Generators {
 		@Override
 		public final void moveGenerationTo(FollowingMapper<S, T, ?> next) {
 //			System.out.println("Demande de saut " + this + " ->" + next);
-			try {waitValue();}
-			catch (InterruptedException e){}
+			waitValue();
 			this.next = next;
 			if (isEmpty())
 				next.run();
@@ -961,8 +1007,7 @@ public class Generators {
 
 		@Override
 		public final void moveGenerationTo(FollowingMapper_<S, T, ?, ?> next) {
-			try {waitValue();}
-			catch (InterruptedException e){}
+			waitValue();
 			this.next_ = next;
 			if (isEmpty())
 				next.run();
@@ -971,7 +1016,7 @@ public class Generators {
 		}
 
 		@Override
-		protected void generate() throws InterruptedException, EndOfGenerationException {
+		protected void generate() throws EndOfGenerationException {
 			try {
 				while (true)
 					yield(map.apply(source.next()));
@@ -995,7 +1040,7 @@ public class Generators {
 		}
 
 		@Override
-		public final T readLastValue() throws InterruptedException, EndOfGenerationException {
+		public final T readLastValue() throws EndOfGenerationException {
 //			System.out.println("Read last "+this);
 			T t = readValue();
 			endGeneration();
@@ -1024,7 +1069,7 @@ public class Generators {
 		}
 
 		@Override
-		public final T next() throws EndOfGenerationException, InterruptedException, E {
+		public final T next() throws EndOfGenerationException, E {
 			return mapper.next();
 		}
 
@@ -1075,8 +1120,7 @@ public class Generators {
 
 		@Override
 		public final void moveGenerationTo(FollowingMapper_<S, T, ?, ? super E> next) {
-			try {waitValue();}
-			catch (InterruptedException e){}
+			waitValue();
 			this.next = next;
 			if (isEmpty())
 				next.run();
@@ -1119,7 +1163,6 @@ public class Generators {
 			}
 			catch (RuntimeException e) {throw e;}
 			catch (EndOfGenerationException e) {throw e;}
-			catch (InterruptedException e) {throw e;}
 			catch (Exception e) {exception = (E) e;}
 		}
 	}
@@ -1132,11 +1175,10 @@ public class Generators {
 			super(parent);
 		}
 
-		protected abstract void generate() throws InterruptedException, EndOfGenerationException;
+		protected abstract void generate() throws EndOfGenerationException;
 
 		protected final void moveTo(AbstractFollowingMapper<S, T, ?> next) {
-			try {waitValue();}
-			catch (InterruptedException e){}
+			waitValue();
 			this.next = next;
 			if (isEmpty())
 				next.run();
@@ -1150,7 +1192,7 @@ public class Generators {
 
 
 		@Override
-		protected final void generateValues() throws EndOfGenerationException, InterruptedException {
+		protected final void generateValues() throws EndOfGenerationException {
 			try {
 				generate();
 			}
@@ -1181,7 +1223,7 @@ public class Generators {
 		}
 
 		@Override
-		public final T next() throws EndOfGenerationException, InterruptedException {
+		public final T next() throws EndOfGenerationException {
 //			System.out.println("Next demande "+this);
 			waitValue();
 //			System.out.println("Next "+this);
@@ -1189,7 +1231,7 @@ public class Generators {
 		}
 
 		@Override
-		protected void generate() throws EndOfGenerationException, InterruptedException {
+		protected void generate() throws EndOfGenerationException {
 //			System.out.println("Generate de "+this + " sur " +previous);
 			yield(step.apply(previous.readLastValue()));
 //			System.out.println("Generate de +"+this);
@@ -1208,7 +1250,7 @@ public class Generators {
 		}
 
 		@Override
-		public final T readLastValue() throws InterruptedException, EndOfGenerationException {
+		public final T readLastValue() throws EndOfGenerationException {
 //			System.out.println("Read last "+this);
 			T t = readValue();
 //			System.out.println("Reading done "+this);
@@ -1248,7 +1290,7 @@ public class Generators {
 
 
 		@Override
-		public final T next() throws EndOfGenerationException, InterruptedException, E {
+		public final T next() throws EndOfGenerationException, E {
 			waitValue();
 			if (exception != null)
 				throw exception;
@@ -1267,7 +1309,7 @@ public class Generators {
 
 		@SuppressWarnings("unchecked")
 		@Override
-		protected void generate() throws EndOfGenerationException, InterruptedException {
+		protected void generate() throws EndOfGenerationException {
 			try {
 //				System.out.println("Generate de "+this + " sur " +previous);
 				yield(step.apply(previous.readLastValue()));
@@ -1277,7 +1319,6 @@ public class Generators {
 			}
 			catch (RuntimeException e) {throw e;}
 			catch (EndOfGenerationException e) {throw e;}
-			catch (InterruptedException e) {throw e;}
 			catch (Exception e) {exception = (E) e;}
 
 		}
@@ -1315,7 +1356,7 @@ public class Generators {
 		}
 		public CustomPairGenerator() {}
 
-		protected final void yield(S s, T t) throws InterruptedException {
+		protected final void yield(S s, T t) {
 			yield(new Pair<>(s,t));
 		}
 	}
@@ -1327,7 +1368,7 @@ public class Generators {
 		}
 
 		@Override
-		public Pair<S, T> next() throws EndOfGenerationException, InterruptedException, E {
+		public Pair<S, T> next() throws EndOfGenerationException, E {
 			return generator.next();
 		}
 
@@ -1351,7 +1392,7 @@ public class Generators {
 			super(parent);
 		}
 		public CustomPairGenerator_() {}
-		protected final void yield(S s, T t) throws InterruptedException {
+		protected final void yield(S s, T t) {
 			yield(new Pair<>(s,t));
 		}
 	}
@@ -1531,7 +1572,7 @@ public class Generators {
 			return (PairGenerator<S,T>) generator;
 		return new CustomPairGenerator<S, T>(generator) {
 			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
+			protected void generate() throws EndOfGenerationException {
 				while (true)
 					yield(generator.next());
 			}};
@@ -1573,7 +1614,7 @@ public class Generators {
 	public static <S> Generator<S> fromCollection(Collection<S> collection) {
 		return new CustomGenerator<S>() {
 			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
+			protected void generate() throws EndOfGenerationException {
 				for (S s : collection)
 					yield(s);
 
@@ -1604,7 +1645,7 @@ public class Generators {
 	public static <S,T> CustomPairGenerator<S,T> fromPairCollection(Collection<Pair<S,T>> c) {
 		return new CustomPairGenerator<S,T>(){
 			@Override
-			protected void generate() throws InterruptedException {
+			protected void generate() throws EndOfGenerationException {
 				for (Pair<S,T> p : c)
 					yield(p);
 			}};
@@ -1622,7 +1663,7 @@ public class Generators {
 	public static <S> Generator<S> fromSingleton(S s) {
 		return new CustomGenerator<S>() {
 			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
+			protected void generate() throws EndOfGenerationException {
 				yield(s);
 			}};
 	}
@@ -1630,7 +1671,7 @@ public class Generators {
 	public static <S, T> PairGenerator<S, T> fromPairSingleton(S s, T t) {
 		return new CustomPairGenerator<S, T>() {
 			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
+			protected void generate() throws EndOfGenerationException {
 				yield(s,t);
 			}};
 	}
@@ -1666,7 +1707,7 @@ public class Generators {
 	public static <S> Generator<S> constant(S s) {
 		return new CustomGenerator<S>() {
 			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
+			protected void generate() throws EndOfGenerationException {
 				while (true)
 					yield(s);
 			}};
@@ -1689,7 +1730,7 @@ public class Generators {
 		final int noc = values.size();
 		return noc == 0 ? emptyGeneratorGenerator() : new CustomGeneratorGenerator<S>() {
 			@Override
-			protected void generate() throws InterruptedException, EndOfGenerationException {
+			protected void generate() throws EndOfGenerationException {
 				int[] index = new int[noc];
 				Arrays.fill(index, 0);
 				int[] lenghts = new int[noc];
@@ -1701,7 +1742,7 @@ public class Generators {
 					yield(new CustomGenerator<S>() {
 						private int[] pIndex = index.clone();
 						@Override
-						protected void generate() throws InterruptedException, EndOfGenerationException {
+						protected void generate() throws EndOfGenerationException {
 							int k = 0;
 							for (int i : pIndex)
 								yield(values.get(k++).get(i));
