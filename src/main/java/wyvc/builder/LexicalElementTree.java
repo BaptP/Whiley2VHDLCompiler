@@ -12,10 +12,12 @@ import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.CompilerLogger.LoggedContainer;
-import wyvc.utils.Generator.CheckedGenerator;
-import wyvc.utils.Generator.StandardGenerator;
-import wyvc.utils.Generator.StandardPairGenerator;
-import wyvc.utils.Generator;
+import wyvc.utils.Generators.Generator_;
+import wyvc.utils.Generators.PairGenerator;
+import wyvc.utils.Generators.CustomPairGenerator;
+import wyvc.utils.Generators.EndOfGenerationException;
+import wyvc.utils.Generators.Generator;
+import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 
 /**
@@ -158,7 +160,7 @@ public class LexicalElementTree extends LoggedBuilder {
 
 	public interface Node<T> extends Commun {
 		public int getNumberOfComponents();
-		public StandardPairGenerator<String, T> getComponents();
+		public PairGenerator<String, T> getComponents();
 
 
 //		public default boolean equals(T other) {
@@ -198,18 +200,18 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		public int getNumberOfFields();
-		public StandardGenerator<String> getFieldNames();
+		public Generator<String> getFieldNames();
 	}
 
 	public abstract class RecordNode<T extends Tree> implements EffectiveRecordNode<T>, Tree {
 		private final Map<String, T> fields = new HashMap<>();
 
-		public RecordNode(StandardGenerator<Pair<String, T>> fields) {
-			Generator.toPairGenerator(fields).forEach(this.fields::put);
+		public RecordNode(Generator<Pair<String, T>> fields) {
+			Generators.toPairGenerator(fields).forEach(this.fields::put);
 		}
 
-		public <E extends Exception> RecordNode(CheckedGenerator<Pair<String, T>, E> fields) throws E {
-			Generator.toPairGenerator(fields).forEach(this.fields::put);
+		public <E extends Exception> RecordNode(Generator_<Pair<String, T>, E> fields) throws E {
+			Generators.toPairGenerator(fields).forEach(this.fields::put);
 		}
 
 		@Override
@@ -223,12 +225,12 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public StandardGenerator<String> getFieldNames() {
-			return Generator.fromCollection(fields.entrySet()).map(Entry::getKey);
+		public Generator<String> getFieldNames() {
+			return Generators.fromCollection(fields.entrySet()).map(Entry::getKey);
 		}
 
-		public StandardPairGenerator<String, T> getFields() {
-			return Generator.fromCollection(fields.entrySet()).biMap(Entry::getKey, Entry::getValue);
+		public PairGenerator<String, T> getFields() {
+			return Generators.fromCollection(fields.entrySet()).biMap(Entry::getKey, Entry::getValue);
 		}
 
 		@Override
@@ -241,7 +243,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public StandardPairGenerator<String, T> getComponents() {
+		public PairGenerator<String, T> getComponents() {
 			return getFields();
 		}
 
@@ -272,7 +274,10 @@ public class LexicalElementTree extends LoggedBuilder {
 
 		protected final List<Pair<A,B>> options;
 
-		public UnionNode(StandardGenerator<Pair<A,B>> options) {
+		public UnionNode(Generator<Pair<A,B>> options) {
+			this.options = options.toList();
+		}
+		public <E extends Exception> UnionNode(Generator_<Pair<A,B>, E> options) throws E{
 			this.options = options.toList();
 		}
 
@@ -284,8 +289,8 @@ public class LexicalElementTree extends LoggedBuilder {
 			return options.size();
 		}
 
-		public final StandardPairGenerator<A,B> getOptions() {
-			return Generator.fromPairCollection(options);
+		public final PairGenerator<A,B> getOptions() {
+			return Generators.fromPairCollection(options);
 		}
 
 
@@ -299,19 +304,19 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 
-		public StandardPairGenerator<String, T> getComponents() {
-			StandardPairGenerator<T,T> opts = getTypedOptions();
-			return new StandardPairGenerator<String, T>(opts) {
+		public PairGenerator<String, T> getComponents() {
+			PairGenerator<T,T> opts = getTypedOptions();
+			return new CustomPairGenerator<String, T>(opts) {
 				@Override
-				protected void generate() throws InterruptedException, wyvc.utils.Generator.EndOfGenerationException {
-					opts.enumerate().ForEach((Integer k, Pair<T,T> o) -> {
+				protected void generate() throws InterruptedException, EndOfGenerationException {
+					opts.enumerate().forEach_((Integer k, Pair<T,T> o) -> {
 						yield(FLG_PREFIX + k, o.first);
 						yield(VAL_PREFIX + k++, o.second);
 					});
 				}};
 		}
 
-		protected abstract StandardPairGenerator<T,T> getTypedOptions();
+		protected abstract PairGenerator<T,T> getTypedOptions();
 
 		private final <U extends Tree, C extends Tree, D extends Tree> boolean isStructuredAsHelper(UnionNode<U,C,D> other) {
 			return other.getNumberOfOptions() == getNumberOfOptions() &&
@@ -330,12 +335,21 @@ public class LexicalElementTree extends LoggedBuilder {
 	public abstract class RecordUnionNode<T extends Tree, A extends T, B extends RecordNode<T>> extends UnionNode<T,A, B> implements EffectiveRecordNode<T> {
 		private final Set<String> components = new HashSet<>();
 
-		public RecordUnionNode(StandardGenerator<Pair<A,B>> options) {
+		public RecordUnionNode(Generator<Pair<A,B>> options) {
 			super(options);
+			scanComponents();
+		}
+
+		public <E extends Exception> RecordUnionNode(Generator_<Pair<A,B>, E> options) throws E {
+			super(options);
+			scanComponents();
+		}
+
+		private void scanComponents() {
 			final Set<String> cps = new HashSet<>();
-			this.options.get(0).second.getFields().takeFirst().forEach(components::add);;
-			for (int k = 1; k<this.options.size() && !components.isEmpty(); ++k) {
-				this.options.get(k).second.getFields().takeFirst().forEach((String n) -> {
+			options.get(0).second.getFields().takeFirst().forEach(components::add);;
+			for (int k = 1; k<options.size() && !components.isEmpty(); ++k) {
+				options.get(k).second.getFields().takeFirst().forEach((String n) -> {
 					if(components.contains(n))
 						components.add(n);
 				});
@@ -351,11 +365,11 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public StandardGenerator<String> getFieldNames() {
-			return Generator.fromCollection(components);
+		public Generator<String> getFieldNames() {
+			return Generators.fromCollection(components);
 		}
 
-		public StandardPairGenerator<A, RecordNode<T>> getField(String name) throws CompilerException {
+		public PairGenerator<A, RecordNode<T>> getField(String name) throws CompilerException {
 //			if (!components.contains(name))
 				throw NonexistentFieldCompilerError.exception(name, this);
 //			return getOptions().MapSecond((B r) -> r.getField(name)).check();

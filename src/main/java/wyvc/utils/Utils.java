@@ -16,11 +16,11 @@ import wyil.lang.Bytecode.If;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.builder.CompilerLogger;
-import wyvc.utils.CheckedFunctionalInterface.CheckedBiConsumer;
-import wyvc.utils.CheckedFunctionalInterface.CheckedBiFunction;
-import wyvc.utils.CheckedFunctionalInterface.CheckedConsumer;
-import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
-import wyvc.utils.CheckedFunctionalInterface.CheckedSupplier;
+import wyvc.utils.FunctionalInterfaces.CheckedBiConsumer;
+import wyvc.utils.FunctionalInterfaces.CheckedBiFunction;
+import wyvc.utils.FunctionalInterfaces.CheckedConsumer;
+import wyvc.utils.FunctionalInterfaces.CheckedFunction;
+import wyvc.utils.FunctionalInterfaces.CheckedSupplier;
 
 public class Utils {
 	public static void printLocation(CompilerLogger logger, Location<?> a, String n) {
