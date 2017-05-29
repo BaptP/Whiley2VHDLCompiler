@@ -2,10 +2,11 @@ package wyvc.builder.compilationSteps;
 
 
 import wyvc.builder.CompilerLogger;
+import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.TypeCompiler;
 import wyvc.builder.compilationSteps.ParsingStep.ParsedFile;
-import wyvc.utils.Generator;
+import wyvc.utils.Generators;
 
 public class CompileTypesStep extends CompilationStep<ParsedFile, CompileTypesStep.CompiledTypes> {
 	public static class CompiledTypes extends ParsedFile {
@@ -24,7 +25,15 @@ public class CompileTypesStep extends CompilationStep<ParsedFile, CompileTypesSt
 	@Override
 	protected CompiledTypes compile(CompilerLogger logger, ParsedFile data) throws CompilerException {
 		TypeCompiler typeCompiler = new TypeCompiler(logger);
-		Generator.fromCollection(data.file.types()).ForEach(typeCompiler::addNominalType);
+//		throw new CompilerException(new CompilerError() {
+//
+//			@Override
+//			public String info() {
+//				// TODO Auto-generated method stub
+//				return "fin";
+//			}
+//		});
+		Generators.fromCollection(data.file.types()).forEach_(typeCompiler::addNominalType);
 		return new CompiledTypes(data, typeCompiler);
 	}
 

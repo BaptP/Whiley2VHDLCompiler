@@ -2,15 +2,23 @@ package wyvc.utils;
 
 import java.util.function.Function;
 
-import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
+import wyvc.utils.FunctionalInterfaces.CheckedFunction;
 
 public class  Pair<S,T> {
-	public S first;
-	public T second;
+	public final S first;
+	public final T second;
 
 	public Pair(S first, T second) {
 		this.first = first;
 		this.second = second;
+	}
+
+	public S getFirst() {
+		return first;
+	}
+
+	public T getSecond() {
+		return second;
 	}
 
 	public <U> Pair<U,T> transformFirst(Function<? super S, ? extends U> function) {
@@ -21,12 +29,16 @@ public class  Pair<S,T> {
 		return new Pair<>(first, function.apply(second));
 	}
 
-	public <U, E extends Exception> Pair<U,T> transformFirstChecked(CheckedFunction<? super S, ? extends U, E> function) throws E {
+	public <U, E extends Exception> Pair<U,T> transformFirst_(CheckedFunction<? super S, ? extends U, E> function) throws E {
 		return new Pair<>(function.apply(first), second);
 	}
 
-	public <U, E extends Exception> Pair<S,U> transformSecondChecked(CheckedFunction<? super T, ? extends U, E> function) throws E{
+	public <U, E extends Exception> Pair<S,U> transformSecond_(CheckedFunction<? super T, ? extends U, E> function) throws E{
 		return new Pair<>(first, function.apply(second));
+	}
+
+	public Pair<T,S> swap() {
+		return new Pair<>(second,first);
 	}
 
 	public boolean equals(Pair<S,T> other) {

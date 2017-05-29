@@ -43,13 +43,12 @@ import wyvc.builder.TypeCompiler.TypeRecordUnion;
 import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.LexicalElementTree;
 import wyvc.lang.Type;
-import wyvc.utils.CheckedFunctionalInterface.CheckedFunction;
-import wyvc.utils.Generator;
+import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
-import wyvc.utils.Generator.CheckedGenerator;
-import wyvc.utils.Generator.StandardGenerator;
-import wyvc.utils.Generator.StandardPairGenerator;
+import wyvc.utils.Generators.Generator_;
+import wyvc.utils.Generators.Generator;
+import wyvc.utils.Generators.PairGenerator;
 
 public final class DataFlowGraphBuilder extends LexicalElementTree {
 	private final TypeCompiler typeCompiler;
@@ -183,24 +182,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 	}
 
-
-	public static class UnsupportedStructureConversionCompilerError extends CompilerError {
-		private final Structure<?,?> structure;
-
-		public UnsupportedStructureConversionCompilerError(Structure<?,?> structure) {
-			this.structure = structure;
-		}
-
-		@Override
-		public String info() {
-			return "The conversion of CompoundValue is not provided for the structure "+structure;
-		}
-
-		public static CompilerException exception(Structure<?,?> structure) {
-			return new CompilerException(new UnsupportedStructureConversionCompilerError(structure));
-		}
-	}
-
 	public static class UncompatibleStructuresCompilerError extends CompilerError {
 		private final Structure<?,?> structure1;
 		private final Structure<?,?> structure2;
@@ -222,6 +203,46 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 */
 
+
+	public static class UnsupportedTreeNodeCompilerError extends CompilerError {
+		private final Tree node;
+
+		public UnsupportedTreeNodeCompilerError(Tree node) {
+			this.node = node;
+		}
+
+		@Override
+		public String info() {
+			return "The conversion of the node "+node+" is unsupported";
+		}
+
+		public static CompilerException exception(Tree node) {
+			return new CompilerException(new UnsupportedTreeNodeCompilerError(node));
+		}
+	}
+
+	public static class UnrelatedTypeCompilerError extends CompilerError {
+		private final NodeTree<?> value;
+		private final TypeTree type;
+
+		public UnrelatedTypeCompilerError(TypeTree type, NodeTree<?> value) {
+			this.value = value;
+			this.type = type;
+		}
+
+		@Override
+		public String info() {
+			return "The value <"+value+"> of type "+value.getType().toString()+"\ncan't be interpreted as part of the type "+type.toString();
+		}
+
+		public static CompilerException exception(TypeTree type, NodeTree<?> value) {
+			return new CompilerException(new UnrelatedTypeCompilerError(type, value));
+		}
+
+	}
+
+
+
 	private static interface NodeTree<T extends TypeTree> extends Tree {
 
 		public T getType();
@@ -231,8 +252,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 	private class LeafVertex extends Leaf<HalfArrow<?>> implements NodeTree<TypeLeaf> {
 		private final TypeLeaf type;
 
-		public LeafVertex(HalfArrow<?> value, TypeLeaf type) {
-			super(value);
+		public LeafVertex(DataNode value, TypeLeaf type) {
+			super(new HalfArrow<>(value));
 			this.type = type;
 		}
 
@@ -242,18 +263,22 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 	}
 
-	private class RecordVertex extends RecordNode<NodeTree<?>> implements NodeTree<TypeRecord> {
+	private static interface NodeVertex<T extends TypeTree> extends Node<NodeTree<?>>,NodeTree<T> {
+
+	}
+
+	private class RecordVertex extends RecordNode<NodeTree<?>> implements NodeVertex<TypeRecord> {
 		private final TypeRecord type;
 
 		public <E extends Exception> RecordVertex(
-				CheckedGenerator<Pair<String, NodeTree<?>>, E> fields,
+				Generator_<Pair<String, NodeTree<?>>, E> fields,
 				TypeRecord type) throws E {
 			super(fields);
 			this.type = type;
 		}
 
 		public RecordVertex(
-				StandardGenerator<Pair<String, NodeTree<?>>> fields,
+				Generator<Pair<String, NodeTree<?>>> fields,
 				TypeRecord type) {
 			super(fields);
 			this.type = type;
@@ -265,15 +290,33 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 	}
 
-	private class SimpleUnionVertex extends UnionNode<NodeTree<?>, LeafVertex, NodeTree<?>> implements NodeTree<SimpleTypeUnion> {
+	private abstract class UnionVertex<T extends NodeTree<?>> extends UnionNode<NodeTree<?>, LeafVertex, T> {
+		public UnionVertex(Generator<Pair<LeafVertex, T>> options) {
+			super(options);
+		}
+
+		public <E extends Exception> UnionVertex(Generator_<Pair<LeafVertex, T>, E> options) throws E {
+			super(options);
+		}
+	}
+
+	private class SimpleUnionVertex extends UnionVertex<NodeTree<?>> implements NodeVertex<SimpleTypeUnion> {
 		private final SimpleTypeUnion type;
 
 		public SimpleUnionVertex(
-				StandardGenerator<Pair<LeafVertex, NodeTree<?>>> options,
+				Generator<Pair<LeafVertex, NodeTree<?>>> options,
 				SimpleTypeUnion type) {
 			super(options);
 			this.type = type;
 		}
+
+		public <E extends Exception> SimpleUnionVertex(
+				Generator_<Pair<LeafVertex, NodeTree<?>>, E> options,
+				SimpleTypeUnion type) throws E {
+			super(options);
+			this.type = type;
+		}
+
 
 		@Override
 		public SimpleTypeUnion getType() {
@@ -281,17 +324,23 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 		@Override
-		protected StandardPairGenerator<NodeTree<?>, NodeTree<?>> getTypedOptions() {
+		protected PairGenerator<NodeTree<?>, NodeTree<?>> getTypedOptions() {
 			return getOptions().map((LeafVertex a) -> a, (NodeTree<?> b) -> b);
 		}
 	}
 
-	private class RecordUnionVertex extends RecordUnionNode<NodeTree<?>, LeafVertex, RecordVertex> implements NodeTree<TypeRecordUnion>{
+	private class RecordUnionVertex extends UnionVertex<RecordVertex> implements NodeVertex<TypeRecordUnion>{
 		private final TypeRecordUnion type;
 
 		public RecordUnionVertex(
-				StandardGenerator<Pair<LeafVertex, RecordVertex>> options,
+				Generator<Pair<LeafVertex, RecordVertex>> options,
 				TypeRecordUnion type) {
+			super(options);
+			this.type = type;
+		}
+		public <E extends Exception> RecordUnionVertex(
+				Generator_<Pair<LeafVertex, RecordVertex>, E> options,
+				TypeRecordUnion type) throws E {
 			super(options);
 			this.type = type;
 		}
@@ -302,7 +351,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 		@Override
-		protected StandardPairGenerator<NodeTree<?>, NodeTree<?>> getTypedOptions() {
+		protected PairGenerator<NodeTree<?>, NodeTree<?>> getTypedOptions() {
 			return getOptions().map((LeafVertex a) -> a, (RecordVertex b) -> b);
 		}
 	}
@@ -336,17 +385,17 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				this.ret = ret;
 			}
 
-
-/*			public StandardGenerator<NodeTree> getReturn() throws CompilerException {
+// TODO
+			public Generator<NodeTree<?>> getReturn() throws CompilerException {
 				assert !isPartial();
 //				logger.debug("Return ? "+this+" "+ret+" "+tPart+" "+fPart);
-				return ret == null ? tPart.getReturn().gather(fPart.getReturn()).map(
-					(Pair<NodeTree<?>, NodeTree<?>> p) -> buildEndIf(ifs, cond, p.first, p.second)) : Generator.fromCollection(ret);
+				return null;//ret == null ? tPart.getReturn().gather(fPart.getReturn()).map(
+					//(Pair<NodeTree<?>, NodeTree<?>> p) -> buildEndIf(ifs, cond, p.first, p.second)) : Generator.fromCollection(ret);
 			}
 
-			public void completeReturn(List<NodeTree> rem) {
+			public void completeReturn(List<NodeTree<?>> rem) {
 				completeReturn(new PartialReturn(rem));
-			}*/
+			}
 
 			public PartialReturn completeReturn(PartialReturn rem) {
 				if (ret != null) return this;
@@ -373,128 +422,126 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				}
 			}
 		}
-//
-//
-//		private Map<Integer, Tree<HalfArrow<?>>> vars = new HashMap<>();
-//		private PartialReturn partialReturn = null;
-//		private final List<Tree<Type>> returnTypes;
-//		private final DataFlowGraph graph;
-//		private Map<wyil.lang.Type, wyvc.lang.Type> compiledTypes = new HashMap<>();
-//
-//		/*------- Constructor -------*/
-//
-//		@SuppressWarnings("unchecked")
-//		public Builder(WyilFile.FunctionOrMethod func) throws CompilerException {
-//			super(DataFlowGraphBuilder.this.logger);
-//			graph = new DataFlowGraph();
-//			Generator.enumerateFromCollection(func.type().params()).forEach((Integer k, wyil.lang.Type t) ->
-//				vars.put(k, buildParameter(
-//					((Location<Bytecode.VariableDeclaration>)func.getTree().getLocation(k)).getBytecode().getName(),
-//					buildType(t))));
-//			returnTypes = Generator.fromCollection(func.type().returns()).Map(this::buildType).toList();
-//			build(func.getBody());
-///**/			partialReturn.print("RET ");
-//			partialReturn.getReturn().enumerate().mapFirst(Object::toString).mapFirst("ret_"::concat).ForEach(this::buildReturnValue);
-//		}
-//
-//
-//		/*------- Classe content -------*/
-//
-////		private Type isNodeType(TypeTree type) throws CompilerException {
-////			if (type instanceof CompoundType)
-////				CompoundTypeCompilerError.exception(type);
-////			return type.getValue();
-////		}
-////
-////		private Type getNodeType(wyil.lang.Type type) throws CompilerException {
-////			return Utils.checkedAddIfAbsent(compiledTypes, type, () -> isNodeType(buildType(type)));
-////
-////		}
-//
-//
-//		public DataFlowGraph getGraph() {
-//			return graph;
-//		}
-//
-//
-//		public Tree<Type> buildType(wyil.lang.Type type) throws CompilerException {
-//			return typeCompiler.compileType(type);
-//		}
-//
-//
-//
-//
-//
-//
-//
-//
-//		private UndefConstNode buildUndefinedValue(Type type) {
-//			return graph.new UndefConstNode(type);
-//		}
-//
-//		private Structure<NodeTree, HalfArrow<?>> buildUndefinedValue(Structure<TypeTree, Type> structure) throws CompilerException {
-//			if (structure instanceof RecordStructure)
-//				return new RecordStructure<>(((RecordStructure<TypeTree, Type>) structure).getComponents().Map(
-//					(String s, TypeTree t) -> new Pair<>(s, buildUndefinedValue(t))));
-//			if (structure instanceof UnionStructure)
-//				return new UnionStructure<>(((UnionStructure<TypeTree, Type>) structure).getOptions().Map(
-//					(TypeTree t,TypeTree v) -> new Pair<>(buildUndefinedValue(t),buildUndefinedValue(v))));
-//			throw UnsupportedStructureConversionCompilerError.exception(structure);
-//		}
-//
-//		private NodeTree buildUndefinedValue(Tree<Type> type) throws CompilerException {
-//			if (type instanceof Leaf)
-//				return new
-//
-//			return type instanceof PrimitiveType
-//					? new PrimitiveNode(buildUndefinedValue(type.getValue()))
-//					: new CompoundNode<>(buildUndefinedValue(type.getStructure()), type);
-//		}
-//		private RecordStructure<NodeTree, HalfArrow<?>> buildUnionValue(RecordStructure<TypeTree,Type> type, NodeTree value) throws CompilerException {
-//			//if (type.getComponentNumber() != value.getComponentNumber() || )
-//			// TODO Test ?
-//			return new RecordStructure<>(type.getComponents().gather(value.getStructure().getComponents()).Map(
-//				(Pair<Pair<String, TypeTree>, Pair<String,NodeTree>> p) ->
-//				new Pair<>(p.first.first,buildTypedValue(p.second.second, p.first.second))));
-//		}
-//
-//		private UnionStructure<NodeTree, HalfArrow<?>> buildUnionValue(UnionStructure<TypeTree,Type> type, NodeTree value) throws CompilerException {
-//			List<Pair<TypeTree, Pair<NodeTree, NodeTree>>> cps =  value instanceof CompoundNode<?> && value.getStructure() instanceof UnionStructure<?,?>
-//				? ((UnionStructure<NodeTree, HalfArrow<?>>) value.getStructure()).getOptions().map((Pair<NodeTree, NodeTree> p) -> new Pair<>(p.second.getType(), p)).toList()
-//				: Collections.singletonList(new Pair<>(value.getType(), new Pair<>(new PrimitiveNode(graph.getTrue()),value)));
-//			return new UnionStructure<>(type.getOptions().map(
-//					(TypeTree t,TypeTree v) -> new Pair<>(v,Generator.fromPairCollection(cps).find(
-//							(Pair<TypeTree, Pair<NodeTree, NodeTree>> c) -> c.first.equals(v)))).Map(
-//					(Pair<TypeTree, Pair<TypeTree, Pair<NodeTree, NodeTree>>> p) -> p.second == null
-//						? new Pair<>(new PrimitiveNode(graph.getFalse()),buildUndefinedValue(p.first))
-//						: p.second.second));
-//		}
-//
-//		private Structure<NodeTree, HalfArrow<?>> buildTypedValue(Structure<TypeTree, Type> type, NodeTree node) throws CompilerException {
-//			if (type instanceof UnionStructure)
-//				return buildUnionValue((UnionStructure<TypeTree,Type>) type, node);
-//			if (type instanceof RecordStructure)
-//				return buildUnionValue((RecordStructure<TypeTree,Type>) type, node);
-//			throw UnsupportedStructureConversionCompilerError.exception(type);
-//		}
-//
-//		private NodeTree buildTypedValue(NodeTree node, TypeTree type) throws CompilerException {
-////			debug("Val "+(node == null ? "NULL" : node.getType()));
-//			if (node.getType().equals(type))
-//				return node;
+
+
+		private Map<Integer, NodeTree<?>> vars = new HashMap<>();
+		private PartialReturn partialReturn = null;
+		private final List<TypeTree> returnTypes;
+		private final DataFlowGraph graph;
+		private Map<wyil.lang.Type, wyvc.lang.Type> compiledTypes = new HashMap<>();
+
+		/*------- Constructor -------*/
+
+		@SuppressWarnings("unchecked")
+		public Builder(WyilFile.FunctionOrMethod func) throws CompilerException {
+			super(DataFlowGraphBuilder.this.logger);
+			graph = new DataFlowGraph();
+			Generators.fromCollection(func.type().params()).enumerate().forEach_((Integer k, wyil.lang.Type t) ->
+				vars.put(k, buildParameter(
+					((Location<Bytecode.VariableDeclaration>)func.getTree().getLocation(k)).getBytecode().getName(),
+					buildType(t))));
+			returnTypes = Generators.fromCollection(func.type().returns()).map_(this::buildType).toList();
+			//build(func.getBody());
+/**/			partialReturn.print("RET ");
+			partialReturn.getReturn().enumerate().mapFirst(Object::toString).mapFirst("ret_"::concat).forEach_(this::buildReturnValue);
+		}
+
+
+		private void buildReturnValue(String ident, NodeTree<?> ret) {
+			if (ret instanceof LeafVertex)
+				graph.new OutputNode(ident, ((LeafVertex)ret).getValue());
+			else if (ret instanceof NodeVertex)
+				((NodeVertex<?>)ret).getComponents().forEach((Pair<String, NodeTree<?>> p) -> buildReturnValue(ident+"_"+p.first, p.second));
+		}
+
+
+		/*------- Classe content -------*/
+
+//		private Type isNodeType(TypeTree type) throws CompilerException {
 //			if (type instanceof CompoundType)
-//				return new CompoundNode<>(buildTypedValue(type.getStructure(), node), type);
-//			throw UnrelatedTypeCompilerError.exception(type, node);
+//				CompoundTypeCompilerError.exception(type);
+//			return type.getValue();
 //		}
 //
+//		private Type getNodeType(wyil.lang.Type type) throws CompilerException {
+//			return Utils.checkedAddIfAbsent(compiledTypes, type, () -> isNodeType(buildType(type)));
 //
-//
-//
-//		private void buildReturnValue(String ident, NodeTree ret) {
-//			if (ret instanceof PrimitiveNode)
-//				graph.new OutputNode(ident, ret.getValue());
-//			else ret.getComponents().forEach((Pair<String, NodeTree> p) -> buildReturnValue(ident+"_"+p.first, p.second));
 //		}
+
+
+		public DataFlowGraph getGraph() {
+			return graph;
+		}
+
+
+		public TypeTree buildType(wyil.lang.Type type) throws CompilerException {
+			return typeCompiler.compileType(type);
+		}
+
+
+
+
+
+		private LeafVertex buildUndefinedValue(TypeLeaf type) {
+			return new LeafVertex(graph.new UndefConstNode(type.getValue()), type);
+		}
+		private RecordVertex buildUndefinedValue(TypeRecord type) throws CompilerException {
+			return new RecordVertex(type.getFields().mapSecond_(this::buildUndefinedValue), type);
+		}
+		private SimpleUnionVertex buildUndefinedValue(SimpleTypeUnion type) throws CompilerException {
+			type.getOptions().mapFirst_(this::buildUndefinedValue);
+			return new SimpleUnionVertex(type.getOptions().map_(this::buildUndefinedValue, this::buildUndefinedValue), type);
+		}
+		private RecordUnionVertex buildUndefinedValue(TypeRecordUnion type) throws CompilerException {
+			return new RecordUnionVertex(type.getOptions().map_(this::buildUndefinedValue, this::buildUndefinedValue), type);
+		}
+		private NodeTree<?> buildUndefinedValue(TypeTree type) throws CompilerException {
+			if (type instanceof TypeLeaf)
+				return buildUndefinedValue((TypeLeaf)type);
+			if (type instanceof TypeRecord)
+				return buildUndefinedValue((TypeRecord)type);
+			if (type instanceof SimpleTypeUnion)
+				return buildUndefinedValue((SimpleTypeUnion)type);
+			if (type instanceof TypeRecordUnion)
+				return buildUndefinedValue((TypeRecordUnion)type);
+			throw UnsupportedTreeNodeCompilerError.exception(type);
+		}
+
+
+		private LeafVertex buildBoolean(Boolean value) {
+			return new LeafVertex(graph.new ExternConstNode(Type.Boolean, value.toString()), typeCompiler.getBoolean());
+		}
+// TODO !!!!!!!
+		private <T extends NodeTree<?>> PairGenerator<LeafVertex, NodeTree<?>> buildTypedValue(UnionVertex<T> node) {
+			return node.getOptions().mapSecond((NodeTree<?> a) -> a);
+		}
+		private SimpleUnionVertex buildTypedValue(NodeTree<?> node, SimpleTypeUnion type) throws CompilerException {
+			List<Pair<LeafVertex, NodeTree<?>>> cpn = node instanceof UnionVertex
+					? buildTypedValue((UnionVertex<?>)node).toList()
+					: Collections.singletonList(new Pair<>(buildBoolean(true),node));
+			return new SimpleUnionVertex(buildUndefinedValue(type).getOptions().replace(
+				(Pair<LeafVertex, NodeTree<?>> p) -> p.second.getType().equals(node.getType()),
+				() -> new Pair<>(buildBoolean(true), node)), type);
+		}
+		private RecordUnionVertex buildTypedValue(RecordVertex node, TypeRecordUnion type) throws CompilerException {
+			return new RecordUnionVertex(buildUndefinedValue(type).getOptions().replace(
+				(Pair<LeafVertex, RecordVertex> p) -> p.second.getType().equals(node.getType()),
+				() -> new Pair<>(buildBoolean(true), node)), type);
+		}
+		private NodeTree<?> buildTypedValue(NodeTree<?> node, TypeTree type) throws CompilerException {
+//			debug("Val "+(node == null ? "NULL" : node.getType()));
+			if (node.getType().equals(type))
+				return node;
+			if (type instanceof SimpleTypeUnion)
+				return buildTypedValue(node, (SimpleTypeUnion)type);
+			if (type instanceof TypeRecordUnion)
+				return buildTypedValue(node, (TypeRecordUnion)type);
+			throw UnrelatedTypeCompilerError.exception(type, node);
+		}
+
+
+
+//
 //
 //
 //
@@ -559,11 +606,32 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 //							buildParameter(ident+"_"+EffectiveUnionStructure.VAL_PREFIX+k, p.second))));
 //			throw UnsupportedStructureConversionCompilerError.exception(structure);
 //		}
-//		private NodeTree buildParameter(String ident, TypeTree type) throws CompilerException {
-//			return type instanceof PrimitiveType
-//					? new PrimitiveNode(buildParameter(ident, type.getValue()), ident)
-//					: new CompoundNode<>(buildParameter(ident, type.getStructure()), type);
-//		}
+
+// TODO
+		private LeafVertex buildParameter(String ident, TypeLeaf type) throws CompilerException {
+			return new LeafVertex(graph.new InputNode(ident, type.getValue()),type);
+		}
+		private RecordVertex buildParameter(String ident, TypeRecord type) throws CompilerException {
+			return null;//new RecordVertex(type.getFields().mapFirst((ident+"_")::concat).map(this::buildParameter)),type);
+		}
+		private SimpleUnionVertex buildParameter(String ident, SimpleTypeUnion type) throws CompilerException {
+			return null;//new SimpleUnionVertex(graph.new InputNode(ident, type.getValue()),type);
+		}
+		private RecordUnionVertex buildParameter(String ident, TypeRecordUnion type) throws CompilerException {
+			return null;//new RecordUnionVertex(graph.new InputNode(ident, type.getValue()),type);
+		}
+		private NodeTree<?> buildParameter(String ident, TypeTree type) throws CompilerException {
+			if (type instanceof TypeLeaf)
+				return buildParameter(ident, (TypeLeaf) type);
+			if (type instanceof TypeRecord)
+				return buildParameter(ident, (TypeRecord) type);
+			if (type instanceof SimpleTypeUnion)
+				return buildParameter(ident, (SimpleTypeUnion) type);
+			if (type instanceof TypeRecordUnion)
+				return buildParameter(ident, (TypeRecordUnion) type);
+
+			throw UnsupportedTreeNodeCompilerError.exception(type);
+		}
 //
 //
 //		private NodeTree buildParameter(String ident, Tree<Type> type) {
