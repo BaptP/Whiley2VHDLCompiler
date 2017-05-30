@@ -3,6 +3,7 @@ package wyvc.utils;
 import java.util.function.Function;
 
 import wyvc.utils.FunctionalInterfaces.CheckedFunction;
+import wyvc.utils.FunctionalInterfaces.Predicate;
 
 public class  Pair<S,T> {
 	public final S first;
@@ -43,5 +44,9 @@ public class  Pair<S,T> {
 
 	public boolean equals(Pair<S,T> other) {
 		return first.equals(other.first) && second.equals(other.second);
+	}
+
+	public boolean test(Predicate<S> firstTest, Predicate<T> secondTest) {
+		return firstTest.test(first) && secondTest.test(second);
 	}
 }

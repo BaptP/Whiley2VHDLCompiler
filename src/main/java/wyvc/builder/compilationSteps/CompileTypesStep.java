@@ -25,16 +25,16 @@ public class CompileTypesStep extends CompilationStep<ParsedFile, CompileTypesSt
 	@Override
 	protected CompiledTypes compile(CompilerLogger logger, ParsedFile data) throws CompilerException {
 		TypeCompiler typeCompiler = new TypeCompiler(logger);
-//		throw new CompilerException(new CompilerError() {
-//
-//			@Override
-//			public String info() {
-//				// TODO Auto-generated method stub
-//				return "fin";
-//			}
-//		});
 		Generators.fromCollection(data.file.types()).forEach_(typeCompiler::addNominalType);
-		return new CompiledTypes(data, typeCompiler);
+		throw new CompilerException(new CompilerError() {
+
+			@Override
+			public String info() {
+				// TODO Auto-generated method stub
+				return "fin";
+			}
+		});
+//		return new CompiledTypes(data, typeCompiler);
 	}
 
 }
