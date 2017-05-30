@@ -1,5 +1,7 @@
 package wyvc.builder;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -12,6 +14,7 @@ import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.CompilerLogger.LoggedContainer;
+import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
 import wyvc.utils.Generators.CustomPairGenerator;
@@ -36,51 +39,8 @@ public class LexicalElementTree extends LoggedBuilder {
 
 
 
-	public static interface Commun {
 
-
-		/**
-		 * Compares the tree structure with the one of <code>other</code>.
-		 *
-		 * @param other 				The tree to compare with
-		 * @return 						<code>true</code> if the structure matches, else <code>false</code>
-		 */
-		public boolean isStructuredAs(Commun other);
-
-		/**
-		 * Compares the tree with <code>other</code>.
-		 *
-		 * The comparison checks that structure are identical and that the
-		 * leaves' values are equals.
-		 *
-		 * @param other					The tree to compare with
-		 * @return						<code>true</code> if the trees are equals, else <code>false</code>
-		 */
-//		public boolean equals(T other);
-
-		/**
-		 * Pretty-printer for the tree structure.
-		 *
-		 * @param prefix1		The prefix to add to the first line of the representation
-		 * @param prefix2		The prefix to add to the next lines of the representation
-		 * @return				A representation of the tree
-		 */
-		public String toString(String prefix1, String prefix2);
-
-		/**
-		 * Pretty-printer for the tree structure.
-		 *
-		 * @param prefix		The prefix to add to thes lines of the representation
-		 * @return				A representation of the tree
-		 */
-		public default String toString(String prefix) {
-			return toString(prefix, prefix);
-		}
-	}
-
-
-
-	public static interface Tree extends Commun{
+	public static interface Tree {
 		/*------- Compiler messages -------*/
 
 		/**
@@ -115,6 +75,43 @@ public class LexicalElementTree extends LoggedBuilder {
 		/*------- Interface content -------*/
 
 
+		/**
+		 * Compares the tree structure with the one of <code>other</code>.
+		 *
+		 * @param other 				The tree to compare with
+		 * @return 						<code>true</code> if the structure matches, else <code>false</code>
+		 */
+		public boolean isStructuredAs(Tree other);
+
+		/**
+		 * Compares the tree with <code>other</code>.
+		 *
+		 * The comparison checks that structure are identical and that the
+		 * leaves' values are equals.
+		 *
+		 * @param other					The tree to compare with
+		 * @return						<code>true</code> if the trees are equals, else <code>false</code>
+		 */
+//		public boolean equals(T other);
+
+		/**
+		 * Pretty-printer for the tree structure.
+		 *
+		 * @param prefix1		The prefix to add to the first line of the representation
+		 * @param prefix2		The prefix to add to the next lines of the representation
+		 * @return				A representation of the tree
+		 */
+		public String toString(String prefix1, String prefix2);
+
+		/**
+		 * Pretty-printer for the tree structure.
+		 *
+		 * @param prefix		The prefix to add to thes lines of the representation
+		 * @return				A representation of the tree
+		 */
+		public default String toString(String prefix) {
+			return toString(prefix, prefix);
+		}
 
 		/**
 		 * Ensures that the <code>other</code> tree has the same structure than <code>this</code>.
@@ -128,12 +125,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 	}
 
-//	public interface Leaf<L extends Leaf<L,V>, V> {
-//		public V getValue();
-//	}
-
-
-	public class Leaf<V> implements Commun {
+	public class Leaf<V> implements Tree {
 		private final V value;
 
 		public Leaf(V value) {
@@ -148,233 +140,510 @@ public class LexicalElementTree extends LoggedBuilder {
 //			return other instanceof Leaf && value.equals(((Leaf<?,?>)other).value);
 //		}
 
+		@Override
 		public String toString(String prefix1, String prefix2) {
 			return prefix1+value;
 		}
 
 		@Override
-		public boolean isStructuredAs(Commun other) {
+		public boolean isStructuredAs(Tree other) {
 			return other instanceof Leaf;
 		}
 	}
 
-	public interface Node<T> extends Commun {
-		public int getNumberOfComponents();
-		public PairGenerator<String, T> getComponents();
+	public abstract class Node<T extends Tree> implements Tree {
+		public abstract int getNumberOfComponents();
+		public abstract PairGenerator<String, T> getComponents();
 
 
 //		public default boolean equals(T other) {
 //			return other instanceof Node && isStructuredAs(other) && getComponents().takeSecond().gather(
 //				((Node<?>)other).getComponents().takeSecond()).forAll(Tree::equals);
 //		}
-	}
-
-	public static interface EffectiveRecordNode<T extends Tree> extends Node<T> {
-
-		/*------- Compiler messages -------*/
-
-		/**
-		 * A {@link CompilerError} reporting a try to access a nonexistent field.
-		 *
-		 * @author Baptiste Pauget
-		 *
-		 */
-		public static class NonexistentFieldCompilerError extends CompilerError {
-			private final String name;
-			private final EffectiveRecordNode<?> record;
-
-			public NonexistentFieldCompilerError(String name, EffectiveRecordNode<?> record) {
-				this.name = name;
-				this.record = record;
-			}
-
-			@Override
-			public String info() {
-				return "No such field : "+name+" in\n"+
-						"  "+record+"\n"+record.toString("  ");
-			}
-
-			public static CompilerException exception(String name, EffectiveRecordNode<?> tree) {
-				return new CompilerException(new NonexistentFieldCompilerError(name, tree));
-			}
-		}
-
-		public int getNumberOfFields();
-		public Generator<String> getFieldNames();
-	}
-
-	public abstract class RecordNode<T extends Tree> implements EffectiveRecordNode<T>, Tree {
-		private final Map<String, T> fields = new HashMap<>();
-
-		public RecordNode(Generator<Pair<String, T>> fields) {
-			Generators.toPairGenerator(fields).forEach(this.fields::put);
-		}
-
-		public <E extends Exception> RecordNode(Generator_<Pair<String, T>, E> fields) throws E {
-			Generators.toPairGenerator(fields).forEach(this.fields::put);
-		}
 
 		@Override
-		public int getNumberOfComponents() {
-			return fields.size();
-		}
-
-		@Override
-		public int getNumberOfFields() {
-			return fields.size();
-		}
-
-		@Override
-		public Generator<String> getFieldNames() {
-			return Generators.fromCollection(fields.entrySet()).map(Entry::getKey);
-		}
-
-		public PairGenerator<String, T> getFields() {
-			return Generators.fromCollection(fields.entrySet()).biMap(Entry::getKey, Entry::getValue);
-		}
-
-		@Override
-		public String toString(String prefix1, String prefix2) {
-			final int l = getNumberOfFields();
-			return getFields().enumerate().fold(
+		public final String toString(String prefix1, String prefix2) {
+			final int l = getNumberOfComponents();
+			return getComponents().enumerate().fold(
 				(String s, Pair<Integer, Pair<String, T>> c) -> s+
-				prefix2 + (c.first+1 == l ? " └─ " : " ├─ ") + c.second.first+"\n"+c.second.second.toString(prefix2 + " │ "),
-				prefix1 + getClass().getSimpleName());
-		}
-
-		@Override
-		public PairGenerator<String, T> getComponents() {
-			return getFields();
-		}
-
-
-		private final <U extends Tree> boolean isStructuredAsHelper(RecordNode<U> other) {
-			return other.getNumberOfComponents() == getNumberOfComponents() &&
-					getComponents().gather(other.getComponents()).forAll((Pair<String, T> c1, Pair<String, U> c2) ->
-					c1.first.equals(c2.first) && c1.second.equals(c2.second));
-		}
-
-		@Override
-		public boolean isStructuredAs(Commun other) {
-			if (other instanceof RecordNode)
-				return isStructuredAsHelper((RecordNode<?>) other);
-			return false;
-		}
-
-		public T getField(String name) throws CompilerException {
-			if (!fields.containsKey(name))
-				throw NonexistentFieldCompilerError.exception(name, this);
-			return fields.get(name);
+				c.second.second.toString(
+					prefix2 + (c.first+1 == l ? "└─ " : "├─ ") + (c.second.first.length() != 0 ? c.second.first+" : " : ""),
+					prefix2 + (c.first+1 == l ? "   " : "│  ")),
+				prefix1 + getClass().getSimpleName()+"\n");
 		}
 	}
 
-	public abstract class UnionNode<T extends Tree, A extends Tree, B extends Tree> implements Node<T> {
-		public final static String FLG_PREFIX = "is_t";
-		public final static String VAL_PREFIX = "vl_t";
+	public class UnaryNode<T extends Tree, A extends T> extends Node<T> {
+		private final A operand;
 
-		protected final List<Pair<A,B>> options;
+		public UnaryNode(A operand) {
+			this.operand = operand;
+		}
 
-		public UnionNode(Generator<Pair<A,B>> options) {
+		protected String getLabel() {
+			return "op";
+		}
+
+		public final A getOperand() {
+			return operand;
+		}
+
+		@Override
+		public final boolean isStructuredAs(Tree other) {
+			return other instanceof UnaryNode && getOperand().isStructuredAs(((UnaryNode<?, ?>)other).getOperand());
+		}
+
+		@Override
+		public final int getNumberOfComponents() {
+			return 1;
+		}
+
+		@Override
+		public final PairGenerator<String, T> getComponents() {
+			return Generators.fromPairSingleton(getLabel(), getOperand());
+		}
+	}
+
+	public class BinaryNode<T extends Tree, A extends T, B extends T> extends Node<T> {
+		private final A firstOperand;
+		private final B secondOperand;
+
+		public BinaryNode(A firstOperand, B secondOperand) {
+			this.firstOperand = firstOperand;
+			this.secondOperand = secondOperand;
+		}
+
+		protected String getFirstLabel() {
+			return "op_0";
+		}
+		protected String getSecondLabel() {
+			return "op_1";
+		}
+
+		public final A getFirstOperand() {
+			return firstOperand;
+		}
+		public final B getSecondOperand() {
+			return secondOperand;
+		}
+
+		@Override
+		public final boolean isStructuredAs(Tree other) {
+			return other instanceof BinaryNode &&
+					getFirstOperand().isStructuredAs(((BinaryNode<?, ?, ?>)other).getFirstOperand()) &&
+					getSecondOperand().isStructuredAs(((BinaryNode<?, ?, ?>)other).getSecondOperand());
+		}
+
+		@Override
+		public final int getNumberOfComponents() {
+			return 2;
+		}
+
+		@Override
+		public final PairGenerator<String, T> getComponents() {
+			return Generators.fromPairCollection(Arrays.asList(
+				new Pair<>(getFirstLabel(), getFirstOperand()),
+				new Pair<>(getSecondLabel(), getSecondOperand())));
+		}
+	}
+
+	public class UnnamedNode<T extends Tree> extends Node<T> {
+		private final List<T> options;
+
+		public UnnamedNode(Generator<T> options) {
 			this.options = options.toList();
 		}
-		public <E extends Exception> UnionNode(Generator_<Pair<A,B>, E> options) throws E{
+		public <E extends Exception> UnnamedNode(Generator_<T, E> options) throws E {
 			this.options = options.toList();
 		}
-
-		public int getNumberOfComponents() {
-			return 2*options.size();
+		public UnnamedNode(T option) {
+			this.options = Collections.singletonList(option);
 		}
 
-		public final int getNumberOfOptions() {
+		protected String getLabel(int k) {
+			return "opt_"+k;
+		}
+
+		public Generator<T> getOptions() {
+			return Generators.fromCollection(options);
+		}
+
+		public int getNumberOfOptions() {
 			return options.size();
 		}
 
-		public final PairGenerator<A,B> getOptions() {
-			return Generators.fromPairCollection(options);
-		}
-
-
-		public String toString(String prefix1, String prefix2) {
-			final int l = getNumberOfOptions();
-			return getOptions().enumerate().fold(
-				(String s, Pair<Integer, Pair<A,B>> c) -> s+
-				prefix2 + (c.first+1 == l ? " └┰ " : " ├┰ ") + FLG_PREFIX + c.first +"\n"+c.second.first.toString(prefix2 + " │  ") +
-				prefix2 + (c.first+1 == l ? "  ┖ " : " │┖ ") + VAL_PREFIX + c.first+"\n"+c.second.second.toString(prefix2 + (c.first+1 == l ? "    " : " │  ")),
-				prefix1 + getClass().getSimpleName());
-		}
-
-
-		public PairGenerator<String, T> getComponents() {
-			PairGenerator<T,T> opts = getTypedOptions();
-			return new CustomPairGenerator<String, T>(opts) {
-				@Override
-				protected void generate() throws EndOfGenerationException {
-					opts.enumerate().forEach_((Integer k, Pair<T,T> o) -> {
-						yield(FLG_PREFIX + k, o.first);
-						yield(VAL_PREFIX + k++, o.second);
-					});
-				}};
-		}
-
-		protected abstract PairGenerator<T,T> getTypedOptions();
-
-		private final <U extends Tree, C extends Tree, D extends Tree> boolean isStructuredAsHelper(UnionNode<U,C,D> other) {
-			return other.getNumberOfOptions() == getNumberOfOptions() &&
-					getOptions().takeSecond().gather(other.getOptions().takeSecond()).forAll(Commun::isStructuredAs);
+		@Override
+		public final boolean isStructuredAs(Tree other) {
+			return other instanceof UnnamedNode &&
+					getNumberOfOptions() == ((UnnamedNode<?>)other).getNumberOfOptions() &&
+					getOptions().gather(((UnnamedNode<?>)other).getOptions()).forAll(Tree::isStructuredAs);
 		}
 
 		@Override
-		public boolean isStructuredAs(Commun other) {
-			if (other instanceof UnionNode)
-				return isStructuredAsHelper((UnionNode<?,?,?>) other);
-			return false;
+		public final int getNumberOfComponents() {
+			return getNumberOfOptions();
 		}
+
+		@Override
+		public final PairGenerator<String, T> getComponents() {
+			return getOptions().enumerate().mapFirst(this::getLabel);
+		}
+
 	}
 
+	public class NamedNode<T extends Tree> extends Node<T> {
+		private final List<Pair<String,T>> fields;
 
-	public abstract class RecordUnionNode<T extends Tree, A extends T, B extends RecordNode<T>> extends UnionNode<T,A, B> implements EffectiveRecordNode<T> {
-		private final Set<String> components = new HashSet<>();
-
-		public RecordUnionNode(Generator<Pair<A,B>> options) {
-			super(options);
-			scanComponents();
+		public NamedNode(Generator<Pair<String,T>> fields) {
+			this.fields = fields.toList();
+		}
+		public <E extends Exception> NamedNode(Generator_<Pair<String,T>, E> fields) throws E {
+			this.fields = fields.toList();
+		}
+		public NamedNode(String name, T field) {
+			this.fields = Collections.singletonList(new Pair<>(name, field));
 		}
 
-		public <E extends Exception> RecordUnionNode(Generator_<Pair<A,B>, E> options) throws E {
-			super(options);
-			scanComponents();
+		protected String getLabel(int k) {
+			return "opt_"+k;
 		}
 
-		private void scanComponents() {
-			final Set<String> cps = new HashSet<>();
-			options.get(0).second.getFields().takeFirst().forEach(components::add);;
-			for (int k = 1; k<options.size() && !components.isEmpty(); ++k) {
-				options.get(k).second.getFields().takeFirst().forEach((String n) -> {
-					if(components.contains(n))
-						components.add(n);
-				});
-				components.clear();
-				components.addAll(cps);
-				cps.clear();
-			}
+		public PairGenerator<String,T> getFields() {
+			return Generators.fromPairCollection(fields);
 		}
 
-		@Override
-		public int getNumberOfFields() {
-			return components.size();
-		}
-
-		@Override
 		public Generator<String> getFieldNames() {
-			return Generators.fromCollection(components);
+			return getFields().takeFirst();
 		}
 
-		public PairGenerator<A, RecordNode<T>> getField(String name) throws CompilerException {
-//			if (!components.contains(name))
-				throw NonexistentFieldCompilerError.exception(name, this);
-//			return getOptions().MapSecond((B r) -> r.getField(name)).check();
+		public int getNumberOfFields() {
+			return fields.size();
+		}
+
+		@Override
+		public final boolean isStructuredAs(Tree other) {
+			return other instanceof NamedNode &&
+					getNumberOfFields() == ((NamedNode<?>)other).getNumberOfFields() &&
+					getFields().takeFirst().gather(((NamedNode<?>)other).getFields().takeFirst()).forAll(String::equals) &&
+					getFields().takeSecond().gather(((NamedNode<?>)other).getFields().takeSecond()).forAll(Tree::isStructuredAs);
+		}
+
+		@Override
+		public final int getNumberOfComponents() {
+			return getNumberOfFields();
+		}
+
+		@Override
+		public final PairGenerator<String, T> getComponents() {
+			return getFields();
 		}
 	}
+
+
+
+
+
+
+	public class RecordNode<T extends Tree> extends NamedNode<T> {
+
+		public RecordNode(Generator<Pair<String,T>> fields) {
+			super(fields);
+		}
+		public <E extends Exception> RecordNode(Generator_<Pair<String,T>, E> fields) throws E {
+			super(fields);
+		}
+		public RecordNode(String name, T field) {
+			super(name, field);
+		}
+	}
+
+	public class UnionNode<T extends Tree> extends UnnamedNode<T> {
+
+		public UnionNode(Generator<T> options) {
+			super(options);
+		}
+		public <E extends Exception> UnionNode(Generator_<T, E> options) throws E {
+			super(options);
+		}
+		public UnionNode(T option) {
+			super(option);
+		}
+	}
+
+//
+//
+//
+//	public static interface EffectiveRecordNode<T extends Tree> extends Node<T> {
+//
+//		/*------- Compiler messages -------*/
+//
+//		/**
+//		 * A {@link CompilerError} reporting a try to access a nonexistent field.
+//		 *
+//		 * @author Baptiste Pauget
+//		 *
+//		 */
+//		public static class NonexistentFieldCompilerError extends CompilerError {
+//			private final String name;
+//			private final EffectiveRecordNode<?> record;
+//
+//			public NonexistentFieldCompilerError(String name, EffectiveRecordNode<?> record) {
+//				this.name = name;
+//				this.record = record;
+//			}
+//
+//			@Override
+//			public String info() {
+//				return "No such field : "+name+" in\n"+
+//						"  "+record+"\n"+record.toString("  ");
+//			}
+//
+//			public static CompilerException exception(String name, EffectiveRecordNode<?> tree) {
+//				return new CompilerException(new NonexistentFieldCompilerError(name, tree));
+//			}
+//		}
+//
+//		/*------- Interface content -------*/
+//
+//		public int getNumberOfFields();
+//		public Generator<String> getFieldNames();
+//	}
+//
+//	public abstract class RecordNode<T extends Tree> implements EffectiveRecordNode<T>, Tree {
+//		private final Map<String, T> fields = new HashMap<>();
+//
+//		public RecordNode(Generator<Pair<String, T>> fields) {
+//			Generators.toPairGenerator(fields).forEach(this.fields::put);
+//		}
+//
+//		public <E extends Exception> RecordNode(Generator_<Pair<String, T>, E> fields) throws E {
+//			Generators.toPairGenerator(fields).forEach(this.fields::put);
+//		}
+//
+//		@Override
+//		public int getNumberOfComponents() {
+//			return fields.size();
+//		}
+//
+//		@Override
+//		public int getNumberOfFields() {
+//			return fields.size();
+//		}
+//
+//		@Override
+//		public Generator<String> getFieldNames() {
+//			return Generators.fromCollection(fields.entrySet()).map(Entry::getKey);
+//		}
+//
+//		public PairGenerator<String, T> getFields() {
+//			return Generators.fromCollection(fields.entrySet()).biMap(Entry::getKey, Entry::getValue);
+//		}
+//
+//
+//		@Override
+//		public PairGenerator<String, T> getComponents() {
+//			return getFields();
+//		}
+//
+//
+//		private final <U extends Tree> boolean isStructuredAsHelper(RecordNode<U> other) {
+//			return other.getNumberOfComponents() == getNumberOfComponents() &&
+//					getComponents().gather(other.getComponents()).forAll((Pair<String, T> c1, Pair<String, U> c2) ->
+//					c1.first.equals(c2.first) && c1.second.equals(c2.second));
+//		}
+//
+//		@Override
+//		public boolean isStructuredAs(Tree other) {
+//			if (other instanceof RecordNode)
+//				return isStructuredAsHelper((RecordNode<?>) other);
+//			return false;
+//		}
+//
+//		public T getField(String name) throws CompilerException {
+//			if (!fields.containsKey(name))
+//				throw NonexistentFieldCompilerError.exception(name, this);
+//			return fields.get(name);
+//		}
+//	}
+//
+//	public abstract class UnionNode<T extends Tree> implements Node<T> {
+//		public final static String FLG_PREFIX = "is_t";
+//		public final static String VAL_PREFIX = "vl_t"; // TODO Ailleurs
+//
+//		protected final List<T> options;
+//
+//		public UnionNode(Generator<T> options) {
+//			this.options = options.toList();
+//		}
+//		public <E extends Exception> UnionNode(Generator_<T, E> options) throws E{
+//			this.options = options.toList();
+//		}
+//
+//		public int getNumberOfComponents() {
+//			return 2*options.size();
+//		}
+//
+//		public final int getNumberOfOptions() {
+//			return options.size();
+//		}
+//
+//		public final Generator<T> getOptions() {
+//			return Generators.fromCollection(options);
+//		}
+//
+//		public PairGenerator<String, T> getComponents() {
+//			return getOptions().enumerate().mapFirst(Object::toString).mapFirst("opt_"::concat);
+//		}
+//
+//		private final <U extends Tree, B extends Tree> boolean isStructuredAsHelper(UnionNode<U> other) {
+//			return other.getNumberOfOptions() == getNumberOfOptions() &&
+//					getOptions().gather(other.getOptions()).forAll(Tree::isStructuredAs);
+//		}
+//
+//		@Override
+//		public boolean isStructuredAs(Tree other) {
+//			if (other instanceof UnionNode)
+//				return isStructuredAsHelper((UnionNode<?>) other);
+//			return false;
+//		}
+//	}
+//
+//
+//	public abstract class RecordUnionNode<T extends Tree, B extends RecordNode<T>> implements EffectiveRecordNode<T> {
+//		private final Map<String, T> sharedComponents = new HashMap<>();
+//		private final Map<String, T> specificComponents = new HashMap<>();
+//		private final Set<String> coexisting = new HashSet<>();
+//
+//		public RecordUnionNode(Generator<B> options) {
+//			scanComponents(options.toList());
+//		}
+//
+//		public <E extends Exception> RecordUnionNode(Generator_<B, E> options) throws E {
+//			scanComponents(options.toList());
+//		}
+//
+//		private void makeCoexisting(List<String> c) {
+//			for (int k = 0; k < c.size()-1; ++k)
+//				for (int l = k+1; k < c.size(); ++l)
+//					coexisting.add(c.get(k).compareTo(c.get(l)) < 0 ? c.get(k) + "#" + c.get(l) : c.get(l) + "#" + c.get(k));
+//		}
+//
+//		private void scanComponents(List<B> options) {
+//			final Map<String, List<T>> sCps1 = new HashMap<>();
+//			final Map<String, List<T>> sCps2 = new HashMap<>();
+//			final Map<String, List<T>> spCps = new HashMap<>();
+//			B opt = options.get(0);
+//			makeCoexisting(opt.getFieldNames().toList());
+//			opt.getFields().mapSecond(Collections::singletonList).forEach(sCps1::put);;
+//			for (int k = 1; k<options.size() && !sCps1.isEmpty(); ++k) {
+//				opt = options.get(k);
+//				makeCoexisting(opt.getFieldNames().toList());
+//				opt.getFields().forEach((String n, T t) -> {
+//					if(sCps1.containsKey(n)) {
+//						List<T> l = sCps1.remove(n);
+//						l.add(t);
+//						sCps2.put(n, l);
+//					}
+//					else
+//						sCps1.put(n, Collections.singletonList(t));
+//				});
+//				for (Entry<String, List<T>> s : sCps1.entrySet()) {
+//					if(spCps.containsKey(s.getKey()))
+//						spCps.get(s.getKey()).addAll(s.getValue());
+//					else
+//						spCps.put(s.getKey(), s.getValue());
+//				}
+//				sCps1.clear();
+//				sCps1.putAll(sCps2);
+//				sCps2.clear();
+//			}
+//			Generators.fromMap(sCps1).mapSecond(Generators::fromCollection).mapSecond(this::getUnion).map(sharedComponents::put);
+//			Generators.fromMap(spCps).mapSecond(Generators::fromCollection).mapSecond(this::getUnion).map(specificComponents::put);
+//		}
+//
+//		protected abstract T getUnion(Generator<T> options);
+//
+//		private <U extends Tree> boolean isStructuredAsHelper(RecordUnionNode<U, ?> other) {
+//			return sharedComponents.size() == other.sharedComponents.size() && specificComponents.size() == other.specificComponents.size() &&
+//					coexisting.equals(other.coexisting) &&
+//					Generators.fromMap(sharedComponents).gather(Generators.fromMap(other.sharedComponents)).
+//					forAll((Pair<String,T> a, Pair<String, U> b) -> a.first.equals(b.first) && a.second.isStructuredAs(b.second)) &&
+//					Generators.fromMap(specificComponents).gather(Generators.fromMap(other.specificComponents)).
+//					forAll((Pair<String,T> a, Pair<String, U> b) -> a.first.equals(b.first) && a.second.isStructuredAs(b.second));
+//		}
+//
+//		@Override
+//		public boolean isStructuredAs(Tree other) {
+//			return other instanceof RecordUnionNode ? isStructuredAsHelper((RecordUnionNode<?, ?>) other) : false;
+//		}
+//
+//		@Override
+//		public int getNumberOfFields() {
+//			return sharedComponents.size();
+//		}
+//
+//		@Override
+//		public Generator<String> getFieldNames() {
+//			return Generators.fromCollection(sharedComponents.keySet());
+//		}
+//
+//		public int getNumberOfPotentialFields() {
+//			return specificComponents.size();
+//		}
+//
+//		public Generator<String> getPotentialFieldNames() {
+//			return Generators.fromCollection(specificComponents.keySet());
+//		}
+//
+//		public PairGenerator<String,T> getFields() {
+//			return Generators.fromMap(sharedComponents);
+//		}
+//
+//		public PairGenerator<String,T> getPotentialFields() {
+//			return Generators.fromMap(specificComponents);
+//		}
+//
+//
+//		public T getField(String name) throws CompilerException {
+//			if (!sharedComponents.containsKey(name))
+//				throw NonexistentFieldCompilerError.exception(name, this);
+//			return sharedComponents.get(name);
+//		}
+//
+//		public T getPotentialField(String name) throws CompilerException {
+//			if (!specificComponents.containsKey(name))
+//				throw NonexistentFieldCompilerError.exception(name, this);
+//			return specificComponents.get(name);
+//		}
+//
+//		public boolean coextist(String pField1, String pField2) {
+//			return coexisting.contains(pField2+"#"+pField2) || coexisting.contains(pField2+"#"+pField1);
+//		}
+//
+//		@Override
+//		public String toString(String prefix1, String prefix2) {
+//			final int l = getNumberOfFields();
+//			final int m = getNumberOfPotentialFields();
+//			return getFields().append(getPotentialFields()).enumerate().fold(
+//				(String s, Pair<Integer, Pair<String, T>> c) -> s+
+//				prefix2 + (c.first+1 == l+m ? " └" : " ├") + (c.first < l ? "─ " : "╌ ") + c.second.first+"\n"+c.second.second.toString(prefix2 + " │ "),
+//				prefix1 + getClass().getSimpleName());
+//		}
+//
+//
+//
+//		@Override
+//		public int getNumberOfComponents() {
+//			// TODO Auto-generated method stub
+//			return 0;
+//		}
+//
+//		@Override
+//		public PairGenerator<String, T> getComponents() {
+//			// TODO Auto-generated method stub
+//			return null;
+//		}
+//	}
 //
 //
 //	/**

@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -101,6 +103,9 @@ public class Generators {
 		<U> U fold(BiFunction_<? super U, ? super T, ? extends U, E> function, U init) throws E;
 		void forEach(Consumer_<? super T,E> function) throws E;
 		boolean forAll(Predicate_<? super T,E> test) throws E;
+
+		/*------ Conversion ------*/
+		Generator<T> check() throws E;
 	}
 
 	private static interface AbstractMapper<S,P,T> extends AbstractGenerator<T> {
@@ -147,6 +152,7 @@ public class Generators {
 		<U> Generator<U> map(BiFunction<? super S, ? super T, ? extends U> function);
 		void forEach(BiConsumer<? super S, ? super T> function);
 		boolean forAll(BiPredicate<? super S, ? super T> test);
+//		boolean forAll(Predicate<? super S> firstTest, Predicate<? super T> secondTest);
 //		Generator<Pair<S,T>> replace(BiPredicate<? super S, ? super T> test, Supplier<Pair<S,T>> with);
 		
 		/*------ With exceptions ------*/
@@ -170,6 +176,9 @@ public class Generators {
 		default <E extends Exception> boolean forAll_(BiPredicate_<? super S, ? super T,E> test) throws E {
 			return this.<E>toChecked().forAll(test);
 		}
+//		default <E extends Exception> boolean forAll_(Predicate_<? super S, E> firstTest, Predicate_<? super T, E> secondTest) throws E {
+//			return this.<E>toChecked().forAll(firstTest, secondTest);
+//		}
 
 		/*------ Conversion ------*/
 		<E extends Exception> PairGenerator_<S,T,E> toChecked();
@@ -191,6 +200,11 @@ public class Generators {
 		<U> Generator_<U,E> map(BiFunction_<? super S, ? super T, ? extends U, E> function);
 		void forEach(BiConsumer_<? super S,? super T,E> function) throws E;
 		boolean forAll(BiPredicate_<? super S,? super T,E> test) throws E;
+//		boolean forAll(Predicate_<? super S, E> firstTest, Predicate_<? super T, E> secondTest) throws E;
+
+
+		/*------ Conversion ------*/
+		PairGenerator<S,T> check() throws E;
 	}
 
 	private static interface PairMapper<S,P,T,U> extends Mapper<S,P,Pair<T,U>>, PairGenerator<T,U> {
@@ -466,6 +480,11 @@ public class Generators {
 					}
 				}};
 		}
+
+		@Override
+		default Generator<T> check() throws E {
+			return Generators.fromCollection(toList());
+		}
 	}
 
 	public static interface DefaultMapper<S,P,T> extends Mapper<S,P,T>, DefaultGenerator<T> {
@@ -605,6 +624,11 @@ public class Generators {
 		default PairGenerator_<S,T,E> filter(BiPredicate_<? super S, ? super T,E> test) {
 			return Generators.toPairGenerator(filter((Pair<S,T> p) -> test.test(p.first, p.second)));
 		}
+
+		@Override
+		default PairGenerator<S,T> check() throws E {
+			return Generators.fromPairCollection(toList());
+		}
 	}
 
 	private static interface DefaultPairMapper<S,P,T,U> extends PairMapper<S,P,T,U>, DefaultMapper<S,P,Pair<T,U>>, DefaultPairGenerator<T,U> {
@@ -723,6 +747,7 @@ public class Generators {
 		
 		@Override
 		public final boolean isEmpty() {
+			waitValue();
 			return done;
 		}
 
@@ -750,7 +775,7 @@ public class Generators {
 			if (done)
 				return;
 			while (!ready)
-				try {Thread.sleep(0,300);}
+				try {Thread.sleep(0,100);}
 			catch (InterruptedException e) {}
 //			System.out.println(">> Wait fin   "+this);
 		}
@@ -1617,6 +1642,16 @@ public class Generators {
 			protected void generate() throws EndOfGenerationException {
 				for (S s : collection)
 					yield(s);
+
+			}};
+	}
+
+	public static <S,T> PairGenerator<S,T> fromMap(Map<S,T> map) {
+		return new CustomPairGenerator<S,T>() {
+			@Override
+			protected void generate() throws EndOfGenerationException {
+				for (Entry<S,T> s : map.entrySet())
+					yield(s.getKey(),s.getValue());
 
 			}};
 	}
