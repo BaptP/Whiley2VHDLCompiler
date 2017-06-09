@@ -67,7 +67,7 @@ public class VHDLCompileTask implements Build.Task {
 	public Project project() {
 		return project;
 	}
-
+	
 	public Set<Entry<?>> build(Collection<Pair<Entry<?>, Root>> delta, Graph graph) throws IOException {
 		Runtime runtime = Runtime.getRuntime();
 		long start = System.currentTimeMillis();

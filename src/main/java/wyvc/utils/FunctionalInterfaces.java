@@ -313,4 +313,16 @@ public interface FunctionalInterfaces {
 	public interface CheckedBiPredicate<S,T,E extends Exception> {
 		public boolean test(S s, T t) throws E;
 	}
+	
+	
+	
+	
+	
+	
+	public static class Identity<T> implements Function<T, T> {
+		@Override
+		public T apply(T t) {
+			return t;
+		}
+	}
 }
