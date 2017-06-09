@@ -9,12 +9,16 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import wyvc.builder.CompilerLogger.CompilerDebug;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.CompilerLogger.LoggedContainer;
+import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
+import wyvc.utils.Generators.CustomPairGenerator;
+import wyvc.utils.Generators.EndOfGenerationException;
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
