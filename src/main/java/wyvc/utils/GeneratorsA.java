@@ -1,4 +1,5 @@
 package wyvc.utils;
+
 //
 //import java.lang.reflect.Array;
 //import java.util.ArrayList;
@@ -770,6 +771,7 @@ public abstract class GeneratorsA {}
 //		/**
 //		 * <p>Constructs a generator with no parent.</p>
 //		 */
+
 //		public CustomGenerator_() {}
 //
 //		/**
@@ -813,23 +815,8 @@ public abstract class GeneratorsA {}
 //		 * @return 							The next value
 //		 * @throws EndOfGenerationException	Thrown if no more values can be generated
 //		 * @throws InterruptedException		Thrown if the generation thread is interrupted
+//		 * @throws E			Thrown if the generation has thrown it
 //		 */
-//		public T next() throws EndOfGenerationException, InterruptedException, E {
-//			try {
-//				waitValue();
-//			}
-//			catch (EndOfGenerationException e) {
-//				if (exception != null)
-//					throw exception;
-//				throw e;
-//			}
-//			return getValue();
-//		}
-//
-//		/**
-//		 * <p>Builds a list of the generator's remaining values.
-//		 *
-//		 * @return 				A list of the values generated
 //		 */
 //		public List<T> toList() throws E{
 //			List<T> l = new ArrayList<>();

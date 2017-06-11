@@ -947,7 +947,6 @@ public class TypeCompiler extends LexicalElementTree {
 			}
 		}
 		catch (EndOfGenerationException e) {}
-		catch (InterruptedException e) {} // TODO non.
 		if (spCps.isEmpty())
 			return new ProducedRecord<>(Generators.fromMap(sCps1).mapSecond(Generators::fromCollection).mapSecond(Union<AbstractType>::new).
 					mapSecond(AbstractType::toCanonicalForm).mapSecond(CanonicalType::simplify));
