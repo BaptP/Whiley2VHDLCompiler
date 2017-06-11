@@ -32,7 +32,7 @@ public interface FunctionalInterfaces {
 			return (A a) -> f.test(apply(a));
 		}
 
-		default <T> Consumer<A> o(Consumer<? super R> f) {
+		default <T> Consumer<A> c(Consumer<? super R> f) {
 			return (A a) -> f.accept(apply(a));
 		}
 		default <T, E extends Exception> Consumer_<A,E> o_(Consumer_<? super R, E> f) {
@@ -275,7 +275,7 @@ public interface FunctionalInterfaces {
 
 
 
-
+/*
 
 
 
@@ -312,5 +312,5 @@ public interface FunctionalInterfaces {
 	@FunctionalInterface
 	public interface CheckedBiPredicate<S,T,E extends Exception> {
 		public boolean test(S s, T t) throws E;
-	}
+	}*/
 }

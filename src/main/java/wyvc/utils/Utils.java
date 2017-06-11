@@ -16,11 +16,6 @@ import wyil.lang.Bytecode.If;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.builder.CompilerLogger;
-import wyvc.utils.FunctionalInterfaces.CheckedBiConsumer;
-import wyvc.utils.FunctionalInterfaces.CheckedBiFunction;
-import wyvc.utils.FunctionalInterfaces.CheckedConsumer;
-import wyvc.utils.FunctionalInterfaces.CheckedFunction;
-import wyvc.utils.FunctionalInterfaces.CheckedSupplier;
 
 public class Utils {
 	public static void printLocation(CompilerLogger logger, Location<?> a, String n) {
@@ -46,7 +41,7 @@ public class Utils {
 			m.add(f.apply(e));
 		return m.toArray(t);
 	}
-
+/*
 	public static <S,T> List<Pair<S,T>> gather(List<S> l1, List<T> l2) {
 		int m = Math.min(l1.size(), l2.size());
 		ArrayList<Pair<S,T>> l = new ArrayList<>(m);
@@ -70,30 +65,10 @@ public class Utils {
 	}
 
 
-	public static <S,T> List<T> convert(List<S> l, Function<? super S, ? extends T> f) {
-		ArrayList<T> m = new ArrayList<>(l.size());
-		for (S s : l)
-			m.add(f.apply(s));
-		return m;
-	}
-
 	public static <S,T,E extends Exception> List<T> checkedConvert(List<S> l, CheckedFunction<? super S, ? extends T, E> f) throws E {
 		ArrayList<T> m = new ArrayList<>(l.size());
 		for (S s : l)
 			m.add(f.apply(s));
-		return m;
-	}
-
-	@SuppressWarnings("unchecked")
-	public static <S,T> List<T> convert(List<S> l) {
-		return convert(l, (S s) -> (T) s);
-	}
-
-	public static <S,T> List<T> convert(List<S> l, BiFunction<? super S, ? super Integer, ? extends T> f) {
-		ArrayList<T> m = new ArrayList<>(l.size());
-		int k = 0;
-		for (S s : l)
-			m.add(f.apply(s,k++));
 		return m;
 	}
 
@@ -103,13 +78,6 @@ public class Utils {
 		for (S s : l)
 			m.add(f.apply(s, k++));
 		return m;
-	}
-
-	public static <S> List<S> concat(List<S> l1, List<S> l2) {
-		List<S> l = new ArrayList<>(l1.size()+l2.size());
-		l.addAll(l1);
-		l.addAll(l2);
-		return l;
 	}
 
 	public static <S, T, E extends Exception> CheckedFunction<S, T, E> FICE(CheckedFunction<S, T, E> f) {
@@ -138,15 +106,42 @@ public class Utils {
 			f.accept(k++, s);
 	}
 
-	public static <S> void ignore(S s) {}
 
-	public static <S,T> T addIfAbsent(Map<S,T> m, S k, Supplier<T> v) {
+	public static <S,T, E extends Exception> T checkedAddIfAbsent(Map<S,T> m, S k, CheckedSupplier<T, E> v) throws E {
 		if (!m.containsKey(k))
 			m.put(k, v.get());
 		return m.get(k);
+	}*/
+
+	public static <S,T> List<T> convert(List<S> l, Function<? super S, ? extends T> f) {
+		ArrayList<T> m = new ArrayList<>(l.size());
+		for (S s : l)
+			m.add(f.apply(s));
+		return m;
 	}
 
-	public static <S,T, E extends Exception> T checkedAddIfAbsent(Map<S,T> m, S k, CheckedSupplier<T, E> v) throws E {
+	public static <S,T> List<T> convert(List<S> l, BiFunction<? super S, ? super Integer, ? extends T> f) {
+		ArrayList<T> m = new ArrayList<>(l.size());
+		int k = 0;
+		for (S s : l)
+			m.add(f.apply(s,k++));
+		return m;
+	}
+
+	@SuppressWarnings("unchecked")
+	public static <S,T> List<T> convert(List<S> l) {
+		return convert(l, (S s) -> (T) s);
+	}
+
+	public static <S> List<S> concat(List<S> l1, List<S> l2) {
+		List<S> l = new ArrayList<>(l1.size()+l2.size());
+		l.addAll(l1);
+		l.addAll(l2);
+		return l;
+	}
+	public static <S> void ignore(S s) {}
+
+	public static <S,T> T addIfAbsent(Map<S,T> m, S k, Supplier<T> v) {
 		if (!m.containsKey(k))
 			m.put(k, v.get());
 		return m.get(k);

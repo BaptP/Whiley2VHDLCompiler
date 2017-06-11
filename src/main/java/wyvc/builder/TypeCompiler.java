@@ -19,7 +19,9 @@ import wyvc.utils.FunctionalInterfaces.Predicate;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
+import wyvc.utils.Generators.PairGenerator_;
 import wyvc.utils.Generators.CustomPairGenerator;
+import wyvc.utils.Generators.CustomGenerator;
 import wyvc.utils.Generators.EndOfGenerationException;
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Pair;
@@ -32,12 +34,11 @@ import wyvc.lang.Type;
 public class TypeCompiler extends LexicalElementTree {
 
 	/*------- Abstract Type Analysis -------*/
+//
+//	private static interface AbstractProducedType extends Tree {
+//	}
 
-	private static interface AbstractProducedType extends Tree {
-		public boolean isFinite();
-	}
-
-	private static interface AbstractType extends AbstractProducedType {
+	private static interface AbstractType extends Tree {
 
 		/**
 		 * Represents some relations that can exist between two sets.
@@ -252,13 +253,13 @@ public class TypeCompiler extends LexicalElementTree {
 			}
 
 			public static void check(CompilerLogger logger) {
-				/*print(logger, getGenerator());
+				print(logger, getGenerator());
 				print(logger, getGenerator().map((Integer x) -> x+1));
 				print(logger, getGenerator().map((Integer x) -> x+1).map((Integer x) -> x+1));
 				print(logger, getGenerator().map((Integer x) -> x).map((Integer x) -> {if (x%5 == 1) throw new RuntimeException();return x;}).
 						map_((Integer x) -> {if (x%5 == 2) throw new Exception();return x;}).
 						map((Integer x) -> {if (x%5 == 3) throw new RuntimeException();return x;}));
-				logger.debug("Debut");
+				/*logger.debug("Debut");
 				boolean test = true;
 				test &= check(logger, "reflexivity of Opposite",
 					(Order o) -> o,
@@ -300,36 +301,36 @@ public class TypeCompiler extends LexicalElementTree {
 
 
 
-		public CanonicalUnion toCanonicalForm();
-		public Order compareWith(AbstractType other);
-		public default Order dualCompareWith(AbstractType other) {
+		boolean isFinite();
+		CanonicalUnion toCanonicalForm();
+		Order compareWith(AbstractType other);
+		default Order dualCompareWith(AbstractType other) {
 			return compareWith(other).precise(other.compareWith(this).opposite());
 		}
 	}
 
 	private static interface CanonicalType extends AbstractType {
-		public AbstractProducedType simplify();
+		CanonicalType simplify();
 	}
 
-	private static interface CanonicalTypeOrNegation extends CanonicalType {
+	private static interface CanonicalTypeOrNegation<T extends CanonicalTypeOrRecord<?>> extends CanonicalType {
 		boolean isNegation();
-		CanonicalTypeOrRecord getUnderlyingType();
-		public AbstractType simplify();
+		T getUnderlyingType();
+		@Override
+		public CanonicalTypeOrNegation<?> simplify();
 	}
 
-	private static interface CanonicalTypeOrRecord extends CanonicalTypeOrNegation {
+	private static interface CanonicalTypeOrRecord<T extends CanonicalTypeOrRecord<?>> extends CanonicalTypeOrNegation<T> {
 		@Override
 		default boolean isNegation() {
 			return false;
 		}
 		@Override
-		default CanonicalTypeOrRecord getUnderlyingType() {
-			return this;
-		}
+		public CanonicalTypeOrRecord<?> simplify();
 
 	}
 
-	private abstract class SimpleType extends Leaf<String> implements AbstractType,  CanonicalTypeOrRecord {
+	private abstract class SimpleType extends Leaf<String> implements AbstractType,  CanonicalTypeOrRecord<SimpleType> {
 		public SimpleType(String name) {
 			super(name);
 		}
@@ -340,12 +341,17 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 
 		@Override
+		public SimpleType getUnderlyingType() {
+			return this;
+		}
+
+		@Override
 		public CanonicalUnion toCanonicalForm() {
 			return new CanonicalUnion(new CanonicalIntersection(this));
 		}
 
 		@Override
-		public AbstractType simplify() {
+		public SimpleType simplify() {
 			return this;
 		}
 
@@ -434,37 +440,27 @@ public class TypeCompiler extends LexicalElementTree {
 //	}
 
 
-	private class ProducedRecord<T extends AbstractProducedType> extends RecordNode<T> implements AbstractProducedType{
 
-		public ProducedRecord(Generator<Pair<String,T>> fields) {
-			super(fields);
-		}
-
-		public <E extends Exception> ProducedRecord(Generator_<Pair<String,T>, E> fields) throws E {
-			super(fields);
-		}
-
-		@Override
-		public boolean isFinite() {
-			return getFields().takeSecond().forAll(AbstractProducedType::isFinite);
-		}
-	}
-
-	private class Record<T extends AbstractType> extends ProducedRecord<T> implements AbstractType {
+	private class Record<T extends AbstractType> extends NamedNode<T> implements AbstractType {
 //		public final List<Pair<String,T>> fields;
 
-		public Record(Generator<Pair<String,T>> fields) {
+		public Record(PairGenerator<String,T> fields) {
 			super(fields);
 //			this.fields = fields.toList();
 		}
 
-		public <E extends Exception> Record(Generator_<Pair<String,T>, E> fields) throws E {
+		public <E extends Exception> Record(PairGenerator_<String,T, E> fields) throws E {
 			super(fields);
 //			this.fields = fields.toList();
 		}
 
 		boolean hasSameFields(Record<?> other) {
 			return getNumberOfComponents() == other.getNumberOfComponents() && getFields().takeFirst().gather(other.getFields().takeFirst()).forAll(String::equals);
+		}
+
+		@Override
+		public boolean isFinite() {
+			return getFields().takeSecond().forAll(AbstractType::isFinite);
 		}
 
 
@@ -487,17 +483,17 @@ public class TypeCompiler extends LexicalElementTree {
 			Generator<PairGenerator<String, CanonicalIntersection>> fi = Generators.cartesianProduct(getFields().mapSecond(AbstractType::toCanonicalForm).
 					map(Generators::constant, CanonicalUnion::getOptions).map(Generator<String>::<CanonicalIntersection>gather)).map(Generators::toPairGenerator);
 			// | { & ! }
-			Generator<Generator<PairGenerator<String,CanonicalTypeOrNegation>>> fie =
+			Generator<Generator<PairGenerator<String,CanonicalTypeOrNegation<?>>>> fie =
 					fi.map((PairGenerator<String, CanonicalIntersection> i) -> Generators.cartesianProduct(i.map(Generators::constant,CanonicalIntersection::getOptions).
-				map(Generator<String>::<CanonicalTypeOrNegation>gather)).map(Generators::toPairGenerator));
+				map(Generator<String>::<CanonicalTypeOrNegation<?>>gather)).map(Generators::toPairGenerator));
 			// | & { ! }
-			Generator<Generator<Generator<CanonicalTypeOrNegation>>> fiel =
-					fie.map((Generator<PairGenerator<String,CanonicalTypeOrNegation>> i) -> i.map((PairGenerator<String,CanonicalTypeOrNegation> r) -> {
-						final List<Pair<String, CanonicalTypeOrNegation>> chs = r.toList();
+			Generator<Generator<Generator<CanonicalTypeOrNegation<?>>>> fiel =
+					fie.map((Generator<PairGenerator<String,CanonicalTypeOrNegation<?>>> i) -> i.map((PairGenerator<String,CanonicalTypeOrNegation<?>> r) -> {
+						final List<Pair<String, CanonicalTypeOrNegation<?>>> chs = r.toList();
 						return Generators.fromPairCollection(chs).mapFirst((String a) -> Generators.fromPairCollection(chs).
-							mapSecond(CanonicalTypeOrNegation::getUnderlyingType).map((String g, CanonicalTypeOrRecord h) -> new Pair<>(g,g.equals(a) ? h : Any)))
+							mapSecond(CanonicalTypeOrNegation::getUnderlyingType).map((String g, CanonicalTypeOrRecord<?> h) -> new Pair<>(g,g.equals(a) ? h : Any))).mapFirst(Generators::toPairGenerator)
 								.mapFirst(CanonicalRecord::new).
-								map((CanonicalRecord s, CanonicalTypeOrNegation t) ->  t.isNegation() ? new CanonicalNegation(s) : s);
+								map((CanonicalRecord s, CanonicalTypeOrNegation<?> t) ->  t.isNegation() ? new CanonicalNegation(s) : s);
 					}));
 			// | & ! { }
 			return new CanonicalUnion(fiel.map(Generators::concat).map(CanonicalIntersection::new));//*/
@@ -527,48 +523,30 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
-	private class CanonicalRecord extends Record<CanonicalTypeOrRecord> implements CanonicalTypeOrRecord {
-		public CanonicalRecord(Generator<Pair<String,CanonicalTypeOrRecord>> fields) {
+	private class CanonicalRecord extends Record<CanonicalTypeOrRecord<?>> implements CanonicalTypeOrRecord<CanonicalTypeOrRecord<?>> {
+		public CanonicalRecord(PairGenerator<String,CanonicalTypeOrRecord<?>> fields) {
 			super(fields);
 		}
 
+
 		@Override
-		public AbstractType simplify() {
+		public CanonicalRecord getUnderlyingType() {
+			return this;
+		}
+
+		@Override
+		public CanonicalTypeOrRecord<?> simplify() {
 			if (getFields().takeSecond().find(Void) != null)
-				return Void;
+				return Void.simplify();
 			return this;
 		}
 	}
 
-	private class ProducedUnion<T extends AbstractProducedType> extends UnnamedNode<T> implements AbstractProducedType {
 
-		public ProducedUnion(T option) {
-			super(Generators.fromSingleton(option));
-		}
-
-		public ProducedUnion(Generator<T> options) {
-			super(options);
-		}
-
-		public <E extends Exception> ProducedUnion(Generator_<T, E> options) throws E {
-			super(options);
-		}
-
-		@Override
-		protected String getLabel(int k) {
-			return "";
-		}
-
-		@Override
-		public boolean isFinite() {
-			return getOptions().forAll(AbstractProducedType::isFinite);
-		}
-	}
-
-	private class Union<T extends AbstractType> extends ProducedUnion<T> implements AbstractType {
+	private class Union<T extends AbstractType> extends UnnamedNode<T> implements AbstractType {
 
 		public Union(T option) {
-			super(Generators.fromSingleton(option));
+			super(option);
 		}
 
 		public Union(Generator<T> options) {
@@ -589,6 +567,17 @@ public class TypeCompiler extends LexicalElementTree {
 			return getOptions().map(other::dualCompareWith).map(Order::opposite).fold(Order::union, Order.DisLesser);
 		}
 
+
+		@Override
+		protected String getLabel(int k) {
+			return "";
+		}
+
+		@Override
+		public boolean isFinite() {
+			return getOptions().forAll(AbstractType::isFinite);
+		}
+
 	}
 
 	private class CanonicalUnion extends Union<CanonicalIntersection> implements CanonicalType {
@@ -604,54 +593,46 @@ public class TypeCompiler extends LexicalElementTree {
 
 		@SuppressWarnings("unchecked")
 		@Override
-		public AbstractProducedType simplify() {
-			List<AbstractType> options = getOptions().map(CanonicalIntersection::simplify).toList();
-			List<AbstractType> utils = new ArrayList<>(options.size());
-			utils.addAll(options);
+		public CanonicalUnion simplify() {
+			List<CanonicalIntersection> options = getOptions().toList();
 			if (options.isEmpty())
-				return Void;
+				return this;
 			if (options.size() == 1)
-				return options.get(0);
+				return new CanonicalUnion(options.get(0).simplify());
+			List<CanonicalIntersection> utils = new ArrayList<>(options.size());
+			utils.addAll(options);
 			final int noo = options.size();
 			for (int k = 0; k < noo; ++k)	{
 				AbstractType t = options.get(k);
-				if (t.equals(Void))
-					utils.set(k, null);
-				else
-					for (int i = k+1; i < noo; ++i) {
-						AbstractType u = options.get(i);
-						if (utils.get(i) != null){
-							switch (t.dualCompareWith(u)) {
-							case Lesser:
-							case DisLesser:
-								utils.set(k, null);
-								break;
-							case Equal:
-							case Greater:
-							case DisEqual:
-							case DisGreater:
-								utils.set(i, null);
-								break;
-							default:
-								break;
-							}}
+				for (int i = k+1; i < noo; ++i) {
+					AbstractType u = options.get(i);
+					if (utils.get(i) != null){
+						switch (t.dualCompareWith(u)) {
+						case Lesser:
+						case DisLesser:
+							utils.set(k, null);
+							break;
+						case Equal:
+						case Greater:
+						case DisEqual:
+						case DisGreater:
+							utils.set(i, null);
+							break;
+						default:
+							break;
+						}}
 					}
 			}
 			// TODO better
-			List<AbstractType> utils2 = new ArrayList<>();
-			for (AbstractType t : utils)
+			List<CanonicalIntersection> utils2 = new ArrayList<>();
+			for (CanonicalIntersection t : utils)
 				if (t != null)
-					utils2.add(t);
+					utils2.add(t.simplify());
 			if (utils2.isEmpty())
-				return Void;
+				return new CanonicalUnion(Generators.emptyGenerator());
 			if (utils2.size() == 1)
-				return utils2.iterator().next();
-			Generator<Record<AbstractType>> recs = Generators.fromCollection(utils2).filter((AbstractType t) -> t instanceof Record).
-					map((AbstractType t) -> (Record<AbstractType>) t);
-			List<AbstractType> others = Generators.fromCollection(utils2).filter((AbstractType t) -> !(t instanceof Record)).toList();
-			return recs.isEmpty() ? others.size() > 1 ? new ProducedUnion<>(Generators.fromCollection(others)) : others.get(0)
-			                      : others.isEmpty() ? createRecordUnion(recs)
-			                                         : new ProducedUnion<>(Generators.fromSingleton(createRecordUnion(recs)).append(Generators.fromCollection(others)));
+				return new CanonicalUnion(utils2.iterator().next());
+			return new CanonicalUnion(Generators.fromCollection(utils2));
 		}
 
 		@Override
@@ -695,30 +676,32 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
-	private class CanonicalIntersection extends Intersection<CanonicalTypeOrNegation> implements CanonicalType {
-		public CanonicalIntersection(CanonicalTypeOrNegation option) {
+	private class CanonicalIntersection extends Intersection<CanonicalTypeOrNegation<?>> implements CanonicalType {
+		public CanonicalIntersection(CanonicalTypeOrNegation<?> option) {
 			super(option);
 		}
 
-		public CanonicalIntersection(Generator<CanonicalTypeOrNegation> options) {
+		public CanonicalIntersection(Generator<CanonicalTypeOrNegation<?>> options) {
+			super(options);
+		}
+
+		public <E extends Exception> CanonicalIntersection(Generator_<CanonicalTypeOrNegation<?>,E> options) throws E {
 			super(options);
 		}
 
 
 		@Override
-		public AbstractType simplify() {
-			List<AbstractType> options = getOptions().map(CanonicalTypeOrNegation::simplify).toList();
-			List<AbstractType> utils = new ArrayList<>(options.size());
-			utils.addAll(options);
+		public CanonicalIntersection simplify() {
+			List<CanonicalTypeOrNegation<?>> options = getOptions().toList();
 			if (options.isEmpty())
-				return Void;
+				return this;
 			if (options.size() == 1)
-				return options.get(0);
+				return new CanonicalIntersection(options.get(0).simplify());
+			List<CanonicalTypeOrNegation<?>> utils = new ArrayList<>(options.size());
+			utils.addAll(options);
 			final int noo = options.size();
 			for (int k = 0; k < noo; ++k)	{
 				AbstractType t = options.get(k);
-				if (t.equals(Void))
-					return Void;
 				for (int i = k+1; i < noo; ++i) {
 					AbstractType u = options.get(i);
 					if (utils.get(i) != null)
@@ -734,7 +717,7 @@ public class TypeCompiler extends LexicalElementTree {
 							utils.set(k, null);
 							break;
 						case Disjointed:
-							return Void;
+							return new CanonicalIntersection(Generators.emptyGenerator());
 						case Unknown:
 						default:
 							break;
@@ -747,9 +730,9 @@ public class TypeCompiler extends LexicalElementTree {
 //				return utils.iterator().next();
 
 			Map<String, List<CanonicalRecord>> records = new HashMap<>();
-			List<AbstractType> nonRecords = new ArrayList();
-			for (AbstractType t : utils) {
-				if (t == null);
+			List<CanonicalTypeOrNegation<?>> nonRecords = new ArrayList<>();
+			for (CanonicalTypeOrNegation<?> t : utils) {
+				if (t==null);
 				else
 				if (t instanceof CanonicalRecord) {
 					String f = ((CanonicalRecord) t).getFields().takeFirst().<String>fold((String s, String u) -> s+"#"+u, "").substring(1);
@@ -760,29 +743,31 @@ public class TypeCompiler extends LexicalElementTree {
 				else
 					nonRecords.add(t);
 			}
+
+
 			for (Entry<String, List<CanonicalRecord>> e : records.entrySet()){
 				String[] f = e.getKey().split("#");
-				List<Generator<CanonicalTypeOrRecord>> l = Generators.fromCollection(e.getValue()).
+				List<Generator<CanonicalTypeOrRecord<?>>> l = Generators.fromCollection(e.getValue()).
 						map(CanonicalRecord::getFields).map(PairGenerator::takeSecond).toList();
 
-				nonRecords.add(new Record<>(new CustomPairGenerator<String, CanonicalIntersection>(){
+				Generators.cartesianProduct(Generators.fromCollection(f).gather(new CustomGenerator<Generator<CanonicalTypeOrRecord<?>>>() {
 					@Override
-					protected void generate() throws InterruptedException, EndOfGenerationException {
-						for (String g : f)
-							yield(g,new CanonicalIntersection(Generators.fromCollection(l).<CanonicalTypeOrNegation>map((Generator<CanonicalTypeOrRecord> a) -> {
-								try {return a.next();}
-								catch (EndOfGenerationException e) {}
-								catch (InterruptedException e) {}
-								return null;
-							})));
-					}}.mapSecond(CanonicalIntersection::simplify)));
+					protected void generate() throws EndOfGenerationException {
+						while (true)
+							yield(new CanonicalIntersection(Generators.fromCollection(l).map_(Generator::next)).simplify().
+								getOptions().map(CanonicalTypeOrNegation::getUnderlyingType));
+					}}).mapFirst(Generators::constant).map(Generator<String>::<CanonicalTypeOrRecord<?>>gather)).
+				map(Generators::toPairGenerator).map(CanonicalRecord::new).forEach(nonRecords::add);;
 			}
-			if (nonRecords.isEmpty())
-				return Void;
-			if (nonRecords.size() == 1)
-				return nonRecords.iterator().next();
-			return new Intersection<>(Generators.fromCollection(nonRecords));
+
+			return new CanonicalIntersection(Generators.fromCollection(nonRecords));
 		}
+
+		@Override
+		public CanonicalUnion toCanonicalForm() {
+			return new CanonicalUnion(this);
+		}
+
 	}
 
 
@@ -803,13 +788,13 @@ public class TypeCompiler extends LexicalElementTree {
 
 		@Override
 		public CanonicalUnion toCanonicalForm() {
-			return new CanonicalUnion(Generators.cartesianProduct(getType().toCanonicalForm().getOptions().map(Intersection::getOptions)).map(
-				(Generator<CanonicalTypeOrNegation> g) -> g.map(this::newNegation)).map(CanonicalIntersection::new));
+			return new CanonicalUnion(Generators.cartesianProduct(getType().toCanonicalForm().getOptions().map(CanonicalIntersection::getOptions)).map(
+				(Generator<CanonicalTypeOrNegation<?>> g) -> new CanonicalIntersection(g.map(this::newNegation))));
 		}
 
-		public CanonicalTypeOrNegation newNegation(CanonicalTypeOrNegation type) {
+		public CanonicalTypeOrNegation<?> newNegation(CanonicalTypeOrNegation<?> type) {
 			return type instanceof CanonicalNegation ? ((CanonicalNegation)type).getType()
-			                                         : new CanonicalNegation((CanonicalTypeOrRecord)type);
+			                                         : new CanonicalNegation((CanonicalTypeOrRecord<?>)type);
 		}
 
 		@Override
@@ -819,8 +804,8 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
-	private class CanonicalNegation extends Negation<CanonicalTypeOrRecord> implements CanonicalTypeOrNegation {
-		public CanonicalNegation(CanonicalTypeOrRecord type) {
+	private class CanonicalNegation extends Negation<CanonicalTypeOrRecord<?>> implements CanonicalTypeOrNegation<CanonicalTypeOrRecord<?>> {
+		public CanonicalNegation(CanonicalTypeOrRecord<?> type) {
 			super(type);
 		}
 
@@ -830,17 +815,17 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 
 		@Override
-		public AbstractType simplify() {
+		public CanonicalTypeOrNegation<?> simplify() {
 			AbstractType type = getType().simplify();
 			if (type.equals(Any))
 				return Void;
 			if (type.equals(Void))
 				return Any;
-			return new Negation<>(type);
+			return this;
 		}
 
 		@Override
-		public CanonicalTypeOrRecord getUnderlyingType() {
+		public CanonicalTypeOrRecord<?> getUnderlyingType() {
 			return getType();
 		}
 	}
@@ -866,8 +851,8 @@ public class TypeCompiler extends LexicalElementTree {
 		if (type == wyil.lang.Type.T_VOID)
 			return Void;
 		if (type instanceof wyil.lang.Type.Record)
-			return new Record<>((Generators.fromCollection(((wyil.lang.Type.Record) type).getFieldNames()).map_(
-				(String f) -> new Pair<>(f, constructRepresentation(((wyil.lang.Type.Record) type).getField(f))))));
+			return new Record<>((Generators.fromCollection(((wyil.lang.Type.Record) type).getFieldNames()).biMap_((String f) -> f,
+				(String f) -> constructRepresentation(((wyil.lang.Type.Record) type).getField(f)))));
 		if (type instanceof wyil.lang.Type.Union)
 			return new Union<>(Generators.fromCollection(((wyil.lang.Type.Union) type).bounds()).map_(this::constructRepresentation));
 		if (type instanceof wyil.lang.Type.Intersection)
@@ -877,7 +862,7 @@ public class TypeCompiler extends LexicalElementTree {
 		throw UnsupportedTypeCompilerError.exception(type);
 	}
 
-
+/*
 	public class RecordUnion extends BinaryNode<AbstractProducedType, ProducedRecord<AbstractProducedType>, ProducedRecord<AbstractProducedType>> implements AbstractProducedType {
 		private final CoexistingFields coexisting;
 
@@ -972,7 +957,7 @@ public class TypeCompiler extends LexicalElementTree {
 			new ProducedRecord<>(Generators.fromMap(spCps).mapSecond(Generators::fromCollection).mapSecond(Union<AbstractType>::new).
 					mapSecond(AbstractType::toCanonicalForm).mapSecond(CanonicalType::simplify)),
 			ceCps);
-	}
+	}*/
 
 
 	/*------- Abstract Type Compilation -------*/
@@ -982,14 +967,23 @@ public class TypeCompiler extends LexicalElementTree {
 	public static interface TypeTree extends Tree {
 
 	}
+	public static interface AccessibleTypeTree extends TypeTree {
 
-	public class TypeLeaf extends Leaf<Type> implements TypeTree {
+	}
+
+	public class TypeLeaf extends Leaf<Type> implements AccessibleTypeTree {
 		public TypeLeaf(Type value) {
 			super(value);
 		}
 	}
 
-	public class TypeRecord<T extends TypeTree> extends RecordNode<T> implements TypeTree {
+	public class BooleanTypeLeaf extends TypeLeaf {
+		public BooleanTypeLeaf() {
+			super(Type.Boolean);
+		}
+	}
+
+	public class TypeRecord<T extends TypeTree> extends NamedNode<T> implements TypeTree {
 		public TypeRecord(Generator<Pair<String, T>> fields) {
 			super(fields);
 		}
@@ -998,37 +992,73 @@ public class TypeCompiler extends LexicalElementTree {
 		}
 	}
 
-	public class TypeUnion extends UnionNode<TypeTree> implements TypeTree {
+	public class TypeSimpleRecord extends TypeRecord<AccessibleTypeTree> implements AccessibleTypeTree {
+		public TypeSimpleRecord(Generator<Pair<String, AccessibleTypeTree>> fields) {
+			super(fields);
+		}
+		public <E extends Exception> TypeSimpleRecord(Generator_<Pair<String, AccessibleTypeTree>, E> fields) throws E {
+			super(fields);
+		}
+	}
 
-		public TypeUnion(Generator<TypeTree> options) {
+	public class TypeOption<T extends AccessibleTypeTree> extends BinaryNode<TypeTree, BooleanTypeLeaf, T> implements TypeTree {
+		public TypeOption(T type) {
+			super(new BooleanTypeLeaf(), type);
+		}
+
+		@Override
+		public String getFirstLabel() {
+			return "has";
+		}
+		@Override
+		public String getSecondLabel() {
+			return "val";
+		}
+	}
+
+	public class TypeSimpleUnion extends UnnamedNode<TypeOption<TypeLeaf>> implements AccessibleTypeTree {
+
+		public TypeSimpleUnion(Generator<TypeOption<TypeLeaf>> options) {
 			super(options);
 		}
-		public <E extends Exception> TypeUnion(Generator_<TypeTree, E> options) throws E {
+		public <E extends Exception> TypeSimpleUnion(Generator_<TypeOption<TypeLeaf>, E> options) throws E {
 			super(options);
 		}
-		public TypeUnion(TypeTree option) {
+		public TypeSimpleUnion(TypeOption<TypeLeaf> option) {
 			super(option);
 		}
 	}
 
-	public class TypeOption extends BinaryNode<TypeTree, TypeLeaf, TypeTree> implements TypeTree {
-		public TypeOption(TypeTree type) {
-			super(getBoolean(), type);
-		}
 
-	}
-
-	public class TypeRecordUnion extends BinaryNode<TypeTree, TypeRecord<TypeTree>, TypeRecord<TypeOption>> implements TypeTree {
-		public TypeRecordUnion(TypeRecord<TypeTree> shared, TypeRecord<TypeOption> specific) {
+	public class TypeRecordUnion extends BinaryNode<TypeTree, TypeSimpleRecord, TypeRecord<TypeOption<AccessibleTypeTree>>> implements AccessibleTypeTree {
+		public TypeRecordUnion(TypeSimpleRecord shared, TypeRecord<TypeOption<AccessibleTypeTree>> specific) {
 			super(shared, specific);
 		}
 
-		public PairGenerator<String,TypeTree> getSharedFields() {
+		public PairGenerator<String,AccessibleTypeTree> getSharedFields() {
 			return getFirstOperand().getFields();
 		}
-		public PairGenerator<String,TypeOption> getSpecificFields() {
+		public PairGenerator<String,TypeOption<AccessibleTypeTree>> getSpecificFields() {
 			return getSecondOperand().getFields();
 		}
+	}
+
+
+	public class TypeUnion extends BinaryNode<TypeTree, TypeSimpleUnion, TypeRecordUnion> implements AccessibleTypeTree {
+
+		public TypeUnion(TypeSimpleUnion simpleOptions, TypeRecordUnion recordOptions) {
+			super(simpleOptions, recordOptions);
+		}
+
+		@Override
+		public String getFirstLabel() {
+			return "sha";
+		}
+		@Override
+		public String getSecondLabel() {
+			return "spe";
+		}
+
 	}
 
 
@@ -1061,9 +1091,9 @@ public class TypeCompiler extends LexicalElementTree {
 	}
 
 	public static class UnsupportedAbstractTypeCompilerError extends CompilerError {
-		private final AbstractProducedType type;
+		private final AbstractType type;
 
-		public UnsupportedAbstractTypeCompilerError(AbstractProducedType type) {
+		public UnsupportedAbstractTypeCompilerError(AbstractType type) {
 			this.type = type;
 		}
 
@@ -1072,16 +1102,16 @@ public class TypeCompiler extends LexicalElementTree {
 			return "Unsupported compilation of the abstract type\n"+type.toString("");
 		}
 
-		public static CompilerException exception(AbstractProducedType type) {
+		public static CompilerException exception(AbstractType type) {
 			return new CompilerException(new UnsupportedAbstractTypeCompilerError(type));
 		}
 	}
 
 	public static class UnresolvedTypeCompilerError extends CompilerError {
 		private final wyil.lang.Type type;
-		private final AbstractProducedType sType;
+		private final AbstractType sType;
 
-		public UnresolvedTypeCompilerError(wyil.lang.Type type, AbstractProducedType sType) {
+		public UnresolvedTypeCompilerError(wyil.lang.Type type, AbstractType sType) {
 			this.type = type;
 			this.sType = sType;
 		}
@@ -1091,16 +1121,16 @@ public class TypeCompiler extends LexicalElementTree {
 			return "The type \""+type.toString()+"\"\nwas resolved to the non-synthetizable type\n"+sType.toString("  ");
 		}
 
-		public static CompilerException exception(wyil.lang.Type type, AbstractProducedType sType) {
+		public static CompilerException exception(wyil.lang.Type type, AbstractType sType) {
 			return new CompilerException(new UnresolvedTypeCompilerError(type, sType));
 		}
 	}
 
 	public static class UnresolvedTypeCompileNotice extends CompilerNotice {
 		private final String type;
-		private final AbstractProducedType sType;
+		private final AbstractType sType;
 
-		public UnresolvedTypeCompileNotice(String type, AbstractProducedType sType) {
+		public UnresolvedTypeCompileNotice(String type, AbstractType sType) {
 			this.type = type;
 			this.sType = sType;
 		}
@@ -1142,49 +1172,107 @@ public class TypeCompiler extends LexicalElementTree {
 
 
 
+
+
+	public static class CoexistingFields {
+		private final Set<String> coexisting = new HashSet<>();
+
+		public void makeCoexisting(List<String> fields) {
+			for (int k = 0; k < fields.size()-1; ++k)
+				for (int l = k+1; l < fields.size(); ++l)
+					coexisting.add(fields.get(k).compareTo(fields.get(l)) < 0
+						? fields.get(k) + "#" + fields.get(l)
+						: fields.get(l) + "#" + fields.get(k));
+		}
+
+		public boolean coexist(String field1, String field2) {
+			return coexisting.contains(field1 + "#" + field2) || coexisting.contains(field2 + "#" + field1);
+		}
+	}
+
+	private TypeTree createRecordUnion(Generator<Record<AbstractType>> options) throws CompilerException {
+		Map<String, List<AbstractType>> sCps1 = new HashMap<>();
+		Map<String, List<AbstractType>> sCps2 = new HashMap<>();
+		Map<String, List<AbstractType>> spCps = new HashMap<>();
+		CoexistingFields ceCps = new CoexistingFields();
+		try {
+			Record<AbstractType> opt = options.next();
+			ceCps.makeCoexisting(opt.getFieldNames().toList());
+			opt.getFields().mapSecond(Collections::singletonList).mapSecond(ArrayList<AbstractType>::new).forEach(sCps1::put);;
+			while (true) {
+				opt = options.next();
+				ceCps.makeCoexisting(opt.getFieldNames().toList());
+				opt.getFields().forEach((String n, AbstractType t) -> {
+					if(sCps1.containsKey(n)) {
+						List<AbstractType> l = sCps1.remove(n);
+						l.add(t);
+						sCps2.put(n, l);
+					}
+					else
+						sCps1.put(n, new ArrayList<>(Collections.singletonList(t)));
+				});
+				for (Entry<String, List<AbstractType>> s : sCps1.entrySet()) {
+					if(spCps.containsKey(s.getKey()))
+						spCps.get(s.getKey()).addAll(s.getValue());
+					else
+						spCps.put(s.getKey(), s.getValue());
+				}
+				sCps1.clear();
+				sCps1.putAll(sCps2);
+				sCps2.clear();
+			}
+		}
+		catch (EndOfGenerationException e) {}
+		if (spCps.isEmpty())
+			return new TypeRecord<>(Generators.fromMap(sCps1).mapSecond(Generators::fromCollection).mapSecond(Union<AbstractType>::new).
+					mapSecond_(this::compileType));
+		return new TypeRecordUnion(
+			new TypeRecord<TypeTree>(Generators.fromMap(sCps1).mapSecond(Generators::fromCollection).mapSecond(Union<AbstractType>::new).
+					mapSecond_(this::compileType)),
+			new TypeRecord<TypeOption>(Generators.fromMap(spCps).mapSecond(Generators::fromCollection).mapSecond(Union<AbstractType>::new).
+					mapSecond_(this::compileType).mapSecond(TypeOption::new)));
+	}
+
+
+
 	public void addNominalType(WyilFile.Type type) throws CompilerException {
 		AbstractType t = constructRepresentation(type.type());
 		debug(t.toString(type.name() +" : "));
-		t = t.toCanonicalForm();
-//		debug(t.toCanonicalForm().toString(type.name() +" ? "));
-//		AbstractProducedType t2 = t.toCanonicalForm().simplify();
-//		debug(t2.toString(type.name() +" # "));
+		debug(t.toCanonicalForm().toString(type.name() +" ? "));
+		CanonicalType t2 = t.toCanonicalForm().simplify();
+		debug(t2.toString(type.name() +" # "));
 //		if (!t2.isFinite())
 //			logger.addMessage(new UnresolvedTypeCompileNotice(type.name(), t2));
-		nominalAbstractTypes.put(type.name(), t);
+		nominalAbstractTypes.put(type.name(), t2);
 		//nominalTypes.put(type.name(), compileType(type.type()));
 	}
 
-	public TypeLeaf getBoolean() {
-		return new TypeLeaf(Type.Boolean);
-	}
 	public TypeLeaf getByte() {
 		return new TypeLeaf(new Type.Std_logic_vector(7,0));
 	}
 
-	private TypeTree compileType(AbstractProducedType type) throws CompilerException {
+	private AccessibleTypeTree compileType(AbstractType type) throws CompilerException {
 		if (type == Int)
 			return new TypeLeaf(new Type.Signed(31,0));
 		if (type == Bool)
-			return getBoolean();
+			return new BooleanTypeLeaf();
 		if (type == Byte)
 			return getByte();
 		if (type == Null)
-			return new TypeRecord<>(Generators.emptyGenerator());
-		if (type instanceof ProducedRecord)
-			return new TypeRecord<>(((ProducedRecord<?>)type).getFields().mapSecond_(this::compileType));
-		if (type instanceof ProducedUnion)
-			return new TypeUnion(((ProducedUnion<?>)type).getOptions().map_(this::compileType));
-		if (type instanceof RecordUnion)
-			return new TypeRecordUnion(
-				new TypeRecord<>(((RecordUnion)type).getSharedFields().mapSecond_(this::compileType)),
-				new TypeRecord<>(((RecordUnion)type).getSpecificFields().mapSecond_(this::compileType).mapSecond(TypeOption::new)));
+			return new TypeSimpleRecord(Generators.emptyPairGenerator());
+		if (type instanceof Record)
+			return new TypeSimpleRecord(((Record<?>)type).getFields().mapSecond_(this::compileType));
+		if (type instanceof Union){
+			if (((Union<?>)type).getOptions().forAll((AbstractType t) -> t instanceof Record))
+				return createRecordUnion(((Union<?>)type).getOptions().map((AbstractType t) -> (Record) t));
+			return new TypeSimpleUnion(((Union<?>)type).getOptions().map_(this::compileType).map(TypeOption::new)); // TODO plus ! (rec union)
+		}
 		throw new CompilerException(new UnsupportedAbstractTypeCompilerError(type));
 
 	}
 
-	public TypeTree compileType(wyil.lang.Type type) throws CompilerException {
-		AbstractProducedType sType = constructRepresentation(type).toCanonicalForm().simplify();
+	public AccessibleTypeTree compileType(wyil.lang.Type type) throws CompilerException {
+		CanonicalType sType = constructRepresentation(type).toCanonicalForm().simplify();
 		if (!sType.isFinite())
 			throw UnresolvedTypeCompilerError.exception(type, sType);
 		return compileType(sType);

@@ -1,8 +1,10 @@
 package wyvc.utils;
 
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import wyvc.utils.FunctionalInterfaces.CheckedFunction;
+import wyvc.utils.FunctionalInterfaces.BiFunction_;
+import wyvc.utils.FunctionalInterfaces.Function_;
 import wyvc.utils.FunctionalInterfaces.Predicate;
 
 public class  Pair<S,T> {
@@ -22,6 +24,14 @@ public class  Pair<S,T> {
 		return second;
 	}
 
+	public <U,V> Pair<U,V> transform(Function<? super S, ? extends U> fisrtFunction, Function<? super T, ? extends V> secondFunction) {
+		return new Pair<>(fisrtFunction.apply(first), secondFunction.apply(second));
+	}
+
+	public <U> U transform(BiFunction<? super S, ? super T, ? extends U> function) {
+		return function.apply(first,second);
+	}
+
 	public <U> Pair<U,T> transformFirst(Function<? super S, ? extends U> function) {
 		return new Pair<>(function.apply(first), second);
 	}
@@ -30,11 +40,19 @@ public class  Pair<S,T> {
 		return new Pair<>(first, function.apply(second));
 	}
 
-	public <U, E extends Exception> Pair<U,T> transformFirst_(CheckedFunction<? super S, ? extends U, E> function) throws E {
+	public <U, E extends Exception> U transform_(BiFunction_<? super S, ? super T, ? extends U, E> function) throws E {
+		return function.apply(first,second);
+	}
+
+	public <U,V, E extends Exception> Pair<U,V> transform_(Function_<? super S, ? extends U, E> fisrtFunction, Function_<? super T, ? extends V, E> secondFunction) throws E {
+		return new Pair<>(fisrtFunction.apply(first), secondFunction.apply(second));
+	}
+
+	public <U, E extends Exception> Pair<U,T> transformFirst_(Function_<? super S, ? extends U, E> function) throws E {
 		return new Pair<>(function.apply(first), second);
 	}
 
-	public <U, E extends Exception> Pair<S,U> transformSecond_(CheckedFunction<? super T, ? extends U, E> function) throws E{
+	public <U, E extends Exception> Pair<S,U> transformSecond_(Function_<? super T, ? extends U, E> function) throws E{
 		return new Pair<>(first, function.apply(second));
 	}
 

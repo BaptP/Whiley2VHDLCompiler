@@ -324,6 +324,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final List<FunctionReturnNode> returns = new ArrayList<>();
 		public final List<DataArrow<?, ?>> args;
 
+
+
 		public FuncCallNode(Location<Bytecode.Invoke> call, List<HalfArrow<?>> args) {
 			super(call, null, args);
 			invokes.add(this);

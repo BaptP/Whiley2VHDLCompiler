@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import wyvc.utils.Generators.Generator;
+
 public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends OrientedGraph.Arrow<A,N>> {
 	public abstract static class Node<N extends Node<N,A>, A extends Arrow<A,N>> {
 		public final List<A> sources = new ArrayList<>();
@@ -25,12 +27,12 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 			targets.add(target);
 		}
 
-		public List<N> getSources() {
-			return Utils.convert(sources, (A a) -> a.from);
+		public Generator<N> getSources() {
+			return Generators.fromCollection(sources).map((A a) -> a.from);
 		}
 
-		public List<N> getTargets() {
-			return Utils.convert(targets, (A a) -> a.to);
+		public Generator<N> getTargets() {
+			return Generators.fromCollection(targets).map((A a) -> a.to);
 		}
 	}
 

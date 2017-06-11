@@ -17,6 +17,7 @@ import wyvc.builder.CompilerLogger.LoggedContainer;
 import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
+import wyvc.utils.Generators.PairGenerator_;
 import wyvc.utils.Generators.CustomPairGenerator;
 import wyvc.utils.Generators.EndOfGenerationException;
 import wyvc.utils.Generators.Generator;
@@ -71,6 +72,25 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 
+		public static class UnexistingFieldCompilerError extends CompilerError {
+			private final NamedNode<?> record;
+			private final String field;
+
+			public UnexistingFieldCompilerError(NamedNode<?> record, String field) {
+				this.record = record;
+				this.field = field;
+			}
+
+			@Override
+			public String info() {
+				return "No field \""+field+"\" exist in the node "+record.toString("  ");
+			}
+
+			public static CompilerException exception(NamedNode<?> record, String field) {
+				return new CompilerException(new UnexistingFieldCompilerError(record, field));
+			}
+		}
+
 
 		/*------- Interface content -------*/
 
@@ -92,7 +112,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		 * @param other					The tree to compare with
 		 * @return						<code>true</code> if the trees are equals, else <code>false</code>
 		 */
-//		public boolean equals(T other);
+		public boolean equals(Tree other);
 
 		/**
 		 * Pretty-printer for the tree structure.
@@ -149,9 +169,16 @@ public class LexicalElementTree extends LoggedBuilder {
 		public boolean isStructuredAs(Tree other) {
 			return other instanceof Leaf;
 		}
+
+		@Override
+		public boolean equals(Tree other) {
+			return other instanceof Leaf && ((Leaf<?>)other).getValue().equals(getValue());
+		}
+
+
 	}
 
-	public abstract class Node<T extends Tree> implements Tree {
+	public interface Node<T extends Tree> extends Tree {
 		public abstract int getNumberOfComponents();
 		public abstract PairGenerator<String, T> getComponents();
 
@@ -161,8 +188,10 @@ public class LexicalElementTree extends LoggedBuilder {
 //				((Node<?>)other).getComponents().takeSecond()).forAll(Tree::equals);
 //		}
 
+
+
 		@Override
-		public final String toString(String prefix1, String prefix2) {
+		default String toString(String prefix1, String prefix2) {
 			final int l = getNumberOfComponents();
 			return getComponents().enumerate().fold(
 				(String s, Pair<Integer, Pair<String, T>> c) -> s+
@@ -171,9 +200,15 @@ public class LexicalElementTree extends LoggedBuilder {
 					prefix2 + (c.first+1 == l ? "   " : "│  ")),
 				prefix1 + getClass().getSimpleName()+"\n");
 		}
+
+		@Override
+		default boolean equals(Tree other) {
+			return other instanceof Node && isStructuredAs(other) &&
+					((Node<?>)other).getComponents().takeSecond().gather(getComponents().takeSecond()).forAll(Tree::equals);
+		}
 	}
 
-	public class UnaryNode<T extends Tree, A extends T> extends Node<T> {
+	public class UnaryNode<T extends Tree, A extends T> implements Node<T> {
 		private final A operand;
 
 		public UnaryNode(A operand) {
@@ -204,13 +239,17 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 	}
 
-	public class BinaryNode<T extends Tree, A extends T, B extends T> extends Node<T> {
+	public class BinaryNode<T extends Tree, A extends T, B extends T> implements Node<T> {
 		private final A firstOperand;
 		private final B secondOperand;
 
 		public BinaryNode(A firstOperand, B secondOperand) {
 			this.firstOperand = firstOperand;
 			this.secondOperand = secondOperand;
+		}
+
+		public BinaryNode(Pair<A, B> operands) {
+			this(operands.first, operands.second);
 		}
 
 		protected String getFirstLabel() {
@@ -247,17 +286,20 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 	}
 
-	public class UnnamedNode<T extends Tree> extends Node<T> {
+	public class UnnamedNode<T extends Tree> implements Node<T> {
 		private final List<T> options;
 
-		public UnnamedNode(Generator<T> options) {
-			this.options = options.toList();
+		public UnnamedNode(Generator<? extends T> options) {
+			this.options = options.map((T t) -> t).toList();
 		}
-		public <E extends Exception> UnnamedNode(Generator_<T, E> options) throws E {
-			this.options = options.toList();
+		public <E extends Exception> UnnamedNode(Generator_<? extends T, E> options) throws E {
+			this.options = options.map((T t) -> t).toList();
 		}
 		public UnnamedNode(T option) {
 			this.options = Collections.singletonList(option);
+		}
+		public UnnamedNode() {
+			this.options = Collections.emptyList();
 		}
 
 		protected String getLabel(int k) {
@@ -291,24 +333,27 @@ public class LexicalElementTree extends LoggedBuilder {
 
 	}
 
-	public class NamedNode<T extends Tree> extends Node<T> {
+	public class NamedNode<T extends Tree> implements Node<T> {
 		private final List<Pair<String,T>> fields;
 
-		public NamedNode(Generator<Pair<String,T>> fields) {
-			this.fields = fields.toList();
+		public <A extends T> NamedNode(Generator<Pair<String,A>> fields) {
+			this.fields = Generators.toPairGenerator(fields).mapSecond((T t) -> t).toList();
 		}
-		public <E extends Exception> NamedNode(Generator_<Pair<String,T>, E> fields) throws E {
-			this.fields = fields.toList();
+		public <A extends T, E extends Exception> NamedNode(Generator_<Pair<String,A>, E> fields) throws E {
+			this.fields = Generators.toPairGenerator(fields).mapSecond((T t) -> t).toList();
 		}
 		public NamedNode(String name, T field) {
 			this.fields = Collections.singletonList(new Pair<>(name, field));
+		}
+		public NamedNode() {
+			this.fields = Collections.emptyList();
 		}
 
 		protected String getLabel(int k) {
 			return "opt_"+k;
 		}
 
-		public PairGenerator<String,T> getFields() {
+		public PairGenerator<String, T> getFields() {
 			return Generators.fromPairCollection(fields);
 		}
 
@@ -320,12 +365,25 @@ public class LexicalElementTree extends LoggedBuilder {
 			return fields.size();
 		}
 
+		public boolean hasField(String field) {
+			return getFieldNames().find(fields::equals) != null;
+		}
+
+		public T getField(String field) throws CompilerException {
+			for (Pair<String,T> f : fields)
+				if (f.first.equals(field))
+					return f.second;
+			throw UnexistingFieldCompilerError.exception(this, field);
+		}
+
 		@Override
 		public final boolean isStructuredAs(Tree other) {
-			return other instanceof NamedNode &&
-					getNumberOfFields() == ((NamedNode<?>)other).getNumberOfFields() &&
-					getFields().takeFirst().gather(((NamedNode<?>)other).getFields().takeFirst()).forAll(String::equals) &&
+			return other instanceof NamedNode && hasSameFields((NamedNode<?>)other) &&
 					getFields().takeSecond().gather(((NamedNode<?>)other).getFields().takeSecond()).forAll(Tree::isStructuredAs);
+		}
+
+		public final boolean hasSameFields(NamedNode<?> other) {
+			return getNumberOfFields() == other.getNumberOfFields() && getFields().takeFirst().gather(other.getFields().takeFirst()).forAll(String::equals);
 		}
 
 		@Override
@@ -339,36 +397,36 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 	}
 
-
-
-
-
-
-	public class RecordNode<T extends Tree> extends NamedNode<T> {
-
-		public RecordNode(Generator<Pair<String,T>> fields) {
-			super(fields);
-		}
-		public <E extends Exception> RecordNode(Generator_<Pair<String,T>, E> fields) throws E {
-			super(fields);
-		}
-		public RecordNode(String name, T field) {
-			super(name, field);
-		}
-	}
-
-	public class UnionNode<T extends Tree> extends UnnamedNode<T> {
-
-		public UnionNode(Generator<T> options) {
-			super(options);
-		}
-		public <E extends Exception> UnionNode(Generator_<T, E> options) throws E {
-			super(options);
-		}
-		public UnionNode(T option) {
-			super(option);
-		}
-	}
+//
+//
+//
+//
+//
+//	public class RecordNode<T extends Tree> extends NamedNode<T> {
+//
+//		public RecordNode(Generator<Pair<String,T>> fields) {
+//			super(fields);
+//		}
+//		public <E extends Exception> RecordNode(Generator_<Pair<String,T>, E> fields) throws E {
+//			super(fields);
+//		}
+//		public RecordNode(String name, T field) {
+//			super(name, field);
+//		}
+//	}
+//
+//	public class UnionNode<T extends Tree> extends UnnamedNode<T> {
+//
+//		public UnionNode(Generator<T> options) {
+//			super(options);
+//		}
+//		public <E extends Exception> UnionNode(Generator_<T, E> options) throws E {
+//			super(options);
+//		}
+//		public UnionNode(T option) {
+//			super(option);
+//		}
+//	}
 
 //
 //
