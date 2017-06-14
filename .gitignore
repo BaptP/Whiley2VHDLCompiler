@@ -6,3 +6,4 @@ target/*
 running/*.ps
 running/*.png
 running/*.xdot
+/target/
