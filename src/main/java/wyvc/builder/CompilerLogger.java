@@ -163,7 +163,8 @@ public class CompilerLogger {
 			level = level+"│ ";
 		}
 		public void debugLevel(String message){
-			debug(level+message);
+			for (String e : message.split("\n"))
+				debug(level+e);
 		}
 		protected void closeLevel() {
 			level = level.substring(0, Math.max(0,level.length()-2));
@@ -171,6 +172,7 @@ public class CompilerLogger {
 			block.pop();
 		}
 		protected <T> T end(T a) {
+//			debugLevel("R " + a);
 /**/			closeLevel();
 			return a;
 		}

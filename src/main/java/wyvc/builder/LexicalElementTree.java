@@ -21,6 +21,8 @@ import wyvc.utils.Generators.PairGenerator_;
 import wyvc.utils.Generators.CustomPairGenerator;
 import wyvc.utils.Generators.EndOfGenerationException;
 import wyvc.utils.Generators.Generator;
+import wyvc.utils.FunctionalInterfaces;
+import wyvc.utils.FunctionalInterfaces.Function;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 
@@ -41,7 +43,7 @@ public class LexicalElementTree extends LoggedBuilder {
 
 
 
-	public static interface Tree {
+	public static interface Tree<V> {
 		/*------- Compiler messages -------*/
 
 		/**
@@ -73,10 +75,10 @@ public class LexicalElementTree extends LoggedBuilder {
 
 
 		public static class UnexistingFieldCompilerError extends CompilerError {
-			private final NamedNode<?> record;
+			private final NamedNode<?,?> record;
 			private final String field;
 
-			public UnexistingFieldCompilerError(NamedNode<?> record, String field) {
+			public UnexistingFieldCompilerError(NamedNode<?,?> record, String field) {
 				this.record = record;
 				this.field = field;
 			}
@@ -86,7 +88,7 @@ public class LexicalElementTree extends LoggedBuilder {
 				return "No field \""+field+"\" exist in the node "+record.toString("  ");
 			}
 
-			public static CompilerException exception(NamedNode<?> record, String field) {
+			public static CompilerException exception(NamedNode<?,?> record, String field) {
 				return new CompilerException(new UnexistingFieldCompilerError(record, field));
 			}
 		}
@@ -101,7 +103,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		 * @param other 				The tree to compare with
 		 * @return 						<code>true</code> if the structure matches, else <code>false</code>
 		 */
-		public boolean isStructuredAs(Tree other);
+		public boolean isStructuredAs(Tree<?> other);
 
 		/**
 		 * Compares the tree with <code>other</code>.
@@ -112,7 +114,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		 * @param other					The tree to compare with
 		 * @return						<code>true</code> if the trees are equals, else <code>false</code>
 		 */
-		public boolean equals(Tree other);
+		public boolean equals(Object other);
 
 		/**
 		 * Pretty-printer for the tree structure.
@@ -139,13 +141,15 @@ public class LexicalElementTree extends LoggedBuilder {
 		 * @param other 				The tree to compare with
 		 * @throws CompilerException 	Thrown if the structures mismatch
 		 */
-		public default void checkIdenticalStructure(Tree other) throws CompilerException {
+		public default void checkIdenticalStructure(Tree<?> other) throws CompilerException {
 			if (!isStructuredAs(other))
 				throw TreeStructureCompilerError.exception(this, other);
 		}
+
+		Generator<V> getValues();
 	}
 
-	public class Leaf<V> implements Tree {
+	public class Leaf<V> implements Tree<V> {
 		private final V value;
 
 		public Leaf(V value) {
@@ -166,19 +170,27 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public boolean isStructuredAs(Tree other) {
+		public boolean isStructuredAs(Tree<?> other) {
 			return other instanceof Leaf;
 		}
 
 		@Override
-		public boolean equals(Tree other) {
+		public boolean equals(Object other) {
+//			if (other instanceof Leaf){
+//				debugLevel("Leaf comparison "+((Leaf<V>)other).getValue()+"/"+getValue());
+//				debugLevel("-> " + ((Leaf<V>)other).getValue().equals(getValue()));
+//			}
 			return other instanceof Leaf && ((Leaf<?>)other).getValue().equals(getValue());
+		}
+		@Override
+		public Generator<V> getValues() {
+			return Generators.fromSingleton(value);
 		}
 
 
 	}
 
-	public interface Node<T extends Tree> extends Tree {
+	public interface Node<T extends Tree<V>,V> extends Tree<V> {
 		public abstract int getNumberOfComponents();
 		public abstract PairGenerator<String, T> getComponents();
 
@@ -194,21 +206,20 @@ public class LexicalElementTree extends LoggedBuilder {
 		default String toString(String prefix1, String prefix2) {
 			final int l = getNumberOfComponents();
 			return getComponents().enumerate().fold(
-				(String s, Pair<Integer, Pair<String, T>> c) -> s+
+				(String s, Pair<Integer, Pair<String, T>> c) -> s+"\n"+
 				c.second.second.toString(
 					prefix2 + (c.first+1 == l ? "└─ " : "├─ ") + (c.second.first.length() != 0 ? c.second.first+" : " : ""),
 					prefix2 + (c.first+1 == l ? "   " : "│  ")),
-				prefix1 + getClass().getSimpleName()+"\n");
+				prefix1 + getClass().getSimpleName());
 		}
 
 		@Override
-		default boolean equals(Tree other) {
-			return other instanceof Node && isStructuredAs(other) &&
-					((Node<?>)other).getComponents().takeSecond().gather(getComponents().takeSecond()).forAll(Tree::equals);
+		default Generator<V> getValues() {
+			return Generators.concat(getComponents().takeSecond().map(Tree::getValues));
 		}
 	}
 
-	public class UnaryNode<T extends Tree, A extends T> implements Node<T> {
+	public class UnaryNode<T extends Tree<V>, A extends T,V> implements Node<T,V> {
 		private final A operand;
 
 		public UnaryNode(A operand) {
@@ -224,8 +235,13 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public final boolean isStructuredAs(Tree other) {
-			return other instanceof UnaryNode && getOperand().isStructuredAs(((UnaryNode<?, ?>)other).getOperand());
+		public final boolean isStructuredAs(Tree<?> other) {
+			return other instanceof UnaryNode && getOperand().isStructuredAs(((UnaryNode<?, ?, ?>)other).getOperand());
+		}
+
+		@Override
+		public final boolean equals(Object other) {
+			return other instanceof UnaryNode && ((UnaryNode<?,?,?>)other).getOperand().equals(getOperand());
 		}
 
 		@Override
@@ -239,7 +255,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 	}
 
-	public class BinaryNode<T extends Tree, A extends T, B extends T> implements Node<T> {
+	public class BinaryNode<T extends Tree<V>, A extends T, B extends T,V> implements Node<T,V> {
 		private final A firstOperand;
 		private final B secondOperand;
 
@@ -253,10 +269,10 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		protected String getFirstLabel() {
-			return "op_0";
+			return "op0";
 		}
 		protected String getSecondLabel() {
-			return "op_1";
+			return "op1";
 		}
 
 		public final A getFirstOperand() {
@@ -267,10 +283,17 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public final boolean isStructuredAs(Tree other) {
+		public final boolean isStructuredAs(Tree<?> other) {
 			return other instanceof BinaryNode &&
-					getFirstOperand().isStructuredAs(((BinaryNode<?, ?, ?>)other).getFirstOperand()) &&
-					getSecondOperand().isStructuredAs(((BinaryNode<?, ?, ?>)other).getSecondOperand());
+					getFirstOperand().isStructuredAs(((BinaryNode<?, ?, ?, ?>)other).getFirstOperand()) &&
+					getSecondOperand().isStructuredAs(((BinaryNode<?, ?, ?, ?>)other).getSecondOperand());
+		}
+
+		@Override
+		public final boolean equals(Object other) {
+			return other instanceof BinaryNode &&
+					((BinaryNode<?,?,?,?>)other).getFirstOperand().equals(getFirstOperand()) &&
+					((BinaryNode<?,?,?,?>)other).getSecondOperand().equals(getSecondOperand());
 		}
 
 		@Override
@@ -286,7 +309,11 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 	}
 
-	public class UnnamedNode<T extends Tree> implements Node<T> {
+	public static <T> Function<T,T> id() {
+		return new FunctionalInterfaces.Identity<T>();
+	}
+
+	public class UnnamedNode<T extends Tree<V>,V> implements Node<T,V> {
 		private final List<T> options;
 
 		public UnnamedNode(Generator<? extends T> options) {
@@ -303,7 +330,7 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		protected String getLabel(int k) {
-			return "opt_"+k;
+			return "opt"+k;
 		}
 
 		public Generator<T> getOptions() {
@@ -315,10 +342,16 @@ public class LexicalElementTree extends LoggedBuilder {
 		}
 
 		@Override
-		public final boolean isStructuredAs(Tree other) {
+		public final boolean isStructuredAs(Tree<?> other) {
 			return other instanceof UnnamedNode &&
-					getNumberOfOptions() == ((UnnamedNode<?>)other).getNumberOfOptions() &&
-					getOptions().gather(((UnnamedNode<?>)other).getOptions()).forAll(Tree::isStructuredAs);
+					getNumberOfOptions() == ((UnnamedNode<?,?>)other).getNumberOfOptions() &&
+					getOptions().gather(((UnnamedNode<?,?>)other).getOptions().map((Tree<?> t) -> t)).forAll(Tree::isStructuredAs);
+			// Identity to avoid java.lang.BootstrapMethodError: call site initialization exception
+		}
+
+		@Override
+		public final boolean equals(Object other) {
+			return other instanceof UnnamedNode && ((UnnamedNode<?,?>)other).getOptions().gather(getOptions()).forAll(Object::equals);
 		}
 
 		@Override
@@ -333,7 +366,7 @@ public class LexicalElementTree extends LoggedBuilder {
 
 	}
 
-	public class NamedNode<T extends Tree> implements Node<T> {
+	public class NamedNode<T extends Tree<V>,V> implements Node<T,V> {
 		private final List<Pair<String,T>> fields;
 
 		public <A extends T> NamedNode(Generator<Pair<String,A>> fields) {
@@ -376,13 +409,21 @@ public class LexicalElementTree extends LoggedBuilder {
 			throw UnexistingFieldCompilerError.exception(this, field);
 		}
 
+
 		@Override
-		public final boolean isStructuredAs(Tree other) {
-			return other instanceof NamedNode && hasSameFields((NamedNode<?>)other) &&
-					getFields().takeSecond().gather(((NamedNode<?>)other).getFields().takeSecond()).forAll(Tree::isStructuredAs);
+		public final boolean isStructuredAs(Tree<?> other) {
+			return other instanceof NamedNode && hasSameFields((NamedNode<?,?>)other) &&
+					getFields().takeSecond().gather(((NamedNode<?,?>)other).getFields().takeSecond().map((Tree<?> t) -> t)).forAll(Tree::isStructuredAs);
+			// Identity to avoid java.lang.BootstrapMethodError: call site initialization exception
 		}
 
-		public final boolean hasSameFields(NamedNode<?> other) {
+		@Override
+		public final boolean equals(Object other) {
+			return other instanceof NamedNode && hasSameFields((NamedNode<?,?>)other) &&
+					((NamedNode<?,?>)other).getFields().takeSecond().gather(getFields().takeSecond()).forAll(Object::equals);
+		}
+
+		public final boolean hasSameFields(NamedNode<?,?> other) {
 			return getNumberOfFields() == other.getNumberOfFields() && getFields().takeFirst().gather(other.getFields().takeFirst()).forAll(String::equals);
 		}
 

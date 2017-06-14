@@ -127,6 +127,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			this.arrow = arrow;
 			return arrow;
 		}
+
+		@Override
+		public String toString() {
+			return node.toString()+"--"+(ident == null ? "" : ident)+"-->";
+		}
 	}
 
 	public abstract class InterfaceNode extends DataNode {
@@ -183,6 +188,9 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			super(label, type, Collections.singletonList(fct));
 			this.fct = fct.arrow;
 			fct.node.returns.add(this);
+		}
+		public FunctionReturnNode(String label, Type type, FuncCallNode fct) {
+			this(label, type, new HalfArrow<>(fct));
 		}
 
 		@Override

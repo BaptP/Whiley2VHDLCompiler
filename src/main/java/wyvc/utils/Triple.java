@@ -10,4 +10,16 @@ public class Triple<S,T,U> {
 		this.second = second;
 		this.third = third;
 	}
+
+	public S getFirst() {
+		return first;
+	}
+
+	public T getSecond() {
+		return second;
+	}
+
+	public U getThird() {
+		return third;
+	}
 }

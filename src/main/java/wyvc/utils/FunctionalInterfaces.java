@@ -78,12 +78,18 @@ public interface FunctionalInterfaces {
 			return (A a, B b) -> f.apply(apply(a,b));
 		}
 
-		default <C> Function<C,R> p(Function<? super C,? extends A> f, Function<? super C,? extends B> g) {
+		default <C> Function<C,R> q(Function<? super C,? extends A> f, Function<? super C,? extends B> g) {
 			return (C c) -> apply(f.apply(c),g.apply(c));
 		}
+		default <C,D> BiFunction<C,D,R> p(Function<? super C,? extends A> f, Function<? super D,? extends B> g) {
+			return (C c, D d) -> apply(f.apply(c),g.apply(d));
+		}
 
-		default <C, E extends Exception> Function_<C,R,E> p_(Function_<? super C,? extends A,E> f, Function_<? super C,? extends B,E> g) {
+		default <C, E extends Exception> Function_<C,R,E> q_(Function_<? super C,? extends A,E> f, Function_<? super C,? extends B,E> g) {
 			return (C c) -> apply(f.apply(c),g.apply(c));
+		}
+		default <C, D, E extends Exception> BiFunction_<C,D,R,E> p_(Function_<? super C,? extends A,E> f, Function_<? super D,? extends B,E> g) {
+			return (C c, D d) -> apply(f.apply(c),g.apply(d));
 		}
 
 		default <E extends Exception> BiFunction_<A,B,R,E> toChecked() {
@@ -103,7 +109,10 @@ public interface FunctionalInterfaces {
 			return (A a, B b) -> f.apply(apply(a,b));
 		}
 
-		default <C> Function_<C,R,E> p(Function_<? super C,? extends A,E> f, Function_<? super C,? extends B,E> g) {
+		default <C, D> BiFunction_<C,D,R,E> p(Function_<? super C,? extends A,E> f, Function_<? super D,? extends B,E> g) {
+			return (C c, D d) -> apply(f.apply(c),g.apply(d));
+		}
+		default <C> Function_<C,R,E> q(Function_<? super C,? extends A,E> f, Function_<? super C,? extends B,E> g) {
 			return (C c) -> apply(f.apply(c),g.apply(c));
 		}
 
@@ -111,6 +120,63 @@ public interface FunctionalInterfaces {
 			return (Pair<C,D> p) -> apply(p.first, p.second);
 		}
 	}
+
+	/*---- f : A,B,C -> R ----*/
+
+	@FunctionalInterface
+	public static interface TriFunction<A,B,C,R> {
+		R apply(A a, B b, C c);
+
+		default <T> TriFunction<A,B,C,T> o(Function<? super R, T> f) {
+			return (A a, B b, C c) -> f.apply(apply(a,b,c));
+		}
+		default <T, E extends Exception> TriFunction_<A,B,C,T,E> o_(Function_<? super R, T, E> f) {
+			return (A a, B b, C c) -> f.apply(apply(a,b,c));
+		}
+
+		default <D> Function<D,R> q(Function<? super D,? extends A> f, Function<? super D,? extends B> g, Function<? super D,? extends C> h) {
+			return (D d) -> apply(f.apply(d),g.apply(d),h.apply(d));
+		}
+		default <D,E,F> TriFunction<D,E,F,R> p(Function<? super D,? extends A> d, Function<? super E,? extends B> e, Function<? super F,? extends C> f) {
+			return (D d_, E e_, F f_) -> apply(d.apply(d_),e.apply(e_),f.apply(f_));
+		}
+
+		default <D, E extends Exception> Function_<D,R,E> q_(Function_<? super D,? extends A,E> f, Function_<? super D,? extends B,E> g, Function_<? super D,? extends C,E> h) {
+			return (D d) -> apply(f.apply(d),g.apply(d),h.apply(d));
+		}
+		default <F, G, H, E extends Exception> TriFunction_<F,G,H,R,E> p_(Function_<? super F,? extends A,E> f, Function_<? super G,? extends B,E> g, Function_<? super H,? extends C,E> h) {
+			return (F f_, G g_, H h_) -> apply(f.apply(f_),g.apply(g_),h.apply(h_));
+		}
+
+		default <E extends Exception> TriFunction_<A,B,C,R,E> toChecked() {
+			return (A a, B b, C c) -> apply(a,b,c);
+		}
+
+		default <D extends A, E extends B, F extends C> Function<Triple<D,E,F>,R> toFunction() {
+			return (Triple<D,E,F> t) -> apply(t.first, t.second,t.third);
+		}
+	}
+
+	@FunctionalInterface
+	public static interface TriFunction_<A,B,C,R,E extends Exception> {
+		R apply(A a, B b, C c) throws E;
+
+		default <T> TriFunction_<A,B,C,T,E> o(Function_<? super R, T, E> f) {
+			return (A a, B b, C c) -> f.apply(apply(a,b,c));
+		}
+
+		default <D> Function_<D,R,E> q(Function_<? super D,? extends A,E> f, Function_<? super D,? extends B,E> g, Function_<? super D,? extends C,E> h) {
+			return (D d) -> apply(f.apply(d),g.apply(d),h.apply(d));
+		}
+		default <F, G, H> TriFunction_<F,G,H,R,E> p(Function_<? super F,? extends A,E> f, Function_<? super G,? extends B,E> g, Function_<? super H,? extends C,E> h) {
+			return (F f_, G g_, H h_) -> apply(f.apply(f_),g.apply(g_),h.apply(h_));
+		}
+
+		default <F extends A, G extends B, H extends C> Function_<Triple<F,G,H>,R,E> toFunction() {
+			return (Triple<F,G,H> t) -> apply(t.first, t.second,t.third);
+		}
+	}
+
 
 
 	/*---- f : A -> boolean ----*/
@@ -150,6 +216,31 @@ public interface FunctionalInterfaces {
 
 		default <C extends A, D extends B> Predicate_<Pair<C,D>,E> toPredicate() {
 			return (Pair<C,D> p) -> test(p.first, p.second);
+		}
+	}
+
+	/*---- f : A,B,C -> boolean ----*/
+
+	@FunctionalInterface
+	public static interface TriPredicate<A,B,C> {
+		boolean test(A a, B b, C c);
+
+		default <E extends Exception> TriPredicate_<A,B,C,E> toChecked() {
+			return (A a, B b, C c) -> test(a,b,c);
+		}
+
+		default <D extends A, E extends B, F extends C> Predicate<Triple<D,E,F>> toConsumer() {
+			return (Triple<D,E,F> t) -> test(t.first, t.second, t.third);
+		}
+	}
+
+	@FunctionalInterface
+	public static interface TriPredicate_<A,B,C,E extends Exception> {
+		boolean test(A a, B b, C c) throws E;
+
+
+		default <D extends A, F extends B, G extends C> Consumer_<Triple<D,F,G>,E> toConsumer() {
+			return (Triple<D,F,G> t) -> test(t.first, t.second, t.third);
 		}
 	}
 
@@ -245,6 +336,29 @@ public interface FunctionalInterfaces {
 		}
 	}
 
+	/*---- f : A,B,C -> () ----*/
+
+	@FunctionalInterface
+	public static interface TriConsumer<A,B,C> {
+		void accept(A a, B b, C c);
+
+		default <E extends Exception> TriConsumer_<A,B,C,E> toChecked() {
+			return (A a, B b, C c) -> accept(a,b, c);
+		}
+
+		default <D extends A, E extends B, F extends C> Consumer<Triple<D,E,F>> toConsumer() {
+			return (Triple<D,E,F> t) -> accept(t.first, t.second, t.third);
+		}
+	}
+
+	@FunctionalInterface
+	public static interface TriConsumer_<A,B,C,E extends Exception> {
+		void accept(A a, B b, C c) throws E;
+
+		default <D extends A, F extends B, G extends C> Consumer_<Triple<D,F,G>,E> toConsumer() {
+			return (Triple<D,F,G> t) -> accept(t.first, t.second, t.third);
+		}
+	}
 
 	/*---- f : () -> boolean ----*/
 

@@ -8,6 +8,9 @@ import java.util.Arrays;
 public abstract class Type implements LexicalElement {
 
 	public abstract boolean equals(Type other);
+	public final boolean equals(Object other) {
+		return other instanceof Type && equals((Type) other);
+	}
 
 	public abstract String getDefault();
 
