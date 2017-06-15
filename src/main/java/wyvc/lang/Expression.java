@@ -360,9 +360,9 @@ public interface Expression extends LexicalElement {
 			super(type);
 			if (type instanceof Type.Signed)
 				this.value = "to_signed("+value+", "+((Type.Signed) type).lenght()+")";
-			else if (type instanceof Type.Std_logic_vector)
+			else /*if (type instanceof Type.Std_logic_vector)
 				this.value = "\""+value.substring(0, value.length()-1)+"\"";
-			else
+			else*/
 				this.value = value;
 		}
 

@@ -154,8 +154,11 @@ public class EntityCompiler {
 		 * @param name
 		 * @return
 		 */
-		private Signal getSignal(DataArrow<?,?> source, String name) {
+		private Signal getSignal(DataArrow<?,?> source, String name) { // TODO Obsolete ?
 			return Utils.addIfAbsent(created, source.from, () -> planCompilation(createSignal(name, source.from), source.from));
+		}
+		private Signal getSignal(DataNode source, String name) {
+			return Utils.addIfAbsent(created, source, () -> planCompilation(createSignal(name, source), source));
 		}
 
 		private Signal getSignal(NamedDataArrow<?,?> source) {
@@ -209,36 +212,20 @@ public class EntityCompiler {
 		private Expression compileBinOp(BinOpNode node) throws CompilerException {
 			Expression e1 = compileExpression(node.op1);
 			Expression e2 = compileExpression(node.op2);
-			switch (node.location.getBytecode().kind()) {
-			case ADD:
-				return new Expression.Add(e1, e2);
-			case SUB:
-				return new Expression.Sub(e1, e2);
-			case MUL:
-				return new Expression.SubVector(new Expression.Mul(e1, e2), ((VectorType)node.type).lenght()-1, 0);
-			case BITWISEAND:
-			case AND:
-				return new Expression.And(e1, e2);
-			case BITWISEOR:
-			case OR:
-			case IS:
-				return new Expression.Or (e1, e2);
-			case BITWISEXOR:
-				return new Expression.Xor(e1, e2);
-			case EQ:
-				return new Expression.Eq(e1, e2);
-			case NEQ:
-				return new Expression.Ne(e1, e2);
-			case LT:
-				return new Expression.Lt(e1, e2);
-			case LTEQ:
-				return new Expression.Le(e1, e2);
-			case GT:
-				return new Expression.Gt(e1, e2);
-			case GTEQ:
-				return new Expression.Ge(e1, e2);
-			default:
-				throw new CompilerException(new UnsupportedDataNodeError(node));
+			switch (node.kind) {
+			case Add: return new Expression.Add(e1, e2);
+			case Sub: return new Expression.Sub(e1, e2);
+			case Mul: return new Expression.SubVector(new Expression.Mul(e1, e2), ((VectorType)node.type).lenght()-1, 0);
+			case And: return new Expression.And(e1, e2);
+			case Or:  return new Expression.Or (e1, e2);
+			case Xor: return new Expression.Xor(e1, e2);
+			case Eq:  return new Expression.Eq(e1, e2);
+			case Ne:  return new Expression.Ne(e1, e2);
+			case Lt:  return new Expression.Lt(e1, e2);
+			case Le:  return new Expression.Le(e1, e2);
+			case Gt:  return new Expression.Gt(e1, e2);
+			case Ge:  return new Expression.Ge(e1, e2);
+			default:  throw new CompilerException(new UnsupportedDataNodeError(node));
 			}
 		}
 
@@ -258,12 +245,8 @@ public class EntityCompiler {
 			compiled.add(call);
 			Component fct = fcts.get(call.funcName);
 			components.add(fct);
-			List<Signal> args = Utils.checkedConvert(
-				call.sources,
-				(DataArrow<?,?> n, Integer k) -> getSignal(n, call.funcName+"_arg_"+k));
-			List<Signal> rets = Utils.checkedConvert(
-				call.returns,
-				(FunctionReturnNode n) -> Utils.addIfAbsent(created, n, () -> createSignal(n.nodeIdent, n)));
+			List<Signal> args = call.getSources().enumerate().map((k,n) -> getSignal(n, call.funcName+"_arg_"+k)).toList();
+			List<Signal> rets = call.getReturns().map(n -> Utils.addIfAbsent(created, n, () -> createSignal(n.nodeIdent, n))).toList();
 			return new ComponentInstance(getFreshLabel(call.funcName), fct, Utils.concat(args, rets).toArray(new Signal[args.size()+rets.size()]));
 		}
 
@@ -295,8 +278,8 @@ public class EntityCompiler {
 			this.portsIn = portsIn;
 			this.portsOut = portsOut;
 			//this.fctName = name;
-			Utils.checkedForEach(sec.inputs, (InputNode n) -> createPort(n));
-			Utils.checkedForEach(sec.outputs, (OutputNode n) -> createPort(n));
+			sec.getInputNodes().forEach(this::createPort);
+			sec.getOutputNodes().forEach(this::createPort);
 			compileSignals();
 			Collections.reverse(statements);
 			return statements;
@@ -337,19 +320,14 @@ public class EntityCompiler {
 			throw new CompilerException(new EmptyEntityError(name));
 		Compiler cmp = new Compiler(logger, fcts);
 		List<ConcurrentStatement> statements = new ArrayList<>();
-		List<Signal> out = new ArrayList<>();
 		DataFlowGraph pSec = parts.get(0);
 		statements.addAll(cmp.compile(name, pSec, true, parts.size() == 1));
 		for (DataFlowGraph sec : parts.subList(1, parts.size())) {
-			out = Utils.convert(pSec.outputs, (OutputNode o) -> cmp.getIO(o));
 			statements.addAll(cmp.compile(name, sec, false, sec == parts.get(parts.size()-1)));
-			pSec = sec;
-			List<Signal> in = Utils.convert(pSec.inputs, (InputNode n) -> cmp.getIO(n));
 			statements.add(new Process(cmp.getFreshLabel("Cycle"), new Variable[0], new Signal[0],
-				Utils.checkedConvert(
-					Utils.gather(out, in),
-					(Pair<Signal, Signal> p) -> new SignalAssignment(p.second, new Access(p.first))
-					).toArray(new SequentialStatement[in.size()])));
+				pSec.getOutputNodes().map(cmp::getIO).gather(sec.getInputNodes().map(cmp::getIO)).
+				mapSecond_(Access::new).map(SignalAssignment::new).toList().toArray(new SequentialStatement[pSec.outputs.size()])));
+			pSec = sec;
 		}
 		Entity entity = new Entity(name, cmp.getInterface());
 		entity.addArchitectures(new Architecture(entity, "Behavioural", cmp.getSignals(), cmp.getConstants(), cmp.getComponent(),

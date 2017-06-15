@@ -64,8 +64,9 @@ public class GraphPrinter {
 				output.write("  inp -> n"+nodes.get(n)+" "+"[color=blue];\n");
 
 			for (A a : graph.arrows)
-				output.write("  n"+nodes.get(a.from)+" -> n"+nodes.get(a.to)+"["+String.join(",",Utils.concat(a.getOptions(),
-					Collections.singletonList("label=\""+a.getSafeIdent()+"\"")))+"];\n");
+				output.write("  n"+nodes.get(a.from)+" -> n"+nodes.get(a.to)+
+/**/				"["+String.join(",",Utils.concat(a.getOptions(),Collections.singletonList("label=\""+a.getSafeIdent()+"\"")))+"]"+
+				";\n");
 
 			for (N n : graph.getOutputs())
 				output.write("  n"+nodes.get(n)+" -> out [color=red];\n");

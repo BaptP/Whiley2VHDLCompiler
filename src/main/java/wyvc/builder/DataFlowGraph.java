@@ -6,8 +6,12 @@ import wyil.lang.Bytecode;
 import wyil.lang.Bytecode.OperatorKind;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.io.GraphPrinter.PrintableGraph;
+import wyvc.lang.Expression;
 import wyvc.lang.Type;
+import wyvc.lang.Type.VectorType;
 import wyvc.lang.TypedValue.Port.Mode;
+import wyvc.utils.Generators;
+import wyvc.utils.Generators.Generator;
 import wyvc.utils.Utils;
 
 import java.util.ArrayList;
@@ -82,9 +86,13 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			nodeIdent = label;
 		}
 
+		private String getShortIdent() {
+			return nodeIdent.length() < 16 ? nodeIdent : nodeIdent.substring(0, 9)+"..."+nodeIdent.substring(nodeIdent.length()-4);
+		}
+
 		@Override
 		public String getIdent() {
-			return nodeIdent+"\n"+(type == null ? "Untyped" : type.toString());
+			return getShortIdent()+"\n"+(type == null ? "Untyped" : type.toString());
 		}
 
 		@Override
@@ -281,11 +289,17 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		return new ExternConstNode(Type.Boolean, "false");
 	}
 
-	public final class UnaOpNode extends InstructionNode<Bytecode.Operator> {
+	public static enum UnaryOperation {
+		Not;
+	}
+
+	public final class UnaOpNode extends WyilNode<Bytecode.Operator> {
+		public final UnaryOperation kind;
 		public final DataArrow<?,?> op;
 
-		public UnaOpNode(Location<Bytecode.Operator> binOp, Type type, HalfArrow<?> op) {
+		public UnaOpNode(Location<Bytecode.Operator> binOp, UnaryOperation kind, Type type, HalfArrow<?> op) {
 			super(binOp, type, Arrays.asList(op));
+			this.kind = kind;
 			this.op = op.arrow;
 		}
 
@@ -296,16 +310,25 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public DataNode duplicate(Duplicator duplicator) {
-			return new UnaOpNode(location, type, duplicator.duplicate(op));
+			return new UnaOpNode(location, kind, type, duplicator.duplicate(op));
 		}
 	}
 
+	public static enum BinaryOperation {
+		Add, Sub, Mul, Div,
+		And, Or, Xor,
+		Eq, Ne,
+		Lt, Le, Gt, Ge;
+	}
+
 	public final class BinOpNode extends WyilNode<Bytecode.Operator> {
+		public final BinaryOperation kind;
 		public final DataArrow<?,?> op1;
 		public final DataArrow<?,?> op2;
 
-		public BinOpNode(Location<Bytecode.Operator> binOp, Type type, HalfArrow<?> op1, HalfArrow<?> op2){
-			super(binOp, type, Arrays.asList(op1, op2));
+		public BinOpNode(Location<Bytecode.Operator> binOp, BinaryOperation kind, Type type, HalfArrow<?> op1, HalfArrow<?> op2){
+			super(kind.toString(), binOp, type, Arrays.asList(op1, op2));
+			this.kind = kind;
 			this.op1 = op1.arrow;
 			this.op2 = op2.arrow;
 		}
@@ -323,7 +346,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public DataNode duplicate(Duplicator duplicator) {
-			return new BinOpNode(location, type, duplicator.duplicate(op1), duplicator.duplicate(op2));
+			return new BinOpNode(location, kind, type, duplicator.duplicate(op1), duplicator.duplicate(op2));
 		}
 	}
 
@@ -339,6 +362,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			invokes.add(this);
 			funcName = call.getBytecode().name().name();
 			this.args = Utils.convert(args, (HalfArrow<?> a) -> a.arrow);
+		}
+
+		public final Generator<FunctionReturnNode> getReturns() {
+			return Generators.fromCollection(returns);
 		}
 
 		@Override
@@ -405,10 +432,20 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	public List<OutputNode> outputs = new ArrayList<>();
 	public List<FuncCallNode> invokes = new ArrayList<>();
 
+	public Generator<InputNode> getInputNodes() {
+		return Generators.fromCollection(inputs);
+	}
+	public Generator<OutputNode> getOutputNodes() {
+		return Generators.fromCollection(outputs);
+	}
+	public Generator<FuncCallNode> getInvokesNodes() {
+		return Generators.fromCollection(invokes);
+	}
+
 
 	static private String toString(Bytecode b) {
 		if (b instanceof Bytecode.Operator)
-			return ((Bytecode.Operator) b).kind() == OperatorKind.IS ? "or" : ((Bytecode.Operator) b).kind().toString();
+			return ((Bytecode.Operator) b).kind().toString();
 		if (b instanceof Bytecode.Const)
 			return ((Bytecode.Const) b).constant().toString();
 		if (b instanceof Bytecode.If)

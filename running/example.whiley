@@ -1,50 +1,43 @@
+//type T is int|byte
+//type U is int|bool
+//type V is T|U
+
+function e(int c) -> int|bool:
+    int|bool a = c
+    if c == 0:
+      a = false
+    return a
 
 
-type Test is {int a, int b}
+type Test is {
+    int|bool x, 
+    byte y
+}
+type Test2 is {
+    int x, 
+    {int a,bool b} z
+}
 
-function foo(Test t, int e) -> (Test f, Test g):
-    int x
-    x = t.a+t.b-e
-    int y
-    y = 3*x
-    skip
-    Test t2 = {a : x, b : y}
-    y = 42 + t.a
-    y = y +t2.a
-    if (y == x):
-        y = 5
-        int x = 2
-        int p = 4
-    t = t2
-    t.a = t.b+t.a+y
-    skip
-    t2.b = t.a+t2.b
-    return t,t2
+function inc2(Test|Test2 t) -> Test|Test2:
+    if t is Test2:
+        t.x = t.x + 1
+    return t
+/*
+function ip(int a, int b) -> (int x, int y):
+    int s = a+b
+    int d = a-b
+    return s,d*/
     
 /*
-type Hello is {int k}
-type Bonjour is {byte e, bool u, Hello h}
+type T1 is {int a, byte c}
+type T2 is {int|bool a}
 
-function foo2(int x) -> (int a)
-ensures a == 5*x:
-    int r
-    r = bar(x,x)
-    Bonjour t = A({k : x}, 0)
-    skip
-    int u
-    u,r,x = swap(t.h.k,r-3),x+2
-    return u+r+x-2
-function bar(int x, int y) -> int :
-    int a = x + 2
-    int b = a-4
-    return y + b + a
+
+function f(T1|T2 t) -> int:
+    int|bool a = t.a
+    if a is int:
+        return a
+    return 0
     
-function swap(int t, int r) -> (int a, int c) :
-    return r,t
-
-
-function A(Hello h, int l) -> Bonjour :
-    Bonjour s = {e : 00b, u : false, h : h}
-    s.h.k = s.h.k + l
-    return s
-*/
+function main(bool b) -> bool|byte|int:
+    return f({a:b})*/

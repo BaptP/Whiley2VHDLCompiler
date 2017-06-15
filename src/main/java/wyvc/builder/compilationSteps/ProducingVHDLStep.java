@@ -13,6 +13,7 @@ import wyvc.builder.compilationSteps.InliningStep.SplittedFunctions;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
 import wyvc.lang.VHDLFile;
+import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
 
@@ -34,10 +35,7 @@ public class ProducingVHDLStep extends CompilationStep<SplittedFunctions, Produc
 	@Override
 	protected CompiledFile compile(CompilerLogger logger, SplittedFunctions data) throws CompilerException {
 		Map<String,Component> fcts = new HashMap<>();
-		return new CompiledFile(data, new VHDLFile(
-			Utils.checkedConvert(
-				data.func,
-				(Pair<String, List<DataFlowGraph>> s) -> EntityCompiler.compile(logger, s.first, s.second, fcts)
-			).toArray(new Entity[data.func.size()])));
+		return new CompiledFile(data, new VHDLFile(Generators.fromPairCollection(data.func).
+			map_((n,g) -> EntityCompiler.compile(logger, n, g, fcts)).toList().toArray(new Entity[data.func.size()])));
 	}
 }

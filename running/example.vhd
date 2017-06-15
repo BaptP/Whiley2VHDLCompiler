@@ -4,3 +4,149 @@
 ------------------------------------------------------------
 
 
+------------------------------------------------------------
+-- Entity e
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity e is
+  port (
+    c              : in  signed(31 downto 0);
+    ret_0_opt0_has : out boolean;
+    ret_0_opt0_val : out boolean;
+    ret_0_opt1_has : out boolean;
+    ret_0_opt1_val : out signed(31 downto 0)
+  );
+end entity e;
+
+
+architecture Behavioural of e is
+
+  signal ret_0_opt0_has1 : boolean;
+  signal ret_0_opt0_has0 : boolean;
+  signal ret_0_opt0_has2 : boolean;
+  signal ret_0_opt0_val1 : boolean;
+  signal ret_0_opt0_val0 : boolean;
+  signal ret_0_opt1_has1 : boolean;
+  signal ret_0_opt1_has0 : boolean;
+  signal ret_0_opt1_val1 : signed(31 downto 0);
+
+begin
+  ret_0_opt1_val1 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
+
+  ret_0_opt1_has0 <= true;
+
+  ret_0_opt1_has1 <= false;
+
+  ret_0_opt0_val0 <= 'X';
+
+  ret_0_opt0_val1 <= false;
+
+  ret_0_opt0_has2 <= c = to_signed(0, 32);
+
+  ret_0_opt0_has0 <= false;
+
+  ret_0_opt0_has1 <= true;
+
+  ret_0_opt1_val  <= 
+      ret_0_opt1_val1 when ret_0_opt0_has2 else 
+      c
+
+  ret_0_opt1_has  <= 
+      ret_0_opt1_has1 when ret_0_opt0_has2 else 
+      ret_0_opt1_has0
+
+  ret_0_opt0_val  <= 
+      ret_0_opt0_val1 when ret_0_opt0_has2 else 
+      ret_0_opt0_val0
+
+  ret_0_opt0_has  <= 
+      ret_0_opt0_has1 when ret_0_opt0_has2 else 
+      ret_0_opt0_has0
+end architecture Behavioural;
+-- Entity e
+------------------------------------------------------------
+
+
+
+------------------------------------------------------------
+-- Entity inc2
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity inc2 is
+  port (
+    t_x_opt0_has         : in  boolean;
+    t_x_opt0_val         : in  boolean;
+    t_x_opt1_has         : in  boolean;
+    t_x_opt1_val         : in  signed(31 downto 0);
+    t_y_has              : in  boolean;
+    t_y_val              : in  std_logic_vector(7 downto 0);
+    t_z_has              : in  boolean;
+    t_z_val_a            : in  signed(31 downto 0);
+    t_z_val_b            : in  boolean;
+    ret_0_sha_x_opt0_has : out boolean;
+    ret_0_sha_x_opt0_val : out boolean;
+    ret_0_sha_x_opt1_has : out boolean;
+    ret_0_sha_x_opt1_val : out signed(31 downto 0);
+    ret_0_spe_y_has      : out boolean;
+    ret_0_spe_y_val      : out std_logic_vector(7 downto 0);
+    ret_0_spe_z_has      : out boolean;
+    ret_0_spe_z_val_a    : out signed(31 downto 0);
+    ret_0_spe_z_val_b    : out boolean
+  );
+end entity inc2;
+
+
+architecture Behavioural of inc2 is
+
+  signal ret_0_sha_x_opt0_has1 : boolean;
+  signal ret_0_sha_x_opt0_has2 : boolean;
+  signal ret_0_sha_x_opt0_val1 : boolean;
+  signal ret_0_sha_x_opt1_has1 : boolean;
+  signal ret_0_sha_x_opt1_val1 : signed(31 downto 0);
+
+begin
+  ret_0_sha_x_opt1_val1 <= t_x_opt1_val + to_signed(1, 32);
+
+  ret_0_sha_x_opt1_has1 <= true;
+
+  ret_0_sha_x_opt0_val1 <= 'X';
+
+  ret_0_sha_x_opt0_has2 <= true and t_x_opt1_has and (t_z_has and true);
+
+  ret_0_sha_x_opt0_has1 <= false;
+
+  ret_0_spe_z_val_b     <= t_z_val_b;
+
+  ret_0_spe_z_val_a     <= t_z_val_a;
+
+  ret_0_spe_z_has       <= t_z_has;
+
+  ret_0_spe_y_val       <= t_y_val;
+
+  ret_0_spe_y_has       <= t_y_has;
+
+  ret_0_sha_x_opt1_val  <= 
+      ret_0_sha_x_opt1_val1 when ret_0_sha_x_opt0_has2 else 
+      t_x_opt1_val
+
+  ret_0_sha_x_opt1_has  <= 
+      ret_0_sha_x_opt1_has1 when ret_0_sha_x_opt0_has2 else 
+      t_x_opt1_has
+
+  ret_0_sha_x_opt0_val  <= 
+      ret_0_sha_x_opt0_val1 when ret_0_sha_x_opt0_has2 else 
+      t_x_opt0_val
+
+  ret_0_sha_x_opt0_has  <= 
+      ret_0_sha_x_opt0_has1 when ret_0_sha_x_opt0_has2 else 
+      t_x_opt0_has
+end architecture Behavioural;
+-- Entity inc2
+------------------------------------------------------------
+
+
+

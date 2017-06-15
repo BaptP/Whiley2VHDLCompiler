@@ -1,106 +1,84 @@
 digraph {
   inp [label="inputs",color=blue,shape=box];
-  n1 [label="t.a
-signed(31 downto 0)",shape="ellipse",color=green];
-  n2 [label="t2.b
-signed(31 downto 0)",shape="ellipse",color=green];
-  n3 [label="y
-signed(31 downto 0)",shape="ellipse",color=green];
-  n4 [label="add
-signed(31 downto 0)",shape="box",color=black];
-  n5 [label="t.b
-signed(31 downto 0)",shape="ellipse",color=green];
-  n6 [label="sub
-signed(31 downto 0)",shape="box",color=black];
-  n7 [label="t.a
-signed(31 downto 0)",shape="ellipse",color=green];
-  n8 [label="y
-signed(31 downto 0)",shape="ellipse",color=green];
-  n9 [label="out_0_0
-{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
-  n10 [label="t.a
-signed(31 downto 0)",shape="ellipse",color=green];
-  n11 [label="add
-signed(31 downto 0)",shape="box",color=black];
-  n12 [label="t.b
-signed(31 downto 0)",shape="ellipse",color=green];
-  n13 [label="e
-signed(31 downto 0)",shape="ellipse",color=green];
-  n14 [label="add
-signed(31 downto 0)",shape="box",color=black];
-  n15 [label="add
-signed(31 downto 0)",shape="box",color=black];
-  n16 [label="add
-signed(31 downto 0)",shape="box",color=black];
-  n17 [label="t
-{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
-  n18 [label="y
-signed(31 downto 0)",shape="ellipse",color=green];
-  n19 [label="x
-signed(31 downto 0)",shape="ellipse",color=green];
-  n20 [label="3
-signed(31 downto 0)",shape="box",color=black];
-  n21 [label="out_0
-{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
-  n22 [label="eq
-boolean",shape="box",color=black];
-  n23 [label="out_1
-{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
-  n24 [label="mul
-signed(31 downto 0)",shape="box",color=black];
-  n25 [label="t2.b
-signed(31 downto 0)",shape="ellipse",color=green];
-  n26 [label="t2.a
-signed(31 downto 0)",shape="ellipse",color=green];
-  n27 [label="If
-Untyped",shape="hexagon",color=yellow];
-  n28 [label="42
-signed(31 downto 0)",shape="box",color=black];
-  n29 [label="add
-signed(31 downto 0)",shape="box",color=black];
-  n30 [label="out_1_0
-{a:signed(31 downto 0),b:signed(31 downto 0)}",shape="ellipse",color=green];
+  n1 [label="ret_0_spe_y_val\nstd_logic_vector(7 downto 0)"];
+  n2 [label="ret_0_spe_z_has\nboolean"];
+  n3 [label="false\nboolean"];
+  n4 [label="ret_0_spe...al_b\nboolean"];
+  n5 [label="1\nsigned(31 downto 0)"];
+  n6 [label="ret_0_spe...al_a\nsigned(31 downto 0)"];
+  n7 [label="true\nboolean"];
+  n8 [label="t_y_val\nstd_logic_vector(7 downto 0)"];
+  n9 [label="mux\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n10 [label="t_x_opt1_has\nboolean"];
+  n11 [label="mux\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n12 [label="Add\nsigned(31 downto 0)",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n13 [label="ret_0_sha..._val\nsigned(31 downto 0)"];
+  n14 [label="ret_0_sha..._val\nboolean"];
+  n15 [label="And\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n16 [label="ret_0_sha..._has\nboolean"];
+  n17 [label="And\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n18 [label="ret_0_spe_y_has\nboolean"];
+  n19 [label="t_x_opt1_val\nsigned(31 downto 0)"];
+  n20 [label="t_x_opt0_has\nboolean"];
+  n21 [label="t_x_opt0_val\nboolean"];
+  n22 [label="t_z_val_b\nboolean"];
+  n23 [label="t_y_has\nboolean"];
+  n24 [label="And\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n25 [label="mux\nsigned(31 downto 0)",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n26 [label="t_z_val_a\nsigned(31 downto 0)"];
+  n27 [label="t_z_has\nboolean"];
+  n28 [label="true\nboolean"];
+  n29 [label="ret_0_sha..._has\nboolean"];
+  n30 [label="true\nboolean"];
+  n31 [label="mux\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n32 [label="'X'\nboolean"];
   out [label="outputs",color=red,shape=box];
 
-  inp -> n17 [color=blue];
-  inp -> n13 [color=blue];
-  n1 -> n11[arrowhead="box",color=purple];
-  n1 -> n9[arrowhead="box",color=purple];
-  n2 -> n30[];
-  n3 -> n25[arrowhead="box",color=purple];
-  n4 -> n1[];
-  n5 -> n29[];
-  n6 -> n19[];
-  n7 -> n29[];
-  n7 -> n14[arrowhead="box",color=purple];
-  n8 -> n22[];
-  n8 -> n4[];
-  n9 -> n21[];
-  n10 -> n16[];
-  n11 -> n2[];
-  n12 -> n16[];
-  n12 -> n9[arrowhead="box",color=purple];
-  n13 -> n6[];
-  n14 -> n18[];
-  n15 -> n8[];
-  n16 -> n4[];
-  n17 -> n7[];
-  n17 -> n5[];
-  n18 -> n15[];
-  n19 -> n24[];
-  n19 -> n26[arrowhead="box",color=purple];
-  n19 -> n22[arrowhead="box",color=purple];
-  n20 -> n24[];
-  n22 -> n27[];
-  n24 -> n3[];
-  n25 -> n12[];
-  n25 -> n11[arrowhead="box",color=purple];
-  n26 -> n15[];
-  n26 -> n10[];
-  n26 -> n30[arrowhead="box",color=purple];
-  n28 -> n14[];
-  n29 -> n6[];
-  n30 -> n23[];
-  n21 -> out [color=red];
-  n23 -> out [color=red];
+  inp -> n20 [color=blue];
+  inp -> n21 [color=blue];
+  inp -> n10 [color=blue];
+  inp -> n19 [color=blue];
+  inp -> n23 [color=blue];
+  inp -> n8 [color=blue];
+  inp -> n27 [color=blue];
+  inp -> n26 [color=blue];
+  inp -> n22 [color=blue];
+  n23 -> n18[label=""];
+  n17 -> n25[label=""];
+  n27 -> n24[label=""];
+  n31 -> n29[label=""];
+  n5 -> n12[label=""];
+  n25 -> n13[label=""];
+  n19 -> n12[label=""];
+  n30 -> n24[label=""];
+  n8 -> n1[label=""];
+  n3 -> n31[label="t_x_opt0_has"];
+  n10 -> n9[label=""];
+  n19 -> n25[label=""];
+  n24 -> n17[label=""];
+  n22 -> n4[label=""];
+  n32 -> n11[label="t_x_opt0_val"];
+  n12 -> n25[label="t_x_opt1_val"];
+  n10 -> n15[label=""];
+  n11 -> n14[label=""];
+  n17 -> n31[label=""];
+  n21 -> n11[label=""];
+  n26 -> n6[label=""];
+  n7 -> n15[label=""];
+  n27 -> n2[label=""];
+  n9 -> n16[label=""];
+  n28 -> n9[label="t_x_opt1_has"];
+  n15 -> n17[label=""];
+  n20 -> n31[label=""];
+  n17 -> n11[label=""];
+  n17 -> n9[label=""];
+  n29 -> out [color=red];
+  n14 -> out [color=red];
+  n16 -> out [color=red];
+  n13 -> out [color=red];
+  n18 -> out [color=red];
+  n1 -> out [color=red];
+  n2 -> out [color=red];
+  n6 -> out [color=red];
+  n4 -> out [color=red];
 }
