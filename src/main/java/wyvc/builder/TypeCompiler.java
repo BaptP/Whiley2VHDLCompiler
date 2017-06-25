@@ -914,14 +914,6 @@ public class TypeCompiler extends LexicalElementTree {
 		public PairGenerator<String,TypeOption<AccessibleTypeTree>> getSpecificFields() {
 			return getSecondOperand().getFields();
 		}
-	}
-
-
-	public class TypeUnion extends BinaryNode<TypeTree, TypeSimpleUnion, TypeRecordUnion,Type> implements AccessibleTypeTree {
-
-		public TypeUnion(TypeSimpleUnion simpleOptions, TypeRecordUnion recordOptions) {
-			super(simpleOptions, recordOptions);
-		}
 
 		@Override
 		public String getFirstLabel() {
@@ -931,7 +923,39 @@ public class TypeCompiler extends LexicalElementTree {
 		public String getSecondLabel() {
 			return "spe";
 		}
+	}
 
+
+	public class TypeUnion extends BinaryNode<TypeTree, TypeSimpleUnion, TypeOption<TypeRecordUnion>,Type> implements AccessibleTypeTree {
+
+		public TypeUnion(TypeSimpleUnion simpleOptions, TypeRecordUnion recordOptions) {
+			super(simpleOptions, new TypeOption<>(recordOptions));
+		}
+
+		@Override
+		public String getFirstLabel() {
+			return "pri";
+		}
+		@Override
+		public String getSecondLabel() {
+			return "rec";
+		}
+
+		public final BooleanTypeLeaf getHasRecords() {
+			return getSecondOperand().getFirstOperand();
+		}
+
+		public final TypeRecordUnion getRecordOptions() {
+			return getSecondOperand().getSecondOperand();
+		}
+
+		public final String hasRecordLabel() {
+			return getSecondLabel() + "_" + getSecondOperand().getFirstLabel();
+		}
+
+		public final String recordOptionsLabel() {
+			return getSecondLabel() + "_" + getSecondOperand().getSecondLabel();
+		}
 	}
 
 
@@ -1109,7 +1133,7 @@ public class TypeCompiler extends LexicalElementTree {
 	}
 
 	private AccessibleTypeTree createUnion2(List<CanonicalTypeOrRecord<?>> options) throws CompilerException {
-		debug(options.toString());
+//		debug(options.toString());
 		if (options.size() == 1)
 			return compileType(options.get(0));
 		List<CanonicalRecord> rec = new ArrayList<>();

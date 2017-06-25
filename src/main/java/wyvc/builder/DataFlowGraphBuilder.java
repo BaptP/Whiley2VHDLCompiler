@@ -1,18 +1,10 @@
 package wyvc.builder;
 
-import java.io.ObjectInputStream.GetField;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Stack;
-import java.util.concurrent.CompletionException;
 
-import javax.lang.model.type.UnionType;
-
-import wyal.lang.WyalFile.Type.Record;
 import wyil.lang.Bytecode;
 import wyil.lang.Constant;
 import wyil.lang.SyntaxTree;
@@ -28,7 +20,6 @@ import wyil.lang.SyntaxTree.Location;
 import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.FunctionOrMethod;
 import wyvc.builder.DataFlowGraph;
-import wyvc.builder.CompilerLogger.CompilerDebug;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.CompilerNotice;
@@ -39,9 +30,6 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
-import wyvc.builder.DataFlowGraph.UndefConstNode;
-import wyvc.builder.LexicalElementTree.Leaf;
-import wyvc.builder.LexicalElementTree.Tree;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
@@ -54,17 +42,13 @@ import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.TypeCompiler.TypeUnion;
 import wyvc.builder.LexicalElementTree;
 import wyvc.lang.Type;
-import wyvc.utils.FunctionalInterfaces.BiFunction;
 import wyvc.utils.FunctionalInterfaces.BiFunction_;
-import wyvc.utils.FunctionalInterfaces.Function;
-import wyvc.utils.FunctionalInterfaces.Supplier;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Generators.PairGenerator;
-import wyvc.utils.Generators.PairGenerator_;
 
 public final class DataFlowGraphBuilder extends LexicalElementTree {
 	private final TypeCompiler typeCompiler;
@@ -120,9 +104,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 	public static class UnsupportedTreeNodeCompilerError extends CompilerError {
-		private final Tree node;
+		private final Tree<?> node;
 
-		public UnsupportedTreeNodeCompilerError(Tree node) {
+		public UnsupportedTreeNodeCompilerError(Tree<?> node) {
 			this.node = node;
 		}
 
@@ -131,7 +115,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return "The conversion of the node "+node+" is unsupported";
 		}
 
-		public static CompilerException exception(Tree node) {
+		public static CompilerException exception(Tree<?> node) {
 			return new CompilerException(new UnsupportedTreeNodeCompilerError(node));
 		}
 	}
@@ -423,10 +407,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 	}
 
 
-	private class VertexUnion extends BinaryNode<VertexTree<?>, VertexSimpleUnion, VertexRecordUnion,HalfArrow<?>> implements VertexNode<VertexTree<?>, TypeUnion>, AccessibleVertexTree<TypeUnion> {
+	private class VertexUnion extends BinaryNode<VertexTree<?>, VertexSimpleUnion, VertexOption<TypeRecordUnion, VertexRecordUnion>, HalfArrow<?>> implements VertexNode<VertexTree<?>, TypeUnion>, AccessibleVertexTree<TypeUnion> {
 		private final TypeUnion type;
 
-		public VertexUnion(VertexSimpleUnion simpleOptions, VertexRecordUnion recordOptions, TypeUnion type) {
+		public VertexUnion(VertexSimpleUnion simpleOptions, VertexOption<TypeRecordUnion, VertexRecordUnion> recordOptions, TypeUnion type) {
 			super(simpleOptions, recordOptions);
 			this.type = type;
 		}
@@ -443,6 +427,22 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		@Override
 		public String getSecondLabel() {
 			return "rec";
+		}
+
+		public final BooleanVertexLeaf getHasRecords() {
+			return getSecondOperand().getFirstOperand();
+		}
+
+		public final VertexRecordUnion getRecordOptions() {
+			return getSecondOperand().getSecondOperand();
+		}
+
+		public final String hasRecordLabel() {
+			return getSecondLabel() + "_" + getSecondOperand().getFirstLabel();
+		}
+
+		public final String recordOptionsLabel() {
+			return getSecondLabel() + "_" + getSecondOperand().getSecondLabel();
 		}
 
 	}
@@ -584,7 +584,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new VertexSimpleRecord(type.getFields().mapSecond_(this::buildUndefinedValue), type);
 		}
 		private VertexSimpleUnion buildUndefinedValue(TypeSimpleUnion type) throws CompilerException {
-			return new VertexSimpleUnion(type.getOptions().map_(t -> new VertexOption<TypeLeaf, VertexLeaf<TypeLeaf>>(
+			return new VertexSimpleUnion(type.getOptions().map_(t -> new VertexOption<>(
 					buildBoolean(false),
 					buildUndefinedValue(t.getSecondOperand()), t)), type);
 		}
@@ -598,7 +598,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private VertexUnion buildUndefinedValue(TypeUnion type) throws CompilerException {
 			return new VertexUnion(
 				buildUndefinedValue(type.getFirstOperand()),
-				buildUndefinedValue(type.getSecondOperand()), type);
+				new VertexOption<>(
+						buildBoolean(false),
+						buildUndefinedValue(type.getRecordOptions()), type.getSecondOperand()), type);
 		}
 		private AccessibleVertexTree<?> buildUndefinedValue(AccessibleTypeTree type) throws CompilerException {
 			if (type instanceof BooleanTypeLeaf)
@@ -635,17 +637,25 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			if (node instanceof VertexUnion)
 				return new VertexUnion(
 					buildTypedValue(((VertexUnion) node).getFirstOperand(), type.getFirstOperand()),
-					buildTypedValue(((VertexUnion) node).getSecondOperand(), type.getSecondOperand()),
+					new VertexOption<>(
+							((VertexUnion) node).getHasRecords(),
+							buildTypedValue(
+								((VertexUnion) node).getRecordOptions(),
+								type.getRecordOptions()) , type.getSecondOperand()),
 					type);
 			if (node instanceof VertexLeaf || node instanceof VertexSimpleUnion)
 				return new VertexUnion(
 					buildTypedValue(node, type.getFirstOperand()),
-					buildUndefinedValue(type.getSecondOperand()),
+					new VertexOption<>(
+							buildBoolean(false),
+							buildUndefinedValue(type.getRecordOptions()), type.getSecondOperand()),
 					type);
 			if (node instanceof VertexSimpleRecord || node instanceof VertexRecordUnion)
 				return new VertexUnion(
 					buildUndefinedValue(type.getFirstOperand()),
-					buildTypedValue(node, type.getSecondOperand()),
+					new VertexOption<>(
+							buildBoolean(false),
+							buildTypedValue(node, type.getRecordOptions()), type.getSecondOperand()),
 					type);
 			throw UnrelatedTypeCompilerError.exception(type, node);
 		}
@@ -727,19 +737,25 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new VertexSimpleUnion(type.getOptions().enumerate().mapFirst(type::getLabel).mapFirst((ident+"_")::concat).map(
 				(s, t) -> new VertexOption<>(
 					buildParameter(s+"_"+t.getFirstLabel(), t.getFirstOperand()),
-					buildParameter(s+"_"+t.getSecondLabel(), t.getSecondOperand()), t)), type);
+					buildParameter(s+"_"+t.getSecondLabel(), t.getSecondOperand()), t)),
+				type);
 		}
 		private VertexRecordUnion buildParameter(String ident, TypeRecordUnion type) throws CompilerException {
 			return new VertexRecordUnion(
 				type.getSharedFields().computeSecond_((f, t) -> buildParameter(ident+"_"+f, t)),
 				type.getSpecificFields().computeSecond_((f, t) -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
 						buildParameter(ident+"_"+f+"_"+t.getFirstLabel(), t.getFirstOperand()),
-						buildParameter(ident+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand()), t)), type);
+						buildParameter(ident+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand()), t)),
+				type);
 		}
 		private VertexUnion buildParameter(String ident, TypeUnion type) throws CompilerException {
 			return new VertexUnion(
 				buildParameter(ident+"_"+type.getFirstLabel(), type.getFirstOperand()),
-				buildParameter(ident+"_"+type.getSecondLabel(), type.getSecondOperand()), type);
+				new VertexOption<>(
+						buildParameter(ident+"_"+type.hasRecordLabel(), type.getHasRecords()),
+						buildParameter(ident+"_"+type.recordOptionsLabel(), type.getRecordOptions()),
+						type.getSecondOperand()),
+				type);
 		}
 		private AccessibleVertexTree<?> buildParameter(String ident, AccessibleTypeTree type) throws CompilerException {
 			if (type instanceof BooleanTypeLeaf)
@@ -827,12 +843,16 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				val.getSharedFields().biMap_(p -> p.first, p -> buildNamedHalfArrow(ident+"_"+p.first, p.second)),
 				val.getSpecificFields().computeSecond_((f, t) -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
 						buildNamedHalfArrow(ident+"_"+f+"_"+t.getFirstLabel(), t.getFirstOperand()),
-						buildNamedHalfArrow(ident+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand()), t.getType())), val.getType());
+						buildNamedHalfArrow(ident+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand()), t.getType())),
+				val.getType());
 		}
 		private VertexUnion buildNamedHalfArrow(String ident, VertexUnion val) throws CompilerException {
 			return new VertexUnion(
 				buildNamedHalfArrow(ident+"_"+val.getFirstLabel(), val.getFirstOperand()),
-				buildNamedHalfArrow(ident+"_"+val.getSecondLabel(), val.getSecondOperand()), val.getType());
+				new VertexOption<>(
+						buildNamedHalfArrow(ident+"_"+val.hasRecordLabel(), val.getHasRecords()),
+						buildNamedHalfArrow(ident+"_"+val.recordOptionsLabel(), val.getRecordOptions()), val.getSecondOperand().getType()),
+				val.getType());
 		}
 		private AccessibleVertexTree<?> buildNamedHalfArrow(String ident, AccessibleVertexTree<?> val) throws CompilerException {
 //			debug(val.toString(ident+" > "));
@@ -892,9 +912,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			public void buildAssign(AccessibleVertexTree<?> assign) throws CompilerException {
 				AccessibleVertexTree<?> r = buildTypedValue(assign, type);
 				vars.put(index, buildNamedHalfArrow(ident, r));
-				debugLevel("Assign de " + ident);
-				debugLevel(assign.toString("  "));
-				debugLevel(r.toString("  "));
+//				debugLevel("Assign de " + ident);
+//				debugLevel(assign.toString("  "));
+//				debugLevel(r.toString("  "));
 
 			}
 
@@ -917,6 +937,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					fieldValue = ((VertexSimpleRecord)value).getField(fieldname);
 				else if (value instanceof VertexRecordUnion)
 					fieldValue = ((VertexRecordUnion)value).getSharedField(fieldname);
+				else if (value instanceof VertexUnion)
+					fieldValue = ((VertexUnion)value).getRecordOptions().getSharedField(fieldname);
 				else
 					throw UnsupportedAssignmentCompilerError.exception(field, value);
 			}
@@ -926,12 +948,24 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				if (value instanceof VertexSimpleRecord)
 					previous.buildAssign(new VertexSimpleRecord(((VertexSimpleRecord)value).getFields().computeSecond_((String f, AccessibleVertexTree<?> v)
 						-> f.equals(fieldname) ? buildTypedValue(assign, v.getType()) : v), ((VertexSimpleRecord)value).getType()));
-				if (value instanceof VertexRecordUnion)
+				else if (value instanceof VertexRecordUnion)
 					previous.buildAssign(new VertexRecordUnion(
 						((VertexRecordUnion)value).getSharedFields().computeSecond_((String f, AccessibleVertexTree<?> v)
 							-> f.equals(fieldname) ? buildTypedValue(assign, v.getType()) : v),
 						((VertexRecordUnion)value).getSpecificFields().toChecked(),
 						((VertexRecordUnion)value).getType()));
+				else if (value instanceof VertexUnion)
+					previous.buildAssign(new VertexUnion(
+						((VertexUnion)value).getFirstOperand(),
+						new VertexOption<>(
+								((VertexUnion)value).getHasRecords(),
+							new VertexRecordUnion(
+								((VertexUnion)value).getRecordOptions().getSharedFields().computeSecond_((String f, AccessibleVertexTree<?> v)
+									-> f.equals(fieldname) ? buildTypedValue(assign, v.getType()) : v),
+								((VertexUnion)value).getRecordOptions().getSpecificFields().toChecked(),
+								((VertexUnion)value).getRecordOptions().getType()),
+							((VertexUnion)value).getSecondOperand().getType()),
+						((VertexUnion)value).getType()));
 			}
 
 			@Override
@@ -959,10 +993,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildAssignValue(Location<?> acc, AccessibleVertexTree<?> val) throws CompilerException {
-/**/			openLevel("Assign");
+//			openLevel("Assign");
 //			Utils.printLocation(logger, acc, level);
 			buildDeque(acc).buildAssign(val);
-/**/			closeLevel();
+//			closeLevel();
 		}
 
 		private void buildAssign(Location<Bytecode.Assign> assign) throws CompilerException {
@@ -981,10 +1015,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildReturn(Location<Bytecode.Return> ret) throws CompilerException {
-			debug("Return.....");
+//			debug("Return.....");
 			Generator_<AccessibleVertexTree<?>,CompilerException> retv = Generators.fromCollection(
 				buildTuple(ret.getOperands())).enumerate().mapFirst(returnTypes::get).swap().map_(this::buildTypedValue);
-			debug("Return ?.....");
+//			debug("Return ?.....");
 			if (partialReturn != null)
 				partialReturn.completeReturn(retv.toList());
 			else
@@ -1066,9 +1100,16 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			if (type instanceof TypeSimpleRecord && value instanceof VertexRecordUnion)
 				return buildFlowTyping(is, (TypeSimpleRecord)type, ((VertexRecordUnion)value));
 			if (type instanceof TypeSimpleRecord && value instanceof VertexUnion)
-				return buildFlowTyping(is, (TypeSimpleRecord)type, ((VertexUnion)value).getSecondOperand());
+				return buildFlowTyping(is, (TypeSimpleRecord)type, (VertexUnion)value);
 			throw UnsupportedFlowTypingCompilerError.exception(type, value);
 		}
+
+		private BooleanVertexLeaf buildFlowTyping(Location<Bytecode.Operator> is, TypeSimpleRecord type, VertexUnion value) throws CompilerException {
+			return new BooleanVertexLeaf(graph.new BinOpNode(is, BinaryOperation.And, Type.Boolean,
+				value.getHasRecords().getValue(),
+				buildFlowTyping(is, type, value.getRecordOptions()).getValue()));
+		}
+
 
 		private BooleanVertexLeaf buildIs(Location<Bytecode.Operator> is) throws CompilerException {
 			return buildFlowTyping(is,
@@ -1099,6 +1140,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			case SUB: 	return BinaryOperation.Sub;
 			case MUL: 	return BinaryOperation.Mul;
 			case DIV: 	return BinaryOperation.Div;
+			case REM: 	return BinaryOperation.Rem;
 			case BITWISEOR:
 			case OR: 	return BinaryOperation.Or;
 			case BITWISEAND:
@@ -1196,7 +1238,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private VertexUnion buildAlias(TypeUnion type, VertexUnion node) throws CompilerException {
 			return new VertexUnion(
 				buildAlias(type.getFirstOperand(), node.getFirstOperand()),
-				buildAlias(type.getSecondOperand(), node.getSecondOperand()), type);
+				new VertexOption<>(
+						node.getHasRecords(),
+						buildAlias(type.getRecordOptions(), node.getRecordOptions()), type.getSecondOperand()),
+				type);
 		}
 		private AccessibleVertexTree<?> buildAlias(AccessibleTypeTree type, AccessibleVertexTree<?> node) throws CompilerException {
 			// TODO BooleanLeaf ?
@@ -1211,7 +1256,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			if (type instanceof TypeSimpleRecord && node instanceof VertexRecordUnion)
 				return buildAlias((TypeSimpleRecord) type, (VertexRecordUnion) node);
 			if (type instanceof TypeSimpleRecord && node instanceof VertexUnion)
-				return buildAlias((TypeSimpleRecord) type, ((VertexUnion) node).getSecondOperand());
+				return buildAlias((TypeSimpleRecord) type, ((VertexUnion) node).getRecordOptions());
 			if (type instanceof TypeSimpleUnion && node instanceof VertexSimpleUnion)
 				return buildAlias((TypeSimpleUnion) type, (VertexSimpleUnion) node);
 			if (type instanceof TypeSimpleUnion && node instanceof VertexUnion)
@@ -1219,7 +1264,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			if (type instanceof TypeRecordUnion && node instanceof VertexRecordUnion)
 				return buildAlias((TypeRecordUnion) type, (VertexRecordUnion) node);
 			if (type instanceof TypeRecordUnion && node instanceof VertexUnion)
-				return buildAlias((TypeRecordUnion) type, ((VertexUnion) node).getSecondOperand());
+				return buildAlias((TypeRecordUnion) type, ((VertexUnion) node).getRecordOptions());
 			if (type instanceof TypeUnion && node instanceof VertexUnion)
 				return buildAlias((TypeUnion) type, (VertexUnion) node);
 			throw UnsupportedAliasCompilerError.exception(type, node);
@@ -1264,19 +1309,24 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new VertexSimpleUnion(type.getOptions().enumerate().mapFirst(type::getLabel).mapFirst((ident+"_")::concat).map(
 				(s, t) -> new VertexOption<>(
 					buildCallReturn(s+"_"+t.getFirstLabel(), t.getFirstOperand(), func),
-					buildCallReturn(s+"_"+t.getSecondLabel(), t.getSecondOperand(), func), t)), type);
+					buildCallReturn(s+"_"+t.getSecondLabel(), t.getSecondOperand(), func), t)),
+				type);
 		}
 		private VertexRecordUnion buildCallReturn(String ident, TypeRecordUnion type, FuncCallNode func) throws CompilerException {
 			return new VertexRecordUnion(
 				type.getSharedFields().computeSecond_((f, t) -> buildCallReturn(ident+"_"+f, t, func)),
 				type.getSpecificFields().computeSecond_((f, t) -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
 						buildCallReturn(ident+"_"+t+"_"+t.getFirstLabel(), t.getFirstOperand(), func),
-						buildCallReturn(ident+"_"+t+"_"+t.getSecondLabel(), t.getSecondOperand(), func), t)), type);
+						buildCallReturn(ident+"_"+t+"_"+t.getSecondLabel(), t.getSecondOperand(), func), t)),
+				type);
 		}
 		private VertexUnion buildCallReturn(String ident, TypeUnion type, FuncCallNode func) throws CompilerException {
 			return new VertexUnion(
 				buildCallReturn(ident+"_"+type.getFirstLabel(), type.getFirstOperand(), func),
-				buildCallReturn(ident+"_"+type.getSecondLabel(), type.getSecondOperand(), func), type);
+				new VertexOption<>(
+						buildCallReturn(ident+"_"+type.hasRecordLabel(), type.getHasRecords(), func),
+						buildCallReturn(ident+"_"+type.recordOptionsLabel(), type.getRecordOptions(), func), type.getSecondOperand()),
+				type);
 		}
 
 		private AccessibleVertexTree<?> buildCallReturn(String ident, AccessibleTypeTree type, FuncCallNode func) throws CompilerException {
@@ -1363,7 +1413,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private VertexUnion buildEndIf(Location<If> ifs, HalfArrow<?> ifn, VertexUnion trueLab, VertexUnion falseLab) throws CompilerException {
 			return new VertexUnion(
 				buildEndIf(ifs, ifn, trueLab.getFirstOperand(), falseLab.getFirstOperand()),
-				buildEndIf(ifs, ifn, trueLab.getSecondOperand(), falseLab.getSecondOperand()),
+				new VertexOption<>(
+						buildEndIf(ifs, ifn, trueLab.getHasRecords(), falseLab.getHasRecords()),
+						buildEndIf(ifs, ifn, trueLab.getRecordOptions(), falseLab.getRecordOptions()),trueLab.getSecondOperand().getType()),
 				trueLab.getType());
 		}
 		private AccessibleVertexTree<?> buildEndIf(Location<If> ifs, HalfArrow<?> ifn, AccessibleVertexTree<?> trueLab, AccessibleVertexTree<?> falseLab) throws CompilerException {
@@ -1422,10 +1474,17 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private VertexUnion copyNamedHalfArrow(VertexUnion name, VertexUnion node) throws CompilerException {
 			return new VertexUnion(
 				copyNamedHalfArrow(name.getFirstOperand(), node.getFirstOperand()),
-				copyNamedHalfArrow(name.getSecondOperand(), node.getSecondOperand()),
+				new VertexOption<>(
+						copyNamedHalfArrow(name.getHasRecords(), node.getHasRecords()),
+						copyNamedHalfArrow(name.getRecordOptions(), node.getRecordOptions()),
+						name.getSecondOperand().getType()),
 				name.getType());
 		}
 		private AccessibleVertexTree<?> copyNamedHalfArrow(AccessibleVertexTree<?> name, AccessibleVertexTree<?> node) throws CompilerException {
+			if (name == null) {
+				// TODO
+				return node;
+			}
 			name.checkIdenticalStructure(node);
 			if (name instanceof BooleanVertexLeaf 	&& node instanceof BooleanVertexLeaf)
 				return copyNamedHalfArrow((BooleanVertexLeaf)name, (BooleanVertexLeaf)node);

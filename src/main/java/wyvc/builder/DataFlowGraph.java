@@ -315,7 +315,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 	public static enum BinaryOperation {
-		Add, Sub, Mul, Div,
+		Add, Sub, Mul, Div,Rem,
 		And, Or, Xor,
 		Eq, Ne,
 		Lt, Le, Gt, Ge;
