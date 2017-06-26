@@ -347,8 +347,6 @@ public interface Expression extends LexicalElement {
 		@Override
 		public void addTokens(Token t) {
 			t.n(value.ident);
-			// TODO Auto-generated method stub
-
 		}
 
 	}

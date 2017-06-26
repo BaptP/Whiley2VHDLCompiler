@@ -87,7 +87,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		private String getShortIdent() {
-			return nodeIdent.length() < 16 ? nodeIdent : nodeIdent.substring(0, 9)+"..."+nodeIdent.substring(nodeIdent.length()-4);
+			return nodeIdent.length() < 19 ? nodeIdent : nodeIdent.substring(0, 12)+"..."+nodeIdent.substring(nodeIdent.length()-4);
 		}
 
 		@Override
@@ -102,6 +102,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		public DataFlowGraph getGraph() {
 			return DataFlowGraph.this;
+		}
+
+		protected void addSource(HalfArrow<?> source) {
+			source.complete(this);
 		}
 
 		public abstract boolean isStaticallyKnown();
@@ -315,7 +319,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 	public static enum BinaryOperation {
-		Add, Sub, Mul, Div,Rem,
+		Add, Sub, Mul, Div, Rem,
 		And, Or, Xor,
 		Eq, Ne,
 		Lt, Le, Gt, Ge;
@@ -422,6 +426,50 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 	}
 
+
+
+	public final class WhileNode extends WyilNode<Bytecode.While> {
+		public DataArrow<?,?> condition = null;
+		public final DataArrow<?,?> previousValue;
+		public DataArrow<?,?> nextValue = null;
+
+		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> previousValue) {
+			super("rmux", ifs, previousValue.node.type, Collections.singletonList(previousValue));
+			this.previousValue  =  previousValue.arrow;
+		}
+
+		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> condition, HalfArrow<?> previousValue, HalfArrow<?> nextValue) {
+			super("rmux", ifs, previousValue.node.type, Arrays.asList(condition, previousValue, nextValue));
+			this.condition = condition.arrow;
+			this.previousValue  =  previousValue.arrow;
+			this.nextValue  =  nextValue.arrow;
+
+		}
+		public void complete(HalfArrow<?> condition, HalfArrow<?> nextValue) {
+			if (this.nextValue != null)
+				return;
+			addSource(nextValue);
+			addSource(condition);
+			this.nextValue = nextValue.arrow;
+			this.condition = condition.arrow;
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;//TODO complex
+		}
+
+
+		@Override
+		public DataNode duplicate(Duplicator duplicator) {
+			return new WhileNode(location, duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue));
+		}
+	}
 
 
 

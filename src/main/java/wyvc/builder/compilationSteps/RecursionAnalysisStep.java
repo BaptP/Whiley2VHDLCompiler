@@ -73,9 +73,9 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 		for (FuncNode c : func.values())
 			c.findRank(func);
 		List<Pair<String, FuncNode>> fcts = new ArrayList<>();
-		func.forEach((String s, FuncNode n) -> fcts.add(new Pair<String, FuncNode>(s, n)));
-		func.forEach((String s, FuncNode n) -> logger.debug(s+" rang "+n.rank));
-		fcts.sort((Pair<String, FuncNode> e1, Pair<String, FuncNode> e2) -> e1.second.rank - e2.second.rank);
+		func.forEach((s, n) -> fcts.add(new Pair<String, FuncNode>(s, n)));
+		func.forEach((s, n) -> logger.debug(s+" rang "+n.rank));
+		fcts.sort((e1, e2) -> e1.second.rank - e2.second.rank);
 		return new OrderedFunction(data, Utils.convert(fcts, (Pair<String, FuncNode> p) -> new Pair<String, DataFlowGraph>(p.first, p.second.data)));
 	}
 }

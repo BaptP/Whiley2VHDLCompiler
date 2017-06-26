@@ -6,16 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 import wyil.lang.Bytecode;
+import wyil.lang.Bytecode.OperatorKind;
 import wyil.lang.Constant;
 import wyil.lang.SyntaxTree;
-import wyil.lang.Bytecode.AliasDeclaration;
-import wyil.lang.Bytecode.Const;
-import wyil.lang.Bytecode.FieldLoad;
-import wyil.lang.Bytecode.If;
-import wyil.lang.Bytecode.Invoke;
-import wyil.lang.Bytecode.OperatorKind;
-import wyil.lang.Bytecode.VariableAccess;
-import wyil.lang.Bytecode.VariableDeclaration;
 import wyil.lang.SyntaxTree.Location;
 import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.FunctionOrMethod;
@@ -30,6 +23,7 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
+import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
@@ -455,13 +449,13 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		private class PartialReturn {
 			private final HalfArrow<?> cond;
-			private final Location<If> ifs;
+			private final Location<Bytecode.If> ifs;
 			private PartialReturn tPart;
 			private PartialReturn fPart;
 			private final List<AccessibleVertexTree<?>> ret;
 
 
-			public PartialReturn(Location<If> ifs, HalfArrow<?> cond, PartialReturn tPart, PartialReturn fPart) {
+			public PartialReturn(Location<Bytecode.If> ifs, HalfArrow<?> cond, PartialReturn tPart, PartialReturn fPart) {
 				this.cond = cond;
 				this.ifs = ifs;
 				this.tPart = tPart;
@@ -790,10 +784,12 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				buildReturn((Location<Bytecode.Return>) location);
 			else if (bytecode instanceof Bytecode.If)
 				buildIf((Location<Bytecode.If>) location);
+			else if (bytecode instanceof Bytecode.While)
+				buildWhile((Location<Bytecode.While>) location);
 			else if (bytecode instanceof Bytecode.Skip)
 				graph.addSeparation();
 			else
-				WyilUnsupportedCompilerError.exception(location);
+				throw WyilUnsupportedCompilerError.exception(location);
 /**/			closeLevel();
 		}
 
@@ -809,8 +805,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private List<AccessibleVertexTree<?>> buildTuple(Location<?>[] elem) throws CompilerException {
 			ArrayList<AccessibleVertexTree<?>> exprs = new ArrayList<>();
 			for (Location<?> e : elem){
-				if (e.getBytecode() instanceof Invoke)
-					exprs.addAll(buildInvoke((Location<Invoke>) e));
+				if (e.getBytecode() instanceof Bytecode.Invoke)
+					exprs.addAll(buildInvoke((Location<Bytecode.Invoke>) e));
 				else
 					exprs.add(buildExpression(e));
 			}
@@ -1113,7 +1109,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		private BooleanVertexLeaf buildIs(Location<Bytecode.Operator> is) throws CompilerException {
 			return buildFlowTyping(is,
-				buildType(((Constant.Type)(((Const)(is.getOperand(1).getBytecode())).constant())).value()),
+				buildType(((Constant.Type)(((Bytecode.Const)(is.getOperand(1).getBytecode())).constant())).value()),
 				buildExpression(is.getOperand(0)));
 		}
 
@@ -1180,7 +1176,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			throw WyilUnsupportedCompilerError.exception(op);
 		}
 
-		private AccessibleVertexTree<?> buildConst(Location<Const> val) throws CompilerException {
+		private AccessibleVertexTree<?> buildConst(Location<Bytecode.Const> val) throws CompilerException {
 			TypeTree t = buildType(val.getType());
 			logger.debug(t.toString(""));
 			if (t instanceof BooleanTypeLeaf)
@@ -1193,7 +1189,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
-		private AccessibleVertexTree<?> buildFieldAccess(Location<FieldLoad> field) throws CompilerException {
+		private AccessibleVertexTree<?> buildFieldAccess(Location<Bytecode.FieldLoad> field) throws CompilerException {
 			AccessibleVertexTree<?> record = buildAccess(field.getOperand(0));
 			if (record instanceof VertexSimpleRecord)
 				return ((VertexSimpleRecord)record).getField(field.getBytecode().fieldName());
@@ -1273,9 +1269,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private AccessibleVertexTree<?> buildVariableAccess(Location<?> var) throws CompilerException {
 			Bytecode bytecode = var.getBytecode();
 //			debug("var access"+var+" "+var.getIndex());
-			if (bytecode instanceof VariableDeclaration)
+			if (bytecode instanceof Bytecode.VariableDeclaration)
 				return vars.get(var.getIndex());
-			if (bytecode instanceof AliasDeclaration)
+			if (bytecode instanceof Bytecode.AliasDeclaration)
 				return buildAlias(buildType(var.getType()), buildVariableAccess(var.getOperand(0)));
 			throw WyilUnsupportedCompilerError.exception(var);
 		}
@@ -1286,9 +1282,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 /**/			openLevel("Access");
 /**/			Utils.printLocation(logger, location, level);
 			Bytecode bytecode = location.getBytecode();
-			if (bytecode instanceof FieldLoad)
-				return end(buildFieldAccess((Location<FieldLoad>) location));
-			if (bytecode instanceof VariableAccess)
+			if (bytecode instanceof Bytecode.FieldLoad)
+				return end(buildFieldAccess((Location<Bytecode.FieldLoad>) location));
+			if (bytecode instanceof Bytecode.VariableAccess)
 				return end(buildVariableAccess(location.getOperand(0)));
 			throw new CompilerException(new WyilUnsupportedCompilerError(location));
 		}
@@ -1345,7 +1341,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			throw UnsupportedTreeNodeCompilerError.exception(type);
 		}
 
-		private List<AccessibleVertexTree<?>> buildInvoke(Location<Invoke> call) throws CompilerException {
+		private List<AccessibleVertexTree<?>> buildInvoke(Location<Bytecode.Invoke> call) throws CompilerException {
 			openLevel("INVOKE");
 			debugLevel("Param "+call.getBytecode().type().params().length + " Op "+call.numberOfOperands());
 			FuncCallNode c = graph.new FuncCallNode(call,
@@ -1367,12 +1363,12 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			Bytecode bytecode = location.getBytecode();
 			if (bytecode instanceof Bytecode.Operator)
 				return end(buildOperator((Location<Bytecode.Operator>) location));
-			if (bytecode instanceof Const)
-				return end(buildConst((Location<Const>) location));
-			if (bytecode instanceof VariableAccess || bytecode instanceof FieldLoad)
+			if (bytecode instanceof Bytecode.Const)
+				return end(buildConst((Location<Bytecode.Const>) location));
+			if (bytecode instanceof Bytecode.VariableAccess || bytecode instanceof Bytecode.FieldLoad)
 				return end(buildAccess(location));
-			if (bytecode instanceof Invoke)
-				return end(buildInvoke((Location<Invoke>) location).get(0));
+			if (bytecode instanceof Bytecode.Invoke)
+				return end(buildInvoke((Location<Bytecode.Invoke>) location).get(0));
 			throw new CompilerException(new WyilUnsupportedCompilerError(location));
 		}
 
@@ -1380,27 +1376,27 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		/*------ buildEndIf ------*/
 
-		private BooleanVertexLeaf buildEndIf(Location<If> ifs, HalfArrow<?> ifn, BooleanVertexLeaf trueLab, BooleanVertexLeaf falseLab) {
+		private BooleanVertexLeaf buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, BooleanVertexLeaf trueLab, BooleanVertexLeaf falseLab) {
 			return trueLab.getValue().node == falseLab.getValue().node
 					? trueLab
 					: new BooleanVertexLeaf(graph.new EndIfNode(ifs, ifn, trueLab.getValue(), falseLab.getValue()));
 		}
-		private VertexLeaf<?> buildEndIf(Location<If> ifs, HalfArrow<?> ifn, VertexLeaf<?> trueLab, VertexLeaf<?> falseLab) {
+		private VertexLeaf<?> buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexLeaf<?> trueLab, VertexLeaf<?> falseLab) {
 			return trueLab.getValue().node == falseLab.getValue().node
 					? trueLab
 					: new VertexLeaf<>(graph.new EndIfNode(ifs, ifn, trueLab.getValue(), falseLab.getValue()), trueLab.getType());
 		}
-		private VertexSimpleRecord buildEndIf(Location<If> ifs, HalfArrow<?> ifn, VertexSimpleRecord trueLab, VertexSimpleRecord falseLab) throws CompilerException {
+		private VertexSimpleRecord buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexSimpleRecord trueLab, VertexSimpleRecord falseLab) throws CompilerException {
 			return new VertexSimpleRecord(trueLab.getFields().addComponent(falseLab.getFields().takeSecond()).map23_(
 				(t, f) -> buildEndIf(ifs, ifn, t,f)), trueLab.getType());
 		}
-		private VertexSimpleUnion buildEndIf(Location<If> ifs, HalfArrow<?> ifn, VertexSimpleUnion trueLab, VertexSimpleUnion falseLab) throws CompilerException {
+		private VertexSimpleUnion buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexSimpleUnion trueLab, VertexSimpleUnion falseLab) throws CompilerException {
 			return new VertexSimpleUnion(trueLab.getOptions().gather(falseLab.getOptions()).map_(
 				(t, f) -> new VertexOption<>(
 						 buildEndIf(ifs, ifn, t.getFirstOperand(),f.getFirstOperand()),
 						 buildEndIf(ifs, ifn, t.getSecondOperand(), f.getSecondOperand()), t.getType())), trueLab.getType());
 		}
-		private VertexRecordUnion buildEndIf(Location<If> ifs, HalfArrow<?> ifn, VertexRecordUnion trueLab, VertexRecordUnion falseLab) throws CompilerException {
+		private VertexRecordUnion buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexRecordUnion trueLab, VertexRecordUnion falseLab) throws CompilerException {
 			return new VertexRecordUnion(
 				falseLab.getSharedFields().duplicateFirst().mapSecond_(trueLab::getSharedField).map23(
 					(t, f) -> buildEndIf(ifs, ifn, t,f)),
@@ -1410,7 +1406,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 							buildEndIf(ifs, ifn, t.getSecondOperand(), f.getSecondOperand()), t.getType())),
 				trueLab.getType());
 		}
-		private VertexUnion buildEndIf(Location<If> ifs, HalfArrow<?> ifn, VertexUnion trueLab, VertexUnion falseLab) throws CompilerException {
+		private VertexUnion buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexUnion trueLab, VertexUnion falseLab) throws CompilerException {
 			return new VertexUnion(
 				buildEndIf(ifs, ifn, trueLab.getFirstOperand(), falseLab.getFirstOperand()),
 				new VertexOption<>(
@@ -1418,7 +1414,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 						buildEndIf(ifs, ifn, trueLab.getRecordOptions(), falseLab.getRecordOptions()),trueLab.getSecondOperand().getType()),
 				trueLab.getType());
 		}
-		private AccessibleVertexTree<?> buildEndIf(Location<If> ifs, HalfArrow<?> ifn, AccessibleVertexTree<?> trueLab, AccessibleVertexTree<?> falseLab) throws CompilerException {
+		private AccessibleVertexTree<?> buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, AccessibleVertexTree<?> trueLab, AccessibleVertexTree<?> falseLab) throws CompilerException {
 			trueLab.checkIdenticalStructure(falseLab);
 			if (trueLab instanceof BooleanVertexLeaf 	&& falseLab instanceof BooleanVertexLeaf)
 				return buildEndIf(ifs, ifn, (BooleanVertexLeaf)trueLab, 	(BooleanVertexLeaf)falseLab);
@@ -1503,7 +1499,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
-		private void buildIf(Location<If> ifs) throws CompilerException {
+		private void buildIf(Location<Bytecode.If> ifs) throws CompilerException {
 			AccessibleVertexTree<?> cond = buildExpression(ifs.getOperand(0));
 
 			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
@@ -1557,6 +1553,144 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				trueReturn = new PartialReturn(ifs, ifn, trueReturn, partialReturn);
 			}
 			partialReturn = prevReturn != null ? prevReturn.completeReturn(trueReturn) : trueReturn;
+		}
+
+
+
+		/*------ buildStartWhile ------*/
+
+		private BooleanVertexLeaf buildStartWhile(Location<Bytecode.While> whiles, BooleanVertexLeaf node) {
+			return new BooleanVertexLeaf(graph.new WhileNode(whiles, node.getValue()));
+		}
+		private VertexLeaf<?> buildStartWhile(Location<Bytecode.While> whiles, VertexLeaf<?> node) {
+			return new VertexLeaf<>(graph.new WhileNode(whiles, node.getValue()), node.getType());
+		}
+		private VertexSimpleRecord buildStartWhile(Location<Bytecode.While> whiles, VertexSimpleRecord node) throws CompilerException {
+			return new VertexSimpleRecord(node.getFields().mapSecond_(f -> buildStartWhile(whiles, f)), node.getType());
+		}
+		private VertexSimpleUnion buildStartWhile(Location<Bytecode.While> whiles, VertexSimpleUnion node) throws CompilerException {
+			return new VertexSimpleUnion(node.getOptions().map_(o -> new VertexOption<>(
+						buildStartWhile(whiles, o.getFirstOperand()),
+						buildStartWhile(whiles, o.getSecondOperand()), o.getType())),
+				node.getType());
+		}
+		private VertexRecordUnion buildStartWhile(Location<Bytecode.While> whiles, VertexRecordUnion node) throws CompilerException {
+			return new VertexRecordUnion(
+				node.getSharedFields().mapSecond_(f -> buildStartWhile(whiles, f)),
+				node.getSpecificFields().mapSecond_(
+					o -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
+							buildStartWhile(whiles, o.getFirstOperand()),
+							buildStartWhile(whiles, o.getSecondOperand()), o.getType())),
+				node.getType());
+		}
+		private VertexUnion buildStartWhile(Location<Bytecode.While> whiles, VertexUnion node) throws CompilerException {
+			return new VertexUnion(
+				buildStartWhile(whiles, node.getFirstOperand()),
+				new VertexOption<>(
+						buildStartWhile(whiles, node.getHasRecords()),
+						buildStartWhile(whiles, node.getRecordOptions()), node.getSecondOperand().getType()),
+				node.getType());
+		}
+		AccessibleVertexTree<?> buildStartWhile(Location<Bytecode.While> whiles, AccessibleVertexTree<?> node) throws CompilerException {
+			if (node instanceof BooleanVertexLeaf)
+				return buildStartWhile(whiles, (BooleanVertexLeaf)node);
+			if (node instanceof VertexLeaf)
+				return buildStartWhile(whiles, (VertexLeaf<?>)node);
+			if (node instanceof VertexSimpleRecord)
+				return buildStartWhile(whiles, (VertexSimpleRecord)node);
+			if (node instanceof VertexSimpleUnion)
+				return buildStartWhile(whiles, (VertexSimpleUnion)node);
+			if (node instanceof VertexRecordUnion)
+				return buildStartWhile(whiles, (VertexRecordUnion)node);
+			if (node instanceof VertexUnion)
+				return buildStartWhile(whiles, (VertexUnion)node);
+			throw UnsupportedTreeNodeCompilerError.exception(node);
+		}
+
+
+		/*------ buildEndWhile ------*/
+
+
+//		private void buildEndWhile(HalfArrow<?> whilen, BooleanVertexLeaf previous, BooleanVertexLeaf next) {
+//			return
+//		}
+		@SuppressWarnings("unchecked")
+		private void buildEndWhile(HalfArrow<?> whilen, VertexLeaf<?> previous, VertexLeaf<?> next) {
+			((HalfArrow<WhileNode>) previous.getValue()).node.complete(whilen, next.getValue());
+		}
+		private void buildEndWhile(HalfArrow<?> whilen, VertexSimpleRecord previous, VertexSimpleRecord next) throws CompilerException {
+			previous.getFieldNames().forEach_(f -> buildEndWhile(whilen, previous.getField(f), next.getField(f)));
+		}
+		private void buildEndWhile(HalfArrow<?> whilen, VertexSimpleUnion previous, VertexSimpleUnion next) {
+			previous.getOptions().gather(next.getOptions()).forEach_(
+				(p, n) -> {
+						buildEndWhile(whilen, p.getFirstOperand(),n.getFirstOperand());
+						buildEndWhile(whilen, p.getSecondOperand(), n.getSecondOperand());});
+		}
+		private void buildEndWhile(HalfArrow<?> whilen, VertexRecordUnion previous, VertexRecordUnion next) throws CompilerException {
+			previous.getFirstOperand().getFieldNames().forEach_(f -> buildEndWhile(whilen, previous.getSharedField(f), next.getSharedField(f)));
+			next.getSpecificFields().duplicateFirst().mapSecond_(previous::getSpecificField).dropFirst().forEach(
+					(p, n) -> {
+							buildEndWhile(whilen, p.getFirstOperand(), n.getFirstOperand());
+							buildEndWhile(whilen, p.getSecondOperand(), n.getSecondOperand());});
+		}
+		private void buildEndWhile(HalfArrow<?> whilen, VertexUnion previous, VertexUnion next) throws CompilerException {
+			buildEndWhile(whilen, previous.getFirstOperand(), next.getFirstOperand());
+			buildEndWhile(whilen, previous.getHasRecords(), next.getHasRecords());
+			buildEndWhile(whilen, previous.getRecordOptions(), next.getRecordOptions());
+		}
+		private void buildEndWhile(HalfArrow<?> whilen, AccessibleVertexTree<?> previous, AccessibleVertexTree<?> next) throws CompilerException {
+			previous.checkIdenticalStructure(next);
+//			if (previous instanceof BooleanVertexLeaf 	&& next instanceof BooleanVertexLeaf)
+//				buildEndWhile(whilen, (BooleanVertexLeaf)previous, 	(BooleanVertexLeaf)next);
+			if (previous instanceof VertexLeaf 			&& next instanceof VertexLeaf)
+				buildEndWhile(whilen, (VertexLeaf<?>)previous, 		(VertexLeaf<?>)next);
+			else if (previous instanceof VertexSimpleRecord 	&& next instanceof VertexRecord)
+				buildEndWhile(whilen, (VertexSimpleRecord)previous, 	(VertexSimpleRecord)next);
+			else if (previous instanceof VertexSimpleUnion 	&& next instanceof VertexSimpleUnion)
+				buildEndWhile(whilen, (VertexSimpleUnion)previous, 	(VertexSimpleUnion)next);
+			else if (previous instanceof VertexRecordUnion 	&& next instanceof VertexRecordUnion)
+				buildEndWhile(whilen, (VertexRecordUnion)previous, (VertexRecordUnion)next);
+			else if (previous instanceof VertexUnion 	&& next instanceof VertexUnion)
+				buildEndWhile(whilen, (VertexUnion)previous, (VertexUnion)next);
+			else
+				throw UnsupportedTreeNodeCompilerError.exception(previous);
+		}
+
+
+
+		private void buildWhile(Location<Bytecode.While> whiles) throws CompilerException {
+			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
+			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).forEach(state::put);
+			Generators.fromMap(state).forEach(vars::put);
+			build(whiles.getBlock(0));
+
+			AccessibleVertexTree<?> cond = buildExpression(whiles.getOperand(0));
+			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
+				throw new CompilerException(new CompilerError() {
+					@Override
+					public String info() {
+						return "The condition is not a Leaf...";
+					}
+				});
+			HalfArrow<?> whilen = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
+			boolean m = false;
+			for (Integer v : vars.keySet()) {
+				AccessibleVertexTree<?> p = state.get(v);
+				AccessibleVertexTree<?> n = vars.get(v);
+				if (p != n) {
+					m = true;
+					buildEndWhile(whilen, p, n);
+				}
+			}
+
+			if (!m)
+				logger.addMessage(new CompilerNotice() {
+					@Override
+					public String info() {
+						return "The loop <"+whiles+"> is infinite.";
+					}});
+
 		}
 	}
 

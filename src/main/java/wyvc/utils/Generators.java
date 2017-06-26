@@ -2407,6 +2407,7 @@ public class Generators {
 	 *
 	 * @param <S> 				The generators values' type
 	 * @param generators		The generators to concatenate
+	 * 
 	 * @return 					A {@link Generator} producing the value of each generator.
 	 */
 	public static <S> Generator<S> concat(Generator<Generator<S>> generators) {

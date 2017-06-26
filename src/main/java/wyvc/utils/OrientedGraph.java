@@ -19,11 +19,11 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 			graph.addNode((N)this);
 		}
 
-		public void addSource(A source) {
+		protected void addSource(A source) {
 			sources.add(source);
 		}
 
-		public void addTarget(A target) {
+		protected void addTarget(A target) {
 			targets.add(target);
 		}
 
