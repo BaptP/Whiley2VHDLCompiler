@@ -23,7 +23,7 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
-import wyvc.builder.DataFlowGraph.WhileNode;
+import wyvc.builder.DataFlowGraph.EndWhileNode;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
@@ -36,6 +36,7 @@ import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.TypeCompiler.TypeUnion;
 import wyvc.builder.LexicalElementTree;
 import wyvc.lang.Type;
+import wyvc.utils.FunctionalInterfaces.BiFunction;
 import wyvc.utils.FunctionalInterfaces.BiFunction_;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
@@ -113,6 +114,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new CompilerException(new UnsupportedTreeNodeCompilerError(node));
 		}
 	}
+
 
 	public static class UnrelatedTypeCompilerError extends CompilerError {
 		private final VertexTree<?> value;
@@ -1611,55 +1613,70 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		/*------ buildEndWhile ------*/
 
 
-//		private void buildEndWhile(HalfArrow<?> whilen, BooleanVertexLeaf previous, BooleanVertexLeaf next) {
-//			return
-//		}
-		@SuppressWarnings("unchecked")
-		private void buildEndWhile(HalfArrow<?> whilen, VertexLeaf<?> previous, VertexLeaf<?> next) {
-			((HalfArrow<WhileNode>) previous.getValue()).node.complete(whilen, next.getValue());
+		private BooleanVertexLeaf buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, BooleanVertexLeaf previousValue, BooleanVertexLeaf nextValue) {
+			return previousValue.getValue().node == nextValue.getValue().node
+					? previousValue
+					: new BooleanVertexLeaf(graph.new EndWhileNode(whiles, whilen, previousValue.getValue(), nextValue.getValue()));
 		}
-		private void buildEndWhile(HalfArrow<?> whilen, VertexSimpleRecord previous, VertexSimpleRecord next) throws CompilerException {
-			previous.getFieldNames().forEach_(f -> buildEndWhile(whilen, previous.getField(f), next.getField(f)));
+		private VertexLeaf<?> buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexLeaf<?> previousValue, VertexLeaf<?> nextValue) {
+			return previousValue.getValue().node == nextValue.getValue().node
+					? previousValue
+					: new VertexLeaf<>(graph.new EndWhileNode(whiles, whilen, previousValue.getValue(), nextValue.getValue()), previousValue.getType());
 		}
-		private void buildEndWhile(HalfArrow<?> whilen, VertexSimpleUnion previous, VertexSimpleUnion next) {
-			previous.getOptions().gather(next.getOptions()).forEach_(
-				(p, n) -> {
-						buildEndWhile(whilen, p.getFirstOperand(),n.getFirstOperand());
-						buildEndWhile(whilen, p.getSecondOperand(), n.getSecondOperand());});
+		private VertexSimpleRecord buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexSimpleRecord previousValue, VertexSimpleRecord nextValue) throws CompilerException {
+			return new VertexSimpleRecord(previousValue.getFields().addComponent(nextValue.getFields().takeSecond()).map23_(
+				(t, f) -> buildEndWhile(whiles, whilen, t,f)), previousValue.getType());
 		}
-		private void buildEndWhile(HalfArrow<?> whilen, VertexRecordUnion previous, VertexRecordUnion next) throws CompilerException {
-			previous.getFirstOperand().getFieldNames().forEach_(f -> buildEndWhile(whilen, previous.getSharedField(f), next.getSharedField(f)));
-			next.getSpecificFields().duplicateFirst().mapSecond_(previous::getSpecificField).dropFirst().forEach(
-					(p, n) -> {
-							buildEndWhile(whilen, p.getFirstOperand(), n.getFirstOperand());
-							buildEndWhile(whilen, p.getSecondOperand(), n.getSecondOperand());});
+		private VertexSimpleUnion buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexSimpleUnion previousValue, VertexSimpleUnion nextValue) throws CompilerException {
+			return new VertexSimpleUnion(previousValue.getOptions().gather(nextValue.getOptions()).map_(
+				(t, f) -> new VertexOption<>(
+						 buildEndWhile(whiles, whilen, t.getFirstOperand(),f.getFirstOperand()),
+						 buildEndWhile(whiles, whilen, t.getSecondOperand(), f.getSecondOperand()), t.getType())), previousValue.getType());
 		}
-		private void buildEndWhile(HalfArrow<?> whilen, VertexUnion previous, VertexUnion next) throws CompilerException {
-			buildEndWhile(whilen, previous.getFirstOperand(), next.getFirstOperand());
-			buildEndWhile(whilen, previous.getHasRecords(), next.getHasRecords());
-			buildEndWhile(whilen, previous.getRecordOptions(), next.getRecordOptions());
+		private VertexRecordUnion buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexRecordUnion previousValue, VertexRecordUnion nextValue) throws CompilerException {
+			return new VertexRecordUnion(
+				nextValue.getSharedFields().duplicateFirst().mapSecond_(previousValue::getSharedField).map23(
+					(t, f) -> buildEndWhile(whiles, whilen, t,f)),
+				nextValue.getSpecificFields().duplicateFirst().mapSecond_(previousValue::getSpecificField).map23(
+					(t, f) -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
+							buildEndWhile(whiles, whilen, t.getFirstOperand(), f.getFirstOperand()),
+							buildEndWhile(whiles, whilen, t.getSecondOperand(), f.getSecondOperand()), t.getType())),
+				previousValue.getType());
 		}
-		private void buildEndWhile(HalfArrow<?> whilen, AccessibleVertexTree<?> previous, AccessibleVertexTree<?> next) throws CompilerException {
-			previous.checkIdenticalStructure(next);
-//			if (previous instanceof BooleanVertexLeaf 	&& next instanceof BooleanVertexLeaf)
-//				buildEndWhile(whilen, (BooleanVertexLeaf)previous, 	(BooleanVertexLeaf)next);
-			if (previous instanceof VertexLeaf 			&& next instanceof VertexLeaf)
-				buildEndWhile(whilen, (VertexLeaf<?>)previous, 		(VertexLeaf<?>)next);
-			else if (previous instanceof VertexSimpleRecord 	&& next instanceof VertexRecord)
-				buildEndWhile(whilen, (VertexSimpleRecord)previous, 	(VertexSimpleRecord)next);
-			else if (previous instanceof VertexSimpleUnion 	&& next instanceof VertexSimpleUnion)
-				buildEndWhile(whilen, (VertexSimpleUnion)previous, 	(VertexSimpleUnion)next);
-			else if (previous instanceof VertexRecordUnion 	&& next instanceof VertexRecordUnion)
-				buildEndWhile(whilen, (VertexRecordUnion)previous, (VertexRecordUnion)next);
-			else if (previous instanceof VertexUnion 	&& next instanceof VertexUnion)
-				buildEndWhile(whilen, (VertexUnion)previous, (VertexUnion)next);
-			else
-				throw UnsupportedTreeNodeCompilerError.exception(previous);
+		private VertexUnion buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexUnion previousValue, VertexUnion nextValue) throws CompilerException {
+			return new VertexUnion(
+				buildEndWhile(whiles, whilen, previousValue.getFirstOperand(), nextValue.getFirstOperand()),
+				new VertexOption<>(
+						buildEndWhile(whiles, whilen, previousValue.getHasRecords(), nextValue.getHasRecords()),
+						buildEndWhile(whiles, whilen, previousValue.getRecordOptions(), nextValue.getRecordOptions()),previousValue.getSecondOperand().getType()),
+				previousValue.getType());
 		}
+		private AccessibleVertexTree<?> buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, AccessibleVertexTree<?> previousValue, AccessibleVertexTree<?> nextValue) throws CompilerException {
+			previousValue.checkIdenticalStructure(nextValue);
+			if (previousValue instanceof BooleanVertexLeaf 	&& nextValue instanceof BooleanVertexLeaf)
+				return buildEndWhile(whiles, whilen, (BooleanVertexLeaf)previousValue, 	(BooleanVertexLeaf)nextValue);
+			if (previousValue instanceof VertexLeaf 			&& nextValue instanceof VertexLeaf)
+				return buildEndWhile(whiles, whilen, (VertexLeaf<?>)previousValue, 		(VertexLeaf<?>)nextValue);
+			if (previousValue instanceof VertexSimpleRecord 	&& nextValue instanceof VertexRecord)
+				return buildEndWhile(whiles, whilen, (VertexSimpleRecord)previousValue, 	(VertexSimpleRecord)nextValue);
+			if (previousValue instanceof VertexSimpleUnion 	&& nextValue instanceof VertexSimpleUnion)
+				return buildEndWhile(whiles, whilen, (VertexSimpleUnion)previousValue, 	(VertexSimpleUnion)nextValue);
+			if (previousValue instanceof VertexRecordUnion 	&& nextValue instanceof VertexRecordUnion)
+				return buildEndWhile(whiles, whilen, (VertexRecordUnion)previousValue, (VertexRecordUnion)nextValue);
+			if (previousValue instanceof VertexUnion 	&& nextValue instanceof VertexUnion)
+				return buildEndWhile(whiles, whilen, (VertexUnion)previousValue, (VertexUnion)nextValue);
+			throw UnsupportedTreeNodeCompilerError.exception(previousValue);
+		}
+
+
+
+
 
 
 
 		private void buildWhile(Location<Bytecode.While> whiles) throws CompilerException {
+			HashMap<Integer, AccessibleVertexTree<?>> pstate = new HashMap<>();
+			Generators.fromMap(vars).forEach(pstate::put);
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
 			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).forEach(state::put);
 			Generators.fromMap(state).forEach(vars::put);
@@ -1680,8 +1697,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				AccessibleVertexTree<?> n = vars.get(v);
 				if (p != n) {
 					m = true;
-					buildEndWhile(whilen, p, n);
+					vars.put(v, buildEndWhile(whiles, whilen, p, n));
 				}
+				else
+					vars.put(v, pstate.get(v));
 			}
 
 			if (!m)

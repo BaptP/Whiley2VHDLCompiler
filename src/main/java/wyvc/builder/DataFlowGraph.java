@@ -427,31 +427,41 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 
-
 	public final class WhileNode extends WyilNode<Bytecode.While> {
-		public DataArrow<?,?> condition = null;
+		public final DataArrow<?,?> value;
+
+		public WhileNode(Location<Bytecode.While> whiles, HalfArrow<?> value) {
+			super("While", whiles, value.node.type, Collections.singletonList(value));
+			this.value = value.arrow;
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public DataNode duplicate(Duplicator duplicator) {
+			return new WhileNode(location, duplicator.duplicate(value));
+		}
+	}
+
+	public final class EndWhileNode extends WyilNode<Bytecode.While> {
+		public final DataArrow<?,?> condition;
 		public final DataArrow<?,?> previousValue;
-		public DataArrow<?,?> nextValue = null;
+		public final DataArrow<?,?> nextValue;
 
-		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> previousValue) {
-			super("rmux", ifs, previousValue.node.type, Collections.singletonList(previousValue));
-			this.previousValue  =  previousValue.arrow;
-		}
-
-		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> condition, HalfArrow<?> previousValue, HalfArrow<?> nextValue) {
-			super("rmux", ifs, previousValue.node.type, Arrays.asList(condition, previousValue, nextValue));
+		public EndWhileNode(Location<Bytecode.While> whiles, HalfArrow<?> condition, HalfArrow<?> previousValue, HalfArrow<?> nextValue) {
+			super("EndWhile", whiles, previousValue.node.type, Arrays.asList(condition, previousValue, nextValue));
 			this.condition = condition.arrow;
 			this.previousValue  =  previousValue.arrow;
-			this.nextValue  =  nextValue.arrow;
-
-		}
-		public void complete(HalfArrow<?> condition, HalfArrow<?> nextValue) {
-			if (this.nextValue != null)
-				return;
-			addSource(nextValue);
-			addSource(condition);
 			this.nextValue = nextValue.arrow;
-			this.condition = condition.arrow;
 		}
 
 		@Override
@@ -467,9 +477,54 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public DataNode duplicate(Duplicator duplicator) {
-			return new WhileNode(location, duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue));
+			return new EndWhileNode(location, duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue));
 		}
 	}
+
+
+//
+//	public final class WhileNode extends WyilNode<Bytecode.While> {
+//		public DataArrow<?,?> condition = null;
+//		public final DataArrow<?,?> previousValue;
+//		public DataArrow<?,?> nextValue = null;
+//
+//		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> previousValue) {
+//			super("rmux", ifs, previousValue.node.type, Collections.singletonList(previousValue));
+//			this.previousValue  =  previousValue.arrow;
+//		}
+//
+//		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> condition, HalfArrow<?> previousValue, HalfArrow<?> nextValue) {
+//			super("rmux", ifs, previousValue.node.type, Arrays.asList(condition, previousValue, nextValue));
+//			this.condition = condition.arrow;
+//			this.previousValue  =  previousValue.arrow;
+//			this.nextValue  =  nextValue.arrow;
+//
+//		}
+//		public void complete(HalfArrow<?> condition, HalfArrow<?> nextValue) {
+//			if (this.nextValue != null)
+//				return;
+//			addSource(nextValue);
+//			addSource(condition);
+//			this.nextValue = nextValue.arrow;
+//			this.condition = condition.arrow;
+//		}
+//
+//		@Override
+//		public List<String> getOptions() {
+//			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
+//		}
+//
+//		@Override
+//		public boolean isStaticallyKnown() {
+//			return false;//TODO complex
+//		}
+//
+//
+//		@Override
+//		public DataNode duplicate(Duplicator duplicator) {
+//			return new WhileNode(location, duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue));
+//		}
+//	}
 
 
 
