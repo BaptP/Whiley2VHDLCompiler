@@ -1370,121 +1370,99 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
+		/*------ buildMergeNode ------*/
 
-		/*------ buildEndIf ------*/
-
-		private BooleanVertexLeaf buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, BooleanVertexLeaf trueLab, BooleanVertexLeaf falseLab) {
-			return trueLab.getValue().node == falseLab.getValue().node
-					? trueLab
-					: new BooleanVertexLeaf(graph.new EndIfNode(ifs, ifn, trueLab.getValue(), falseLab.getValue()));
+		private BooleanVertexLeaf buildMerge(
+				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
+				BooleanVertexLeaf tree1, BooleanVertexLeaf tree2) {
+			return mergeBoolean.apply(tree1, tree2);
 		}
-		private VertexLeaf<?> buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexLeaf<?> trueLab, VertexLeaf<?> falseLab) {
-			return trueLab.getValue().node == falseLab.getValue().node
-					? trueLab
-					: new GeneralVertexLeaf(graph.new EndIfNode(ifs, ifn, trueLab.getValue(), falseLab.getValue()));
+		private VertexLeaf<?> buildMerge(
+				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				VertexLeaf<?> tree1, VertexLeaf<?> tree2) {
+			return mergeGeneral.apply(tree1, tree2);
 		}
-		private VertexSimpleRecord buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexSimpleRecord trueLab, VertexSimpleRecord falseLab) throws CompilerException {
-			return new VertexSimpleRecord(trueLab.getFields().addComponent(falseLab.getFields().takeSecond()).map23_(
-				(t, f) -> buildEndIf(ifs, ifn, t,f)));
+		private VertexSimpleRecord buildMerge(
+				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
+				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				VertexSimpleRecord tree1, VertexSimpleRecord tree2) throws CompilerException {
+			return new VertexSimpleRecord(tree1.getFields().addComponent(tree2.getFields().takeSecond()).map23_(
+				(t, f) -> buildMerge(mergeBoolean, mergeGeneral, t,f)));
 		}
-		private VertexSimpleUnion buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexSimpleUnion trueLab, VertexSimpleUnion falseLab) throws CompilerException {
-			return new VertexSimpleUnion(trueLab.getOptions().gather(falseLab.getOptions()).map_(
+		private VertexSimpleUnion buildMerge(
+				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
+				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				VertexSimpleUnion tree1, VertexSimpleUnion tree2) throws CompilerException {
+			return new VertexSimpleUnion(tree1.getOptions().gather(tree2.getOptions()).map_(
 				(t, f) -> new VertexOption<>(
-						 buildEndIf(ifs, ifn, t.getFirstOperand(),f.getFirstOperand()),
-						 buildEndIf(ifs, ifn, t.getSecondOperand(), f.getSecondOperand()))));
+						 buildMerge(mergeBoolean, t.getFirstOperand(),f.getFirstOperand()),
+						 buildMerge(mergeGeneral, t.getSecondOperand(), f.getSecondOperand()))));
 		}
-		private VertexRecordUnion buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexRecordUnion trueLab, VertexRecordUnion falseLab) throws CompilerException {
+		private VertexRecordUnion buildMerge(
+				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
+				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				VertexRecordUnion tree1, VertexRecordUnion tree2) throws CompilerException {
 			return new VertexRecordUnion(
-				falseLab.getSharedFields().duplicateFirst().mapSecond_(trueLab::getSharedField).map23(
-					(t, f) -> buildEndIf(ifs, ifn, t,f)),
-				falseLab.getSpecificFields().duplicateFirst().mapSecond_(trueLab::getSpecificField).map23(
+				tree2.getSharedFields().duplicateFirst().mapSecond_(tree1::getSharedField).map23(
+					(t, f) -> buildMerge(mergeBoolean, mergeGeneral, t,f)),
+				tree2.getSpecificFields().duplicateFirst().mapSecond_(tree1::getSpecificField).map23(
 					(t, f) -> new VertexOption<>(
-							buildEndIf(ifs, ifn, t.getFirstOperand(), f.getFirstOperand()),
-							buildEndIf(ifs, ifn, t.getSecondOperand(), f.getSecondOperand()))));
+							buildMerge(mergeBoolean, t.getFirstOperand(), f.getFirstOperand()),
+							buildMerge(mergeBoolean, mergeGeneral, t.getSecondOperand(), f.getSecondOperand()))));
 		}
-		private VertexUnion buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, VertexUnion trueLab, VertexUnion falseLab) throws CompilerException {
+		private VertexUnion buildMerge(
+				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
+				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				VertexUnion tree1, VertexUnion tree2) throws CompilerException {
 			return new VertexUnion(
-				buildEndIf(ifs, ifn, trueLab.getFirstOperand(), falseLab.getFirstOperand()),
+				buildMerge(mergeBoolean, mergeGeneral, tree1.getFirstOperand(), tree2.getFirstOperand()),
 				new VertexOption<>(
-						buildEndIf(ifs, ifn, trueLab.getHasRecords(), falseLab.getHasRecords()),
-						buildEndIf(ifs, ifn, trueLab.getRecordOptions(), falseLab.getRecordOptions())));
+						buildMerge(mergeBoolean, tree1.getHasRecords(), tree2.getHasRecords()),
+						buildMerge(mergeBoolean, mergeGeneral, tree1.getRecordOptions(), tree2.getRecordOptions())));
 		}
+		private AccessibleVertexTree<?> buildMerge(
+				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
+				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				AccessibleVertexTree<?> tree1, AccessibleVertexTree<?> tree2) throws CompilerException {
+			tree1.checkIdenticalStructure(tree2);
+			if (tree1 instanceof BooleanVertexLeaf 	&& tree2 instanceof BooleanVertexLeaf)
+				return buildMerge(mergeBoolean, (BooleanVertexLeaf)tree1, 	(BooleanVertexLeaf)tree2);
+			if (tree1 instanceof VertexLeaf 			&& tree2 instanceof VertexLeaf)
+				return buildMerge(mergeGeneral, (VertexLeaf<?>)tree1, 		(VertexLeaf<?>)tree2);
+			if (tree1 instanceof VertexSimpleRecord 	&& tree2 instanceof VertexRecord)
+				return buildMerge(mergeBoolean, mergeGeneral, (VertexSimpleRecord)tree1, 	(VertexSimpleRecord)tree2);
+			if (tree1 instanceof VertexSimpleUnion 	&& tree2 instanceof VertexSimpleUnion)
+				return buildMerge(mergeBoolean, mergeGeneral, (VertexSimpleUnion)tree1, 	(VertexSimpleUnion)tree2);
+			if (tree1 instanceof VertexRecordUnion 	&& tree2 instanceof VertexRecordUnion)
+				return buildMerge(mergeBoolean, mergeGeneral, (VertexRecordUnion)tree1, (VertexRecordUnion)tree2);
+			if (tree1 instanceof VertexUnion 	&& tree2 instanceof VertexUnion)
+				return buildMerge(mergeBoolean, mergeGeneral, (VertexUnion)tree1, (VertexUnion)tree2);
+			throw UnsupportedTreeNodeCompilerError.exception(tree1);
+		}
+
+
+
+		private AccessibleVertexTree<?> buildMerge(
+				BiFunction<HalfArrow<?>, HalfArrow<?>, DataNode> merge,
+				AccessibleVertexTree<?> tree1, AccessibleVertexTree<?> tree2) throws CompilerException {
+			return buildMerge(
+				(b, c) -> new BooleanVertexLeaf(merge.apply(b.getValue(), c.getValue())),
+				(b, c) -> new GeneralVertexLeaf(merge.apply(b.getValue(), c.getValue())),
+				tree1, tree2);
+		}
+
+
+
 		private AccessibleVertexTree<?> buildEndIf(Location<Bytecode.If> ifs, HalfArrow<?> ifn, AccessibleVertexTree<?> trueLab, AccessibleVertexTree<?> falseLab) throws CompilerException {
-			trueLab.checkIdenticalStructure(falseLab);
-			if (trueLab instanceof BooleanVertexLeaf 	&& falseLab instanceof BooleanVertexLeaf)
-				return buildEndIf(ifs, ifn, (BooleanVertexLeaf)trueLab, 	(BooleanVertexLeaf)falseLab);
-			if (trueLab instanceof VertexLeaf 			&& falseLab instanceof VertexLeaf)
-				return buildEndIf(ifs, ifn, (VertexLeaf<?>)trueLab, 		(VertexLeaf<?>)falseLab);
-			if (trueLab instanceof VertexSimpleRecord 	&& falseLab instanceof VertexRecord)
-				return buildEndIf(ifs, ifn, (VertexSimpleRecord)trueLab, 	(VertexSimpleRecord)falseLab);
-			if (trueLab instanceof VertexSimpleUnion 	&& falseLab instanceof VertexSimpleUnion)
-				return buildEndIf(ifs, ifn, (VertexSimpleUnion)trueLab, 	(VertexSimpleUnion)falseLab);
-			if (trueLab instanceof VertexRecordUnion 	&& falseLab instanceof VertexRecordUnion)
-				return buildEndIf(ifs, ifn, (VertexRecordUnion)trueLab, (VertexRecordUnion)falseLab);
-			if (trueLab instanceof VertexUnion 	&& falseLab instanceof VertexUnion)
-				return buildEndIf(ifs, ifn, (VertexUnion)trueLab, (VertexUnion)falseLab);
-			throw UnsupportedTreeNodeCompilerError.exception(trueLab);
+			return buildMerge((t,f) -> t.node == f.node ? t.node : graph.new EndIfNode(ifs, ifn, t, f), trueLab, falseLab);
 		}
 
 
-
-
-
-		/*------ copyNamedHalfArrow ------*/
-
-		private BooleanVertexLeaf copyNamedHalfArrow(BooleanVertexLeaf name, BooleanVertexLeaf node) {
-			return new BooleanVertexLeaf(node.getValue().node, name.getValue().ident);
-		}
-		private GeneralVertexLeaf copyNamedHalfArrow(VertexLeaf<?> name, VertexLeaf<?> node) {
-			return new GeneralVertexLeaf(node.getValue().node, name.getValue().ident);
-		}
-		private VertexSimpleRecord copyNamedHalfArrow(VertexSimpleRecord name, VertexSimpleRecord node) throws CompilerException {
-			return new VertexSimpleRecord(node.getFields().duplicateFirst().mapSecond_(name::getField).map23(this::copyNamedHalfArrow));
-
-		}
-		private VertexSimpleUnion copyNamedHalfArrow(VertexSimpleUnion name, VertexSimpleUnion node) throws CompilerException {
-			return new VertexSimpleUnion(name.getOptions().gather(node.getOptions()).map(
-				(a,b) -> new VertexOption<>(
-						 copyNamedHalfArrow(a.getFirstOperand(), b.getFirstOperand()),
-						 copyNamedHalfArrow(a.getSecondOperand(), b.getSecondOperand()))));
-		}
-		private VertexOption<AccessibleVertexTree<?>> copyNamedHalfArrow(
-				VertexOption<AccessibleVertexTree<?>> name, VertexOption<AccessibleVertexTree<?>> node) throws CompilerException {
-			return new VertexOption<>(
-					copyNamedHalfArrow(name.getFirstOperand(), node.getFirstOperand()),
-					copyNamedHalfArrow(name.getSecondOperand(), node.getSecondOperand()));
-		}
-		private VertexRecordUnion copyNamedHalfArrow(VertexRecordUnion name, VertexRecordUnion node) throws CompilerException {
-			return new VertexRecordUnion(
-				node.getSharedFields().duplicateFirst().mapSecond_(name::getSharedField).map23(this::copyNamedHalfArrow),
-				node.getSpecificFields().duplicateFirst().mapSecond_(name::getSpecificField).map23(this::copyNamedHalfArrow));
-		}
-		private VertexUnion copyNamedHalfArrow(VertexUnion name, VertexUnion node) throws CompilerException {
-			return new VertexUnion(
-				copyNamedHalfArrow(name.getFirstOperand(), node.getFirstOperand()),
-				new VertexOption<>(
-						copyNamedHalfArrow(name.getHasRecords(), node.getHasRecords()),
-						copyNamedHalfArrow(name.getRecordOptions(), node.getRecordOptions())));
-		}
 		private AccessibleVertexTree<?> copyNamedHalfArrow(AccessibleVertexTree<?> name, AccessibleVertexTree<?> node) throws CompilerException {
-			if (name == null) {
-				// TODO
-				return node;
-			}
-			name.checkIdenticalStructure(node);
-			if (name instanceof BooleanVertexLeaf 	&& node instanceof BooleanVertexLeaf)
-				return copyNamedHalfArrow((BooleanVertexLeaf)name, (BooleanVertexLeaf)node);
-			if (name instanceof VertexLeaf 			&& node instanceof VertexLeaf)
-				return copyNamedHalfArrow((VertexLeaf<?>)name, (VertexLeaf<?>)node);
-			if (name instanceof VertexSimpleRecord 	&& node instanceof VertexRecord)
-				return copyNamedHalfArrow((VertexSimpleRecord)name, (VertexSimpleRecord)node);
-			if (name instanceof VertexSimpleUnion 	&& node instanceof VertexSimpleUnion)
-				return copyNamedHalfArrow((VertexSimpleUnion)name, (VertexSimpleUnion)node);
-			if (name instanceof VertexRecordUnion 	&& node instanceof VertexRecordUnion)
-				return copyNamedHalfArrow((VertexRecordUnion)name, (VertexRecordUnion)node);
-			if (name instanceof VertexUnion 		&& node instanceof VertexUnion)
-				return copyNamedHalfArrow((VertexUnion)name, (VertexUnion)node);
-			throw UnsupportedTreeNodeCompilerError.exception(node);
+			return buildMerge(
+				(na,no) -> new BooleanVertexLeaf(no.getValue().node, na.getValue().ident),
+				(na,no) -> new BooleanVertexLeaf(no.getValue().node, na.getValue().ident),
+				name,node);
 		}
 
 
@@ -1553,33 +1531,30 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new BooleanVertexLeaf(graph.new WhileNode(whiles, node.getValue()));
 		}
 		private VertexLeaf<?> buildStartWhile(Location<Bytecode.While> whiles, VertexLeaf<?> node) {
-			return new VertexLeaf<>(graph.new WhileNode(whiles, node.getValue()), node.getType());
+			return new GeneralVertexLeaf(graph.new WhileNode(whiles, node.getValue()));
 		}
 		private VertexSimpleRecord buildStartWhile(Location<Bytecode.While> whiles, VertexSimpleRecord node) throws CompilerException {
-			return new VertexSimpleRecord(node.getFields().mapSecond_(f -> buildStartWhile(whiles, f)), node.getType());
+			return new VertexSimpleRecord(node.getFields().mapSecond_(f -> buildStartWhile(whiles, f)));
 		}
 		private VertexSimpleUnion buildStartWhile(Location<Bytecode.While> whiles, VertexSimpleUnion node) throws CompilerException {
 			return new VertexSimpleUnion(node.getOptions().map_(o -> new VertexOption<>(
 						buildStartWhile(whiles, o.getFirstOperand()),
-						buildStartWhile(whiles, o.getSecondOperand()), o.getType())),
-				node.getType());
+						buildStartWhile(whiles, o.getSecondOperand()))));
 		}
 		private VertexRecordUnion buildStartWhile(Location<Bytecode.While> whiles, VertexRecordUnion node) throws CompilerException {
 			return new VertexRecordUnion(
 				node.getSharedFields().mapSecond_(f -> buildStartWhile(whiles, f)),
 				node.getSpecificFields().mapSecond_(
-					o -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
+					o -> new VertexOption<>(
 							buildStartWhile(whiles, o.getFirstOperand()),
-							buildStartWhile(whiles, o.getSecondOperand()), o.getType())),
-				node.getType());
+							buildStartWhile(whiles, o.getSecondOperand()))));
 		}
 		private VertexUnion buildStartWhile(Location<Bytecode.While> whiles, VertexUnion node) throws CompilerException {
 			return new VertexUnion(
 				buildStartWhile(whiles, node.getFirstOperand()),
 				new VertexOption<>(
 						buildStartWhile(whiles, node.getHasRecords()),
-						buildStartWhile(whiles, node.getRecordOptions()), node.getSecondOperand().getType()),
-				node.getType());
+						buildStartWhile(whiles, node.getRecordOptions())));
 		}
 		AccessibleVertexTree<?> buildStartWhile(Location<Bytecode.While> whiles, AccessibleVertexTree<?> node) throws CompilerException {
 			if (node instanceof BooleanVertexLeaf)
@@ -1598,62 +1573,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
-		/*------ buildEndWhile ------*/
 
-
-		private BooleanVertexLeaf buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, BooleanVertexLeaf previousValue, BooleanVertexLeaf nextValue) {
-			return previousValue.getValue().node == nextValue.getValue().node
-					? previousValue
-					: new BooleanVertexLeaf(graph.new EndWhileNode(whiles, whilen, previousValue.getValue(), nextValue.getValue()));
-		}
-		private VertexLeaf<?> buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexLeaf<?> previousValue, VertexLeaf<?> nextValue) {
-			return previousValue.getValue().node == nextValue.getValue().node
-					? previousValue
-					: new VertexLeaf<>(graph.new EndWhileNode(whiles, whilen, previousValue.getValue(), nextValue.getValue()), previousValue.getType());
-		}
-		private VertexSimpleRecord buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexSimpleRecord previousValue, VertexSimpleRecord nextValue) throws CompilerException {
-			return new VertexSimpleRecord(previousValue.getFields().addComponent(nextValue.getFields().takeSecond()).map23_(
-				(t, f) -> buildEndWhile(whiles, whilen, t,f)), previousValue.getType());
-		}
-		private VertexSimpleUnion buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexSimpleUnion previousValue, VertexSimpleUnion nextValue) throws CompilerException {
-			return new VertexSimpleUnion(previousValue.getOptions().gather(nextValue.getOptions()).map_(
-				(t, f) -> new VertexOption<>(
-						 buildEndWhile(whiles, whilen, t.getFirstOperand(),f.getFirstOperand()),
-						 buildEndWhile(whiles, whilen, t.getSecondOperand(), f.getSecondOperand()), t.getType())), previousValue.getType());
-		}
-		private VertexRecordUnion buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexRecordUnion previousValue, VertexRecordUnion nextValue) throws CompilerException {
-			return new VertexRecordUnion(
-				nextValue.getSharedFields().duplicateFirst().mapSecond_(previousValue::getSharedField).map23(
-					(t, f) -> buildEndWhile(whiles, whilen, t,f)),
-				nextValue.getSpecificFields().duplicateFirst().mapSecond_(previousValue::getSpecificField).map23(
-					(t, f) -> new VertexOption<AccessibleTypeTree, AccessibleVertexTree<?>>(
-							buildEndWhile(whiles, whilen, t.getFirstOperand(), f.getFirstOperand()),
-							buildEndWhile(whiles, whilen, t.getSecondOperand(), f.getSecondOperand()), t.getType())),
-				previousValue.getType());
-		}
-		private VertexUnion buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, VertexUnion previousValue, VertexUnion nextValue) throws CompilerException {
-			return new VertexUnion(
-				buildEndWhile(whiles, whilen, previousValue.getFirstOperand(), nextValue.getFirstOperand()),
-				new VertexOption<>(
-						buildEndWhile(whiles, whilen, previousValue.getHasRecords(), nextValue.getHasRecords()),
-						buildEndWhile(whiles, whilen, previousValue.getRecordOptions(), nextValue.getRecordOptions()),previousValue.getSecondOperand().getType()),
-				previousValue.getType());
-		}
 		private AccessibleVertexTree<?> buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, AccessibleVertexTree<?> previousValue, AccessibleVertexTree<?> nextValue) throws CompilerException {
-			previousValue.checkIdenticalStructure(nextValue);
-			if (previousValue instanceof BooleanVertexLeaf 	&& nextValue instanceof BooleanVertexLeaf)
-				return buildEndWhile(whiles, whilen, (BooleanVertexLeaf)previousValue, 	(BooleanVertexLeaf)nextValue);
-			if (previousValue instanceof VertexLeaf 			&& nextValue instanceof VertexLeaf)
-				return buildEndWhile(whiles, whilen, (VertexLeaf<?>)previousValue, 		(VertexLeaf<?>)nextValue);
-			if (previousValue instanceof VertexSimpleRecord 	&& nextValue instanceof VertexRecord)
-				return buildEndWhile(whiles, whilen, (VertexSimpleRecord)previousValue, 	(VertexSimpleRecord)nextValue);
-			if (previousValue instanceof VertexSimpleUnion 	&& nextValue instanceof VertexSimpleUnion)
-				return buildEndWhile(whiles, whilen, (VertexSimpleUnion)previousValue, 	(VertexSimpleUnion)nextValue);
-			if (previousValue instanceof VertexRecordUnion 	&& nextValue instanceof VertexRecordUnion)
-				return buildEndWhile(whiles, whilen, (VertexRecordUnion)previousValue, (VertexRecordUnion)nextValue);
-			if (previousValue instanceof VertexUnion 	&& nextValue instanceof VertexUnion)
-				return buildEndWhile(whiles, whilen, (VertexUnion)previousValue, (VertexUnion)nextValue);
-			throw UnsupportedTreeNodeCompilerError.exception(previousValue);
+			return buildMerge((t,f) -> t.node == f.node ? t.node : graph.new EndWhileNode(whiles, whilen, t, f), previousValue, nextValue);
 		}
 
 
