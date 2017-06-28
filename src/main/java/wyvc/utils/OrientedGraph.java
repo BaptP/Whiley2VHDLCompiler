@@ -34,6 +34,8 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 		public Generator<N> getTargets() {
 			return Generators.fromCollection(targets).map((A a) -> a.to);
 		}
+
+		protected void removed() {}
 	}
 
 	public abstract static class Arrow<A extends Arrow<A,N>, N extends Node<N,A>> {
@@ -50,6 +52,8 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 			from.addTarget((A) this);
 			to.addSource((A) this);
 		}
+
+		protected void removed() {}
 	}
 
 
@@ -74,6 +78,7 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 	public void removeNode(N node) {
 		if (nodes.contains(node)) {
 			nodes.remove(node);
+			node.removed();
 			for (A a : new ArrayList<>(node.targets))
 				removeArrow(a);
 			for (A a : new ArrayList<>(node.sources))
@@ -84,6 +89,7 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 	public void removeArrow(A arrow) {
 		if (arrows.contains(arrow)) {
 			arrows.remove(arrow);
+			arrow.removed();
 			arrow.from.targets.remove(arrow);
 			arrow.to.sources.remove(arrow);
 		}

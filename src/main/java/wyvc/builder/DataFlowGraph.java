@@ -1,9 +1,12 @@
 package wyvc.builder;
 
 import java.util.List;
+import java.util.Set;
+import java.util.Stack;
 
 import wyil.lang.Bytecode;
 import wyil.lang.SyntaxTree.Location;
+import wyvc.builder.PipelineBlock.CodeBlock;
 import wyvc.io.GraphPrinter.PrintableGraph;
 import wyvc.lang.Type;
 import wyvc.lang.TypedValue.Port.Mode;
@@ -14,6 +17,7 @@ import wyvc.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 
 public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFlowGraph.DataArrow<?,?>> {
 
@@ -29,8 +33,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public List<String> getOptions() {
-			if (from.part != to.part)
-				return Arrays.asList("arrowhead=\"box\"","color=purple");
+			if (from.block != to.block)
+				return from.block.getParent() == to.block || from.block == to.block.getParent()
+					? Arrays.asList("arrowhead=\"box\"","color=purple")
+					: Arrays.asList("arrowhead=\"box\"","color=green");
 			return Collections.emptyList();
 		}
 	}
@@ -60,55 +66,6 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 	}
 
-	@FunctionalInterface
-	public static interface Duplicator {
-		public <T extends DataNode> HalfArrow<T> duplicate(DataArrow<T, ?> arrow);
-	}
-
-	public abstract class DataNode extends PrintableGraph.PrintableNode<DataNode, DataArrow<?,?>> {
-		public final Type type;
-		public final int part;
-		public final String nodeIdent;
-
-
-		public DataNode(String label, Type type) {
-			this(label, type, Collections.emptyList());
-		}
-
-		public DataNode(String label, Type type, List<HalfArrow<?>> sources) {
-			super(DataFlowGraph.this);
-			sources.forEach((HalfArrow<?> a) -> a.complete(this));
-			this.type = type;
-			part = separation;
-			nodeIdent = label;
-		}
-
-		private String getShortIdent() {
-			return nodeIdent.length() < 19 ? nodeIdent : nodeIdent.substring(0, 12)+"..."+nodeIdent.substring(nodeIdent.length()-4);
-		}
-
-		@Override
-		public String getIdent() {
-			return getShortIdent()+"\n"+(type == null ? "Untyped" : type.toString());
-		}
-
-		@Override
-		public List<String> getOptions() {
-			return Collections.emptyList();
-		}
-
-		public DataFlowGraph getGraph() {
-			return DataFlowGraph.this;
-		}
-
-		protected void addSource(HalfArrow<?> source) {
-			source.complete(this);
-		}
-
-		public abstract boolean isStaticallyKnown();
-
-		public abstract DataNode duplicate(Duplicator duplicator);
-	}
 
 
 	public static class HalfArrow<T extends DataNode> {
@@ -140,6 +97,65 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		@Override
 		public String toString() {
 			return node.toString()+"--"+(ident == null ? "" : ident)+"-->";
+		}
+	}
+
+
+	@FunctionalInterface
+	public static interface Duplicator {
+		public <T extends DataNode> HalfArrow<T> duplicate(DataArrow<T, ?> arrow);
+	}
+
+	public abstract class DataNode extends PrintableGraph.PrintableNode<DataNode, DataArrow<?,?>> {
+		public final Type type;
+		public final int part;
+		public final String nodeIdent;
+		public final GraphBlock block;
+
+
+		public DataNode(String label, Type type) {
+			this(label, type, Collections.emptyList());
+		}
+
+		public DataNode(String label, Type type, List<HalfArrow<?>> sources) {
+			super(DataFlowGraph.this);
+			sources.forEach((HalfArrow<?> a) -> a.complete(this));
+			this.type = type;
+			part = separation;
+			nodeIdent = label;
+			block = DataFlowGraph.this.block;
+			block.nodes.add(this);
+		}
+
+		private String getShortIdent() {
+			return nodeIdent.length() < 19 ? nodeIdent : nodeIdent.substring(0, 12)+"..."+nodeIdent.substring(nodeIdent.length()-4);
+		}
+
+		@Override
+		public String getIdent() {
+			return getShortIdent()+"\n"+(type == null ? "Untyped" : type.toString());
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Collections.emptyList();
+		}
+
+		public DataFlowGraph getGraph() {
+			return DataFlowGraph.this;
+		}
+
+		protected void addSource(HalfArrow<?> source) {
+			source.complete(this);
+		}
+
+		public abstract boolean isStaticallyKnown();
+
+		public abstract DataNode duplicate(Duplicator duplicator);
+
+		@Override
+		protected void removed() {
+			block.nodes.remove(this);
 		}
 	}
 
@@ -479,58 +495,151 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 
-//
-//	public final class WhileNode extends WyilNode<Bytecode.While> {
-//		public DataArrow<?,?> condition = null;
-//		public final DataArrow<?,?> previousValue;
-//		public DataArrow<?,?> nextValue = null;
-//
-//		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> previousValue) {
-//			super("rmux", ifs, previousValue.node.type, Collections.singletonList(previousValue));
-//			this.previousValue  =  previousValue.arrow;
-//		}
-//
-//		public WhileNode(Location<Bytecode.While> ifs, HalfArrow<?> condition, HalfArrow<?> previousValue, HalfArrow<?> nextValue) {
-//			super("rmux", ifs, previousValue.node.type, Arrays.asList(condition, previousValue, nextValue));
-//			this.condition = condition.arrow;
-//			this.previousValue  =  previousValue.arrow;
-//			this.nextValue  =  nextValue.arrow;
-//
-//		}
-//		public void complete(HalfArrow<?> condition, HalfArrow<?> nextValue) {
-//			if (this.nextValue != null)
-//				return;
-//			addSource(nextValue);
-//			addSource(condition);
-//			this.nextValue = nextValue.arrow;
-//			this.condition = condition.arrow;
-//		}
-//
-//		@Override
-//		public List<String> getOptions() {
-//			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
-//		}
-//
-//		@Override
-//		public boolean isStaticallyKnown() {
-//			return false;//TODO complex
-//		}
-//
-//
-//		@Override
-//		public DataNode duplicate(Duplicator duplicator) {
-//			return new WhileNode(location, duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue));
-//		}
-//	}
+
+
+
+
+
+
+	public abstract class NodeBlock {
+		protected final NodeBlock parentBlock;
+		protected final List<NodeBlock> nestedBlocks = new ArrayList<>();
+
+		public NodeBlock(NodeBlock parentBlock) {
+			this.parentBlock = parentBlock;
+			if (parentBlock != null)
+				parentBlock.nestedBlocks.add(this);
+		}
+
+		protected abstract GraphBlock getParentGraphBlock();
+
+		public final GraphBlock getParent() {
+			if (parentBlock == null)
+				return null;
+			return parentBlock.getParentGraphBlock();
+		}
+
+		public final Generator<NodeBlock> getNestedBlock() {
+			return Generators.fromCollection(nestedBlocks);
+		}
+	}
+
+	public abstract class AbstractBlock extends NodeBlock {
+
+		public AbstractBlock(NodeBlock parentBlock) {
+			super(parentBlock);
+		}
+
+		@Override
+		protected final GraphBlock getParentGraphBlock() {
+			return parentBlock.getParentGraphBlock();
+		}
+
+	}
+
+	public class CallBlock extends AbstractBlock {
+
+		public CallBlock(NodeBlock parentBlock) {
+			super(parentBlock);
+		}
+
+	}
+
+	public class WhileBlock extends AbstractBlock {
+
+		public WhileBlock(NodeBlock parentBlock) {
+			super(parentBlock);
+		}
+
+	}
+
+
+	public class IfBlock extends AbstractBlock {
+
+		public IfBlock(NodeBlock parentBlock) {
+			super(parentBlock);
+		}
+
+	}
+
+	public class GraphBlock extends NodeBlock {
+		public final int index;
+		public final Set<DataNode> nodes = new HashSet<>();
+
+		public GraphBlock(NodeBlock parentBlock, int index) {
+			super(parentBlock);
+			this.index = index;
+		}
+
+		@Override
+		protected final GraphBlock getParentGraphBlock() {
+			return this;
+		}
+
+	}
+
+
+
+
+
+
+
+
+
+
+	private GraphBlock block = new GraphBlock(null, 0);
+
+	public List<InputNode> inputs = new ArrayList<>();
+	public List<OutputNode> outputs = new ArrayList<>();
+	public List<FuncCallNode> invokes = new ArrayList<>();
+	public List<GraphBlock> topLevelBlocks = new ArrayList<>(Collections.singletonList(block));
 
 
 
 	private int separation = 0;
 
 
-	public List<InputNode> inputs = new ArrayList<>();
-	public List<OutputNode> outputs = new ArrayList<>();
-	public List<FuncCallNode> invokes = new ArrayList<>();
+
+
+
+	public void openNestedBlock() {
+		block = new GraphBlock(block, 0);
+	}
+
+	public CallBlock openCallBlock() {
+		CallBlock c = new CallBlock(block);
+		block = new GraphBlock(c, 0);
+		return c;
+	}
+
+	public WhileBlock openWhileBlock() {
+		WhileBlock w = new WhileBlock(block);
+		block = new GraphBlock(w, 0);
+		return w;
+	}
+
+	public IfBlock openIfBlock() {
+		IfBlock i = new IfBlock(block);
+		block = new GraphBlock(i, 0);
+		return i;
+
+	}
+
+	public void closeBlock() {
+		block = block.getParent(); // TODO vérifier pas null...
+	}
+
+	public void addFollowingBlock() {
+		block = new GraphBlock(block.parentBlock, block.index+1);
+		if(block.parentBlock == null)
+			topLevelBlocks.add(block);
+	}
+
+	public void addConcurrentBlock() {
+		block = new GraphBlock(block.parentBlock, block.index);
+		if(block.parentBlock == null)
+			topLevelBlocks.add(block);
+	}
 
 	public Generator<InputNode> getInputNodes() {
 		return Generators.fromCollection(inputs);
@@ -540,6 +649,22 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 	public Generator<FuncCallNode> getInvokesNodes() {
 		return Generators.fromCollection(invokes);
+	}
+
+
+
+	public void addSeparation() {
+		separation++;
+	}
+
+	@Override
+	public List<DataNode> getInputs() {
+		return Utils.convert(inputs);
+	}
+
+	@Override
+	public List<DataNode> getOutputs() {
+		return Utils.convert(outputs);
 	}
 
 
@@ -553,20 +678,5 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		if (b instanceof Bytecode.Invoke)
 			return ((Bytecode.Invoke) b).name().toString()+"()";
 		return b.toString();
-	}
-
-	public void addSeparation() {
-		separation++;
-	}
-
-	@Override
-	public List<DataNode> getInputs() {
-		return Utils.convert(inputs);
-	}
-
-	@Override
-	public List<DataNode> getOutputs() {
-		// TODO Auto-generated method stub
-		return Utils.convert(outputs);
 	}
 }

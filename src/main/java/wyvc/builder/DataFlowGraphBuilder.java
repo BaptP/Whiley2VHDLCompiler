@@ -798,7 +798,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			else if (bytecode instanceof Bytecode.While)
 				buildWhile((Location<Bytecode.While>) location);
 			else if (bytecode instanceof Bytecode.Skip)
-				graph.addSeparation();
+				graph.addFollowingBlock();
 			else
 				throw WyilUnsupportedCompilerError.exception(location);
 /**/			closeLevel();
@@ -1343,10 +1343,12 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private List<AccessibleVertexTree<?>> buildInvoke(Location<Bytecode.Invoke> call) throws CompilerException {
 			openLevel("INVOKE");
 			debugLevel("Param "+call.getBytecode().type().params().length + " Op "+call.numberOfOperands());
+			graph.openCallBlock();
 			FuncCallNode c = graph.new FuncCallNode(call,
 				Generators.concat(Generators.fromCollection(call.getBytecode().type().params()).enumerate().duplicateFirst().
 					mapFirst(Object::toString).mapSecond(call::getOperand).map_("arg"::concat, this::buildExpression, this::buildType).
 					map23(this::buildTypedValue).map(this::buildNamedHalfArrow).map(VertexTree::getValues)).toList());
+			graph.closeBlock();
 //			FuncCallNode c = graph.new FuncCallNode(call,
 //				Generators.concat(Generators.fromCollection(call.getOperands()).enumerate().map_(
 //				    (Integer t, Location<?> l) -> buildNamedHalfArrow("arg_"+t, buildExpression(l))).map(VertexTree::getValues)).toList());
@@ -1470,6 +1472,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildIf(Location<Bytecode.If> ifs) throws CompilerException {
+			graph.openIfBlock();
 			AccessibleVertexTree<?> cond = buildExpression(ifs.getOperand(0));
 
 			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
@@ -1481,6 +1484,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				});
 			HalfArrow<?> ifn = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
 
+			graph.addConcurrentBlock();
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
 			vars.forEach(state::put);
 			HashMap<Integer, AccessibleVertexTree<?>> tbc = new HashMap<>();
@@ -1493,6 +1497,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			vars.clear();
 			state.forEach(vars::put);
 
+			graph.addConcurrentBlock();
 
 			HashMap<Integer, AccessibleVertexTree<?>> fbc = new HashMap<>();
 
@@ -1503,6 +1508,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			state.forEach((i, t) -> {if (vars.get(i) != t) fbc.put(i, vars.get(i));});
 
 			vars.clear();
+			graph.closeBlock();
 //
 //			debugLevel("True "+tbc.toString());
 //			debugLevel("False "+fbc.toString());
@@ -1591,11 +1597,14 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildWhile(Location<Bytecode.While> whiles) throws CompilerException {
+			graph.openWhileBlock();
 			HashMap<Integer, AccessibleVertexTree<?>> pstate = new HashMap<>();
 			Generators.fromMap(vars).forEach(pstate::put);
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
 			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(state::put);
 			Generators.fromMap(state).forEach(vars::put);
+			graph.openNestedBlock();
+
 			AccessibleVertexTree<?> cond = buildExpression(whiles.getOperand(0));
 			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
 				throw new CompilerException(new CompilerError() {
@@ -1604,9 +1613,13 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 						return "The condition is not a Leaf...";
 					}
 				});
+
 			HalfArrow<?> whilen = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
 
+			graph.addConcurrentBlock();
+
 			build(whiles.getBlock(0));
+			graph.closeBlock();
 
 			boolean m = false;
 			for (Integer v : state.keySet()) {
@@ -1622,7 +1635,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					public String info() {
 						return "The loop <"+whiles+"> is infinite.";
 					}});
-
+			graph.closeBlock();
 		}
 	}
 

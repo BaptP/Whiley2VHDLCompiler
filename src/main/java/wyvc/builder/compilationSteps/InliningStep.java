@@ -6,6 +6,8 @@ import java.util.List;
 
 import wyvc.builder.CompilerLogger;
 import wyvc.builder.DataFlowGraph;
+import wyvc.builder.DataFlowGraphBuilder;
+import wyvc.io.DataFlowGraphPrinter;
 import wyvc.io.GraphPrinter;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
 import wyvc.builder.compilationSteps.RecursionAnalysisStep.OrderedFunction;
@@ -36,7 +38,8 @@ public class InliningStep extends CompilationStep<OrderedFunction, InliningStep.
 
 		List<Pair<String, List<DataFlowGraph>>> func = new ArrayList<>();
 		for (Pair<String, DataFlowGraph> p : data.func) {
-			GraphPrinter.print(logger, p.second, p.first);
+			DataFlowGraphPrinter.print(p.second, p.first);
+//			GraphPrinter.print(logger, p.second, p.first);
 			//WyilSection se = inlining.apply(s);
 			//GraphPrinter.print(logger, se.inputs, se.outputs, n);
 			func.add(new Pair<String, List<DataFlowGraph>>(p.first,  split(p.second)));
