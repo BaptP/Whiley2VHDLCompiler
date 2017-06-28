@@ -23,7 +23,6 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
-import wyvc.builder.DataFlowGraph.EndWhileNode;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
@@ -525,6 +524,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private Map<Integer, AccessibleVertexTree<?>> vars = new HashMap<>();
+		private Map<Integer, String> identifiers = new HashMap<>();
 		private PartialReturn partialReturn = null;
 		private final List<AccessibleTypeTree> returnTypes;
 		private final DataFlowGraph graph;
@@ -536,10 +536,11 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		public Builder(WyilFile.FunctionOrMethod func) throws CompilerException {
 			super(DataFlowGraphBuilder.this.logger);
 			graph = new DataFlowGraph();
-			Generators.fromCollection(func.type().params()).enumerate().forEach_((Integer k, wyil.lang.Type t) ->
+			Generators.fromCollection(func.type().params()).enumerate().forEach_((Integer k, wyil.lang.Type t) -> {
+				identifiers.put(k, ((Location<Bytecode.VariableDeclaration>)func.getTree().getLocation(k)).getBytecode().getName());
 				vars.put(k, buildParameter(
-					((Location<Bytecode.VariableDeclaration>)func.getTree().getLocation(k)).getBytecode().getName(),
-					buildType(t))));
+					identifiers.get(k),
+					buildType(t)));});
 			returnTypes = Generators.fromCollection(func.type().returns()).map_(this::buildType).toList();
 			build(func.getBody());
 /**/			partialReturn.print("RET ");
@@ -1026,6 +1027,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		private void buildDecl(Location<Bytecode.VariableDeclaration> decl) throws CompilerException {
 //			debug("Declaration de "+decl.getBytecode().getName()+" en "+decl.getIndex());
+			identifiers.put(decl.getIndex(), decl.getBytecode().getName());
 			vars.put(decl.getIndex(), decl.numberOfOperands() == 1
 				? buildNamedHalfArrow(decl.getBytecode().getName(),
 					buildTypedValue(buildExpression(decl.getOperand(0)), buildType(decl.getType())))
@@ -1458,12 +1460,12 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
-		private AccessibleVertexTree<?> copyNamedHalfArrow(AccessibleVertexTree<?> name, AccessibleVertexTree<?> node) throws CompilerException {
-			return buildMerge(
-				(na,no) -> new BooleanVertexLeaf(no.getValue().node, na.getValue().ident),
-				(na,no) -> new BooleanVertexLeaf(no.getValue().node, na.getValue().ident),
-				name,node);
-		}
+//		private AccessibleVertexTree<?> copyNamedHalfArrow(AccessibleVertexTree<?> name, AccessibleVertexTree<?> node) throws CompilerException {
+//			return buildMerge(
+//				(na,no) -> new BooleanVertexLeaf(no.getValue().node, na.getValue().ident),
+//				(na,no) -> new BooleanVertexLeaf(no.getValue().node, na.getValue().ident),
+//				name,node);
+//		}
 
 
 
@@ -1515,7 +1517,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 //					debugLevel(r.toString("R "));
 //			});
 			Generators.fromMap(state).forEach_(
-				(i, t) -> vars.put(i, copyNamedHalfArrow(t, buildEndIf(ifs, ifn, tbc.getOrDefault(i, t), fbc.getOrDefault(i, t)))));
+				(i, t) -> vars.put(i, buildNamedHalfArrow(identifiers.get(i), buildEndIf(ifs, ifn, tbc.getOrDefault(i, t), fbc.getOrDefault(i, t)))));
 			if (trueReturn != null || partialReturn != null) {
 				addMessage(new NestedReturnCompilerNotice());
 				trueReturn = new PartialReturn(ifs, ifn, trueReturn, partialReturn);
@@ -1575,7 +1577,11 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private AccessibleVertexTree<?> buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, AccessibleVertexTree<?> previousValue, AccessibleVertexTree<?> nextValue) throws CompilerException {
-			return buildMerge((t,f) -> t.node == f.node ? t.node : graph.new EndWhileNode(whiles, whilen, t, f), previousValue, nextValue);
+			return buildMerge((p,n) -> {
+				if (p.node != n.node) return graph.new EndWhileNode(whiles, whilen, p, n);
+				if (p.node.targets.size() != 0) graph.new EndWhileNode(whiles, whilen, p, n);
+				return p.node.sources.get(0).from;
+			}, previousValue, nextValue);
 		}
 
 
@@ -1588,10 +1594,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			HashMap<Integer, AccessibleVertexTree<?>> pstate = new HashMap<>();
 			Generators.fromMap(vars).forEach(pstate::put);
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
-			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).forEach(state::put);
+			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(state::put);
 			Generators.fromMap(state).forEach(vars::put);
-			build(whiles.getBlock(0));
-
 			AccessibleVertexTree<?> cond = buildExpression(whiles.getOperand(0));
 			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
 				throw new CompilerException(new CompilerError() {
@@ -1601,16 +1605,15 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					}
 				});
 			HalfArrow<?> whilen = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
+
+			build(whiles.getBlock(0));
+
 			boolean m = false;
-			for (Integer v : vars.keySet()) {
+			for (Integer v : state.keySet()) {
 				AccessibleVertexTree<?> p = state.get(v);
 				AccessibleVertexTree<?> n = vars.get(v);
-				if (p != n) {
-					m = true;
-					vars.put(v, buildEndWhile(whiles, whilen, p, n));
-				}
-				else
-					vars.put(v, pstate.get(v));
+				if (p != n) m = true;
+				vars.put(v, buildNamedHalfArrow(identifiers.get(v), buildEndWhile(whiles, whilen, p, n)));
 			}
 
 			if (!m)

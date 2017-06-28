@@ -2,24 +2,14 @@ package wyvc.builder;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 
-import wyvc.builder.CompilerLogger.CompilerDebug;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.CompilerLogger.LoggedContainer;
-import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
-import wyvc.utils.Generators.PairGenerator_;
-import wyvc.utils.Generators.CustomPairGenerator;
-import wyvc.utils.Generators.EndOfGenerationException;
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.FunctionalInterfaces;
 import wyvc.utils.FunctionalInterfaces.Function;
@@ -53,10 +43,10 @@ public class LexicalElementTree extends LoggedBuilder {
 		 * @author Baptiste Pauget
 		 */
 		public static class TreeStructureCompilerError extends CompilerError {
-			private final Tree expected;
-			private final Tree encountered;
+			private final Tree<?> expected;
+			private final Tree<?> encountered;
 
-			public TreeStructureCompilerError(Tree expected, Tree encountered) {
+			public TreeStructureCompilerError(Tree<?> expected, Tree<?> encountered) {
 				this.expected = expected;
 				this.encountered = encountered;
 			}
@@ -68,7 +58,7 @@ public class LexicalElementTree extends LoggedBuilder {
 						encountered.toString("  Encountered : ", "                ");
 			}
 
-			public static CompilerException exception(Tree expected, Tree encountered) {
+			public static CompilerException exception(Tree<?> expected, Tree<?> encountered) {
 				return new CompilerException(new TreeStructureCompilerError(expected, encountered));
 			}
 		}

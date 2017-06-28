@@ -6,7 +6,6 @@ import java.util.Map;
 import wyil.lang.WyilFile.FunctionOrMethod;
 import wyvc.builder.CompilerLogger;
 import wyvc.builder.DataFlowGraphBuilder;
-import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.DataFlowGraph;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
@@ -27,13 +26,6 @@ public class CompileFunctionsStep extends CompilationStep<CompiledTypes, Compile
 
 	@Override
 	protected CompiledFunctions compile(CompilerLogger logger, CompiledTypes data) throws CompilerException {
-//		throw new CompilerException(new CompilerError() {
-//			@Override
-//			public String info() {
-//				// TODO Auto-generated method stub
-//				return "fin";
-//			}
-//		});
 		DataFlowGraphBuilder builder = new DataFlowGraphBuilder(logger, data.typeCompiler);
 		Map<String, DataFlowGraph> func = new HashMap<>();
 		for (FunctionOrMethod fct : data.file.functionOrMethods())

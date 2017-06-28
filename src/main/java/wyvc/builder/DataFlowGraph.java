@@ -3,12 +3,9 @@ package wyvc.builder;
 import java.util.List;
 
 import wyil.lang.Bytecode;
-import wyil.lang.Bytecode.OperatorKind;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.io.GraphPrinter.PrintableGraph;
-import wyvc.lang.Expression;
 import wyvc.lang.Type;
-import wyvc.lang.Type.VectorType;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
@@ -437,7 +434,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public List<String> getOptions() {
-			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
+			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=bisque");
 		}
 
 		@Override
@@ -466,7 +463,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public List<String> getOptions() {
-			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
+			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=bisque");
 		}
 
 		@Override

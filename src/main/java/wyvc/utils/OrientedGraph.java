@@ -71,6 +71,22 @@ public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends
 	public void nodeAdded(N node){}
 	public void arrowAdded(A arrow){}
 
+	public void removeNode(N node) {
+		if (nodes.contains(node)) {
+			nodes.remove(node);
+			for (A a : new ArrayList<>(node.targets))
+				removeArrow(a);
+			for (A a : new ArrayList<>(node.sources))
+				removeArrow(a);
+		}
+	}
 
+	public void removeArrow(A arrow) {
+		if (arrows.contains(arrow)) {
+			arrows.remove(arrow);
+			arrow.from.targets.remove(arrow);
+			arrow.to.sources.remove(arrow);
+		}
+	}
 
 }

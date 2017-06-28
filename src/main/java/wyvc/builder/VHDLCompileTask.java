@@ -18,6 +18,7 @@ import wyvc.builder.compilationSteps.CompilationStep.CompilationFront;
 import wyvc.builder.compilationSteps.CompileFunctionsStep;
 import wyvc.builder.compilationSteps.CompileTypesStep;
 import wyvc.builder.compilationSteps.ExportFileStep;
+import wyvc.builder.compilationSteps.GraphOptimizationStep;
 import wyvc.builder.compilationSteps.InliningStep;
 import wyvc.builder.compilationSteps.ParsingStep;
 import wyvc.builder.compilationSteps.ProducingVHDLStep;
@@ -58,6 +59,7 @@ public class VHDLCompileTask implements Build.Task {
 			setNextStep(new ParsingStep()).
 			setNextStep(new CompileTypesStep()).
 			setNextStep(new CompileFunctionsStep()).
+			setNextStep(new GraphOptimizationStep()).
 			setNextStep(new RecursionAnalysisStep()).
 			setNextStep(new InliningStep()).
 			setNextStep(new ProducingVHDLStep()).

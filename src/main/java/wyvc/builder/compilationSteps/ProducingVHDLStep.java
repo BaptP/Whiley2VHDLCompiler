@@ -1,11 +1,9 @@
 package wyvc.builder.compilationSteps;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import wyvc.builder.CompilerLogger;
-import wyvc.builder.DataFlowGraph;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.EntityCompiler;
 import wyvc.builder.VHDLCompileTask.CompilationUnit;
@@ -14,8 +12,6 @@ import wyvc.lang.Component;
 import wyvc.lang.Entity;
 import wyvc.lang.VHDLFile;
 import wyvc.utils.Generators;
-import wyvc.utils.Pair;
-import wyvc.utils.Utils;
 
 public class ProducingVHDLStep extends CompilationStep<SplittedFunctions, ProducingVHDLStep.CompiledFile> {
 	public static class CompiledFile extends CompilationUnit {
