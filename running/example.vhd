@@ -31,27 +31,30 @@ architecture Behavioural of e is
   signal ret_0_opt1_has1 : boolean;
   signal ret_0_opt1_has0 : boolean;
   signal ret_0_opt1_val1 : signed(31 downto 0);
+  signal ret_0_opt1_val0 : signed(31 downto 0);
 
 begin
+  ret_0_opt1_val0 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
+
   ret_0_opt1_val1 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
 
-  ret_0_opt1_has0 <= true;
+  ret_0_opt1_has0 <= false;
 
   ret_0_opt1_has1 <= false;
 
   ret_0_opt0_val0 <= 'X';
 
-  ret_0_opt0_val1 <= false;
+  ret_0_opt0_val1 <= 'X';
 
   ret_0_opt0_has2 <= c = to_signed(0, 32);
 
   ret_0_opt0_has0 <= false;
 
-  ret_0_opt0_has1 <= true;
+  ret_0_opt0_has1 <= false;
 
   ret_0_opt1_val  <= 
       ret_0_opt1_val1 when ret_0_opt0_has2 else 
-      c
+      ret_0_opt1_val0
 
   ret_0_opt1_has  <= 
       ret_0_opt1_has1 when ret_0_opt0_has2 else 
@@ -109,9 +112,9 @@ architecture Behavioural of inc2 is
   signal ret_0_sha_x_opt1_val1 : signed(31 downto 0);
 
 begin
-  ret_0_sha_x_opt1_val1 <= t_x_opt1_val + to_signed(1, 32);
+  ret_0_sha_x_opt1_val1 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
 
-  ret_0_sha_x_opt1_has1 <= true;
+  ret_0_sha_x_opt1_has1 <= false;
 
   ret_0_sha_x_opt0_val1 <= 'X';
 

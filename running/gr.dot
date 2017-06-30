@@ -1,84 +1,39 @@
 digraph {
+subgraph clouster_0{
+label = FunctionBlock;
+color=blue;
+subgraph clouster_1{
+label = ComputationBlock;
+color=blue;
+subgraph clouster_2{
+label = GraphBlock;
+color=blue;
+  n1 [label="a_b\nboolean", style=filled, fillcolor="0.0 0.2 0.999"];
+  n2 [label="clock\nboolean", style=filled, fillcolor="0.0 0.2 0.999"];
+  n3 [label="start\nboolean", style=filled, fillcolor="0.0 0.2 0.999"];
+  n4 [label="b\nsigned(31 downto 0)", style=filled, fillcolor="0.0 0.2 0.999"];
+  n5 [label="a_x\nsigned(31 downto 0)", style=filled, fillcolor="0.0 0.2 0.999"];
+}
+}
+subgraph clouster_3{
+label = ComputationBlock;
+color=blue;
+}
+subgraph clouster_4{
+label = ComputationBlock;
+color=blue;
+subgraph clouster_5{
+label = GraphBlock;
+color=blue;
+}
+}
+}
   inp [label="inputs",color=blue,shape=box];
-  n1 [label="ret_0_spe_y_val\nstd_logic_vector(7 downto 0)"];
-  n2 [label="ret_0_spe_z_has\nboolean"];
-  n3 [label="false\nboolean"];
-  n4 [label="ret_0_spe...al_b\nboolean"];
-  n5 [label="1\nsigned(31 downto 0)"];
-  n6 [label="ret_0_spe...al_a\nsigned(31 downto 0)"];
-  n7 [label="true\nboolean"];
-  n8 [label="t_y_val\nstd_logic_vector(7 downto 0)"];
-  n9 [label="mux\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n10 [label="t_x_opt1_has\nboolean"];
-  n11 [label="mux\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n12 [label="Add\nsigned(31 downto 0)",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n13 [label="ret_0_sha..._val\nsigned(31 downto 0)"];
-  n14 [label="ret_0_sha..._val\nboolean"];
-  n15 [label="And\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n16 [label="ret_0_sha..._has\nboolean"];
-  n17 [label="And\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n18 [label="ret_0_spe_y_has\nboolean"];
-  n19 [label="t_x_opt1_val\nsigned(31 downto 0)"];
-  n20 [label="t_x_opt0_has\nboolean"];
-  n21 [label="t_x_opt0_val\nboolean"];
-  n22 [label="t_z_val_b\nboolean"];
-  n23 [label="t_y_has\nboolean"];
-  n24 [label="And\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n25 [label="mux\nsigned(31 downto 0)",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n26 [label="t_z_val_a\nsigned(31 downto 0)"];
-  n27 [label="t_z_has\nboolean"];
-  n28 [label="true\nboolean"];
-  n29 [label="ret_0_sha..._has\nboolean"];
-  n30 [label="true\nboolean"];
-  n31 [label="mux\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n32 [label="'X'\nboolean"];
   out [label="outputs",color=red,shape=box];
 
-  inp -> n20 [color=blue];
-  inp -> n21 [color=blue];
-  inp -> n10 [color=blue];
-  inp -> n19 [color=blue];
-  inp -> n23 [color=blue];
-  inp -> n8 [color=blue];
-  inp -> n27 [color=blue];
-  inp -> n26 [color=blue];
-  inp -> n22 [color=blue];
-  n23 -> n18[label=""];
-  n17 -> n25[label=""];
-  n27 -> n24[label=""];
-  n31 -> n29[label=""];
-  n5 -> n12[label=""];
-  n25 -> n13[label=""];
-  n19 -> n12[label=""];
-  n30 -> n24[label=""];
-  n8 -> n1[label=""];
-  n3 -> n31[label="t_x_opt0_has"];
-  n10 -> n9[label=""];
-  n19 -> n25[label=""];
-  n24 -> n17[label=""];
-  n22 -> n4[label=""];
-  n32 -> n11[label="t_x_opt0_val"];
-  n12 -> n25[label="t_x_opt1_val"];
-  n10 -> n15[label=""];
-  n11 -> n14[label=""];
-  n17 -> n31[label=""];
-  n21 -> n11[label=""];
-  n26 -> n6[label=""];
-  n7 -> n15[label=""];
-  n27 -> n2[label=""];
-  n9 -> n16[label=""];
-  n28 -> n9[label="t_x_opt1_has"];
-  n15 -> n17[label=""];
-  n20 -> n31[label=""];
-  n17 -> n11[label=""];
-  n17 -> n9[label=""];
-  n29 -> out [color=red];
-  n14 -> out [color=red];
-  n16 -> out [color=red];
-  n13 -> out [color=red];
-  n18 -> out [color=red];
-  n1 -> out [color=red];
-  n2 -> out [color=red];
-  n6 -> out [color=red];
-  n4 -> out [color=red];
+  inp -> n2 [color=blue];
+  inp -> n3 [color=blue];
+  inp -> n1 [color=blue];
+  inp -> n5 [color=blue];
+  inp -> n4 [color=blue];
 }
