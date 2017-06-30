@@ -81,6 +81,7 @@ public class Generators {
 
 		/*------ Without exceptions ------*/
 		<U> Generator<U> map(Function<? super T, ? extends U> function);
+		<U> PairGenerator<T,U> compute(Function<? super T, ? extends U> function);
 		<U,V> PairGenerator<U,V> biMap(
 				Function<? super T, ? extends U> firstMap,
 				Function<? super T, ? extends V> secondMap);
@@ -92,6 +93,7 @@ public class Generators {
 
 		/*------ With exceptions ------*/
 		<U, E extends Exception> Generator_<U,E> map_(Function_<? super T, ? extends U, E> function);
+		<U, E extends Exception> PairGenerator_<T,U,E> compute_(Function_<? super T, ? extends U, E> function);
 		<U,V, E extends Exception> PairGenerator_<U,V,E> biMap_(
 				Function_<? super T, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap);
@@ -126,6 +128,7 @@ public class Generators {
 
 		/*------ With exceptions ------*/
 		<U> Generator_<U,E> map(Function_<? super T, ? extends U, E> function);
+		<U> PairGenerator_<T,U,E> compute(Function_<? super T, ? extends U, E> function);
 		<U,V> PairGenerator_<U,V,E> biMap(
 				Function_<? super T, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap);
@@ -515,6 +518,9 @@ public class Generators {
 		/*------ With exceptions ------*/
 		@Override default <U, E extends Exception> Generator_<U,E> map_(Function_<? super T, ? extends U, E> function) {
 			return this.<E>toChecked().map(function);
+		}
+		@Override default <U, E extends Exception> PairGenerator_<T,U,E> compute_(Function_<? super T, ? extends U, E> function) {
+			return this.<E>toChecked().compute(function);
 		}
 		@Override default <U,V, E extends Exception> PairGenerator_<U,V,E> biMap_(
 				Function_<? super T, ? extends U,E> firstMap,
@@ -945,6 +951,9 @@ public class Generators {
 		@Override default <E extends Exception> Generator_<T, E> toChecked() {
 			return new Mapper_<>(this, (T t) -> t);
 		}
+		@Override default <U> PairGenerator<T,U> compute(Function<? super T, ? extends U> function) {
+			return biMap(t->t, function);
+		}
 	}
 
 	private static interface SourceGenerator_<T, E extends Exception> extends DefaultGenerator_<T, E> {
@@ -953,6 +962,9 @@ public class Generators {
 		}
 		@Override default <U,V> PairGenerator_<U,V,E> biMap(Function_<? super T, ? extends U,E> firstMap, Function_<? super T, ? extends V,E> secondMap) {
 			return new PairMapper_<>(this, firstMap, secondMap);
+		}
+		@Override default <U> PairGenerator_<T,U,E> compute(Function_<? super T, ? extends U, E> function) {
+			return biMap(t->t, function);
 		}
 	}
 
@@ -1357,6 +1369,11 @@ public class Generators {
 		}
 
 		@Override
+		public final <U> PairGenerator<T,U> compute(Function<? super T, ? extends U> function) {
+			return new PairMapper<>(source, map, map.o(function));
+		}
+
+		@Override
 		public <E extends Exception> Generator_<T, E> toChecked() {
 			return new Mapper_<>(source.toChecked(), map.toChecked());
 		}
@@ -1399,6 +1416,10 @@ public class Generators {
 		@Override
 		public final <U> Generator_<U,E> map(Function_<? super T, ? extends U, E> function) {
 			return new Mapper_<>(generator, source, map.o(function));
+		}
+		@Override
+		public final <U> PairGenerator_<T, U, E> compute(Function_<? super T, ? extends U, E> function) {
+			return new PairMapper_<>(generator, source, map, function.p(map));
 		}
 		@Override
 		public final <U, V> PairGenerator_<U, V, E> biMap(Function_<? super T, ? extends U, E> firstMap,
@@ -2266,9 +2287,9 @@ public class Generators {
 	 * @param a					The array to convert
 	 * @return					A {@link Generator} of the values of the array
 	 */
-	public static <T> Generator<T> fromCollection(Collection<T> collection) {
+	public static <T> Generator<T> fromCollection(Collection<? extends T> collection) {
 		return new SimpleSourceGenerator<T>() {
-			private final Iterator<T> it = collection.iterator();
+			private final Iterator<? extends T> it = collection.iterator();
 			@Override
 			public T nextValue() throws EndOfGenerationException {
 				if (isEmpty()) throw new EndOfGenerationException();
@@ -2292,6 +2313,10 @@ public class Generators {
 	public static <S> Generator<S> fromCollection(S[] a) {
 		return fromCollection(Arrays.asList(a));
 	}
+	public static <S> Generator<S> fromValues(S... a) {
+		return fromCollection(Arrays.asList(a));
+	}
+
 
 	public static <S,T> PairGenerator<S,T> fromMap(Map<S,T> map) {
 		return fromCollection(map.entrySet()).biMap(Entry::getKey, Entry::getValue);
@@ -2407,7 +2432,7 @@ public class Generators {
 	 *
 	 * @param <S> 				The generators values' type
 	 * @param generators		The generators to concatenate
-	 * 
+	 *
 	 * @return 					A {@link Generator} producing the value of each generator.
 	 */
 	public static <S> Generator<S> concat(Generator<Generator<S>> generators) {

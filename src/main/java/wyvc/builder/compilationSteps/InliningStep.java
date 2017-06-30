@@ -5,8 +5,10 @@ import java.util.Collections;
 import java.util.List;
 
 import wyvc.builder.CompilerLogger;
+import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.DataFlowGraph;
 import wyvc.builder.DataFlowGraphBuilder;
+import wyvc.builder.PipelineBuilder;
 import wyvc.io.DataFlowGraphPrinter;
 import wyvc.io.GraphPrinter;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
@@ -28,18 +30,24 @@ public class InliningStep extends CompilationStep<OrderedFunction, InliningStep.
 	}
 
 
+
+
+
+
+
 	@Override
-	protected SplittedFunctions compile(CompilerLogger logger, OrderedFunction data) {
+	protected SplittedFunctions compile(CompilerLogger logger, OrderedFunction data) throws CompilerException {
 		/*UnaryOperator<WyilSection> inlining = (WyilSection s) -> {
 			for (FuncCallNode c : s.invokes)
 				c.inline(data.func.get(c.funcName));
 			return s;
 		};*/
+		PipelineBuilder pipelining = new PipelineBuilder(logger);
 
 		List<Pair<String, List<DataFlowGraph>>> func = new ArrayList<>();
 		for (Pair<String, DataFlowGraph> p : data.func) {
-			DataFlowGraphPrinter.print(p.second, p.first);
-//			GraphPrinter.print(logger, p.second, p.first);
+			GraphPrinter.print(logger, p.second, p.first);
+			DataFlowGraphPrinter.print(pipelining.buildPipeline(p.second), p.first);
 			//WyilSection se = inlining.apply(s);
 			//GraphPrinter.print(logger, se.inputs, se.outputs, n);
 			func.add(new Pair<String, List<DataFlowGraph>>(p.first,  split(p.second)));

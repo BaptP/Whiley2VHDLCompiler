@@ -21,8 +21,11 @@ import wyvc.builder.CompilerLogger.UnsupportedCompilerError;
 import wyvc.builder.DataFlowGraph.BinaryOperation;
 import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
+import wyvc.builder.DataFlowGraph.GraphBlock;
 import wyvc.builder.DataFlowGraph.HalfArrow;
+import wyvc.builder.DataFlowGraph.IfBlock;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
+import wyvc.builder.DataFlowGraph.WhileBlock;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
@@ -536,23 +539,32 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		public Builder(WyilFile.FunctionOrMethod func) throws CompilerException {
 			super(DataFlowGraphBuilder.this.logger);
 			graph = new DataFlowGraph();
+			graph.topLevelBlock.openInputs();
 			Generators.fromCollection(func.type().params()).enumerate().forEach_((Integer k, wyil.lang.Type t) -> {
 				identifiers.put(k, ((Location<Bytecode.VariableDeclaration>)func.getTree().getLocation(k)).getBytecode().getName());
 				vars.put(k, buildParameter(
 					identifiers.get(k),
 					buildType(t)));});
 			returnTypes = Generators.fromCollection(func.type().returns()).map_(this::buildType).toList();
+
+			graph.topLevelBlock.openBody();
+
 			build(func.getBody());
+
+			graph.topLevelBlock.openOutputs();
+
 /**/			partialReturn.print("RET ");
 			partialReturn.getReturn().enumerate().mapFirst(Object::toString).mapFirst("ret_"::concat).forEach_(this::buildReturnValue);
+
+			graph.topLevelBlock.setCurrent();
 		}
 
 
-		private void buildReturnValue(String ident, VertexTree ret) {
+		private void buildReturnValue(String ident, VertexTree ret) throws CompilerException {
 			if (ret instanceof VertexLeaf)
 				graph.new OutputNode(ident, ((VertexLeaf<?>)ret).getValue());
 			else if (ret instanceof VertexNode)
-				((VertexNode<?>)ret).getComponents().forEach((s, t) -> buildReturnValue(ident+"_"+s, t));
+				((VertexNode<?>)ret).getComponents().forEach_((s, t) -> buildReturnValue(ident+"_"+s, t));
 		}
 
 
@@ -583,10 +595,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
-		private GeneralVertexLeaf buildUndefinedValue(TypeLeaf type) {
+		private GeneralVertexLeaf buildUndefinedValue(TypeLeaf type) throws CompilerException {
 			return new GeneralVertexLeaf(graph.new UndefConstNode(type.getValue()));
 		}
-		private BooleanVertexLeaf buildUndefinedValue(BooleanTypeLeaf type) {
+		private BooleanVertexLeaf buildUndefinedValue(BooleanTypeLeaf type) throws CompilerException {
 			return new BooleanVertexLeaf(graph.new UndefConstNode(type.getValue()));
 		}
 		private VertexSimpleRecord buildUndefinedValue(TypeSimpleRecord type) throws CompilerException {
@@ -628,7 +640,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
-		private BooleanVertexLeaf buildBoolean(Boolean value) {
+		private BooleanVertexLeaf buildBoolean(Boolean value) throws CompilerException {
 			return new BooleanVertexLeaf(graph.new ExternConstNode(Type.Boolean, value.toString()));
 		}
 
@@ -695,7 +707,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			else if (node instanceof VertexLeaf)
 				cpn.add(new VertexOption<>(buildBoolean(true), (VertexLeaf<?>) node));
 			else throw UnrelatedTypeCompilerError.exception(type, node);
-			return new VertexSimpleUnion(type.getOptions().<VertexOption<VertexLeaf<?>>>map(o -> {
+			return new VertexSimpleUnion(type.getOptions().map_(o -> {
 				for (VertexOption<VertexLeaf<?>> c : cpn) {
 					if (o.getSecondOperand().getValue().equals(c.getSecondOperand().getType()))
 						return c;
@@ -733,17 +745,17 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		/*------ buildParameter ------*/
 
-		private GeneralVertexLeaf buildParameter(String ident, TypeLeaf type) {
+		private GeneralVertexLeaf buildParameter(String ident, TypeLeaf type) throws CompilerException {
 			return new GeneralVertexLeaf(graph.new InputNode(ident, type.getValue()));
 		}
-		private BooleanVertexLeaf buildParameter(String ident, BooleanTypeLeaf type) {
+		private BooleanVertexLeaf buildParameter(String ident, BooleanTypeLeaf type) throws CompilerException {
 			return new BooleanVertexLeaf(graph.new InputNode(ident, type.getValue()));
 		}
 		private VertexSimpleRecord buildParameter(String ident, TypeSimpleRecord type) throws CompilerException {
 			return new VertexSimpleRecord(type.getFields().duplicateFirst().mapSecond((ident+"_")::concat).map23_(this::buildParameter));
 		}
 		private VertexSimpleUnion buildParameter(String ident, TypeSimpleUnion type) throws CompilerException {
-			return new VertexSimpleUnion(type.getOptions().enumerate().mapFirst(type::getLabel).mapFirst((ident+"_")::concat).map(
+			return new VertexSimpleUnion(type.getOptions().enumerate().mapFirst(type::getLabel).mapFirst((ident+"_")::concat).map_(
 				(s, t) -> new VertexOption<>(
 					buildParameter(s+"_"+t.getFirstLabel(), t.getFirstOperand()),
 					buildParameter(s+"_"+t.getSecondLabel(), t.getSecondOperand()))));
@@ -798,15 +810,17 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			else if (bytecode instanceof Bytecode.While)
 				buildWhile((Location<Bytecode.While>) location);
 			else if (bytecode instanceof Bytecode.Skip)
-				graph.addFollowingBlock();
+				graph.openFollowingBlock();
 			else
 				throw WyilUnsupportedCompilerError.exception(location);
 /**/			closeLevel();
 		}
 
 		private void buildBlock(Location<Bytecode.Block> block) throws CompilerException {
+			GraphBlock blockn = graph.openNestedBlock();
 			for (Location<?> l : block.getOperands())
 				build(l);
+			blockn.close();
 		}
 
 
@@ -1293,10 +1307,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
-		private GeneralVertexLeaf buildCallReturn(String ident, TypeLeaf type, FuncCallNode func) {
+		private GeneralVertexLeaf buildCallReturn(String ident, TypeLeaf type, FuncCallNode func) throws CompilerException {
 			return new GeneralVertexLeaf(graph.new FunctionReturnNode(ident, type.getValue(),func));
 		}
-		private BooleanVertexLeaf buildCallReturn(String ident, BooleanTypeLeaf type, FuncCallNode func) {
+		private BooleanVertexLeaf buildCallReturn(String ident, BooleanTypeLeaf type, FuncCallNode func) throws CompilerException {
 			return new BooleanVertexLeaf(graph.new FunctionReturnNode(ident, type.getValue(),func));
 		}
 		private VertexSimpleRecord buildCallReturn(String ident, TypeSimpleRecord type, FuncCallNode func) throws CompilerException {
@@ -1304,7 +1318,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				(i, t) -> buildCallReturn(i,t,func)));
 		}
 		private VertexSimpleUnion buildCallReturn(String ident, TypeSimpleUnion type, FuncCallNode func) throws CompilerException {
-			return new VertexSimpleUnion(type.getOptions().enumerate().mapFirst(type::getLabel).mapFirst((ident+"_")::concat).map(
+			return new VertexSimpleUnion(type.getOptions().enumerate().mapFirst(type::getLabel).mapFirst((ident+"_")::concat).map_(
 				(s, t) -> new VertexOption<>(
 					buildCallReturn(s+"_"+t.getFirstLabel(), t.getFirstOperand(), func),
 					buildCallReturn(s+"_"+t.getSecondLabel(), t.getSecondOperand(), func))));
@@ -1343,12 +1357,12 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private List<AccessibleVertexTree<?>> buildInvoke(Location<Bytecode.Invoke> call) throws CompilerException {
 			openLevel("INVOKE");
 			debugLevel("Param "+call.getBytecode().type().params().length + " Op "+call.numberOfOperands());
-			graph.openCallBlock();
+//			graph.openCallBlock();
 			FuncCallNode c = graph.new FuncCallNode(call,
 				Generators.concat(Generators.fromCollection(call.getBytecode().type().params()).enumerate().duplicateFirst().
 					mapFirst(Object::toString).mapSecond(call::getOperand).map_("arg"::concat, this::buildExpression, this::buildType).
 					map23(this::buildTypedValue).map(this::buildNamedHalfArrow).map(VertexTree::getValues)).toList());
-			graph.closeBlock();
+//			graph.closeBlock();
 //			FuncCallNode c = graph.new FuncCallNode(call,
 //				Generators.concat(Generators.fromCollection(call.getOperands()).enumerate().map_(
 //				    (Integer t, Location<?> l) -> buildNamedHalfArrow("arg_"+t, buildExpression(l))).map(VertexTree::getValues)).toList());
@@ -1377,25 +1391,25 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		/*------ buildMergeNode ------*/
 
 		private BooleanVertexLeaf buildMerge(
-				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
-				BooleanVertexLeaf tree1, BooleanVertexLeaf tree2) {
+				BiFunction_<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BooleanVertexLeaf tree1, BooleanVertexLeaf tree2) throws CompilerException {
 			return mergeBoolean.apply(tree1, tree2);
 		}
 		private VertexLeaf<?> buildMerge(
-				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
-				VertexLeaf<?> tree1, VertexLeaf<?> tree2) {
+				BiFunction_<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				VertexLeaf<?> tree1, VertexLeaf<?> tree2) throws CompilerException {
 			return mergeGeneral.apply(tree1, tree2);
 		}
 		private VertexSimpleRecord buildMerge(
-				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
-				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				BiFunction_<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				VertexSimpleRecord tree1, VertexSimpleRecord tree2) throws CompilerException {
 			return new VertexSimpleRecord(tree1.getFields().addComponent(tree2.getFields().takeSecond()).map23_(
 				(t, f) -> buildMerge(mergeBoolean, mergeGeneral, t,f)));
 		}
 		private VertexSimpleUnion buildMerge(
-				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
-				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				BiFunction_<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				VertexSimpleUnion tree1, VertexSimpleUnion tree2) throws CompilerException {
 			return new VertexSimpleUnion(tree1.getOptions().gather(tree2.getOptions()).map_(
 				(t, f) -> new VertexOption<>(
@@ -1403,8 +1417,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 						 buildMerge(mergeGeneral, t.getSecondOperand(), f.getSecondOperand()))));
 		}
 		private VertexRecordUnion buildMerge(
-				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
-				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				BiFunction_<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				VertexRecordUnion tree1, VertexRecordUnion tree2) throws CompilerException {
 			return new VertexRecordUnion(
 				tree2.getSharedFields().duplicateFirst().mapSecond_(tree1::getSharedField).map23(
@@ -1415,8 +1429,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 							buildMerge(mergeBoolean, mergeGeneral, t.getSecondOperand(), f.getSecondOperand()))));
 		}
 		private VertexUnion buildMerge(
-				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
-				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				BiFunction_<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				VertexUnion tree1, VertexUnion tree2) throws CompilerException {
 			return new VertexUnion(
 				buildMerge(mergeBoolean, mergeGeneral, tree1.getFirstOperand(), tree2.getFirstOperand()),
@@ -1425,8 +1439,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 						buildMerge(mergeBoolean, mergeGeneral, tree1.getRecordOptions(), tree2.getRecordOptions())));
 		}
 		private AccessibleVertexTree<?> buildMerge(
-				BiFunction<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf> mergeBoolean,
-				BiFunction<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>> mergeGeneral,
+				BiFunction_<BooleanVertexLeaf, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<VertexLeaf<?>, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				AccessibleVertexTree<?> tree1, AccessibleVertexTree<?> tree2) throws CompilerException {
 			tree1.checkIdenticalStructure(tree2);
 			if (tree1 instanceof BooleanVertexLeaf 	&& tree2 instanceof BooleanVertexLeaf)
@@ -1447,7 +1461,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private AccessibleVertexTree<?> buildMerge(
-				BiFunction<HalfArrow<?>, HalfArrow<?>, DataNode> merge,
+				BiFunction_<HalfArrow<?>, HalfArrow<?>, DataNode, CompilerException> merge,
 				AccessibleVertexTree<?> tree1, AccessibleVertexTree<?> tree2) throws CompilerException {
 			return buildMerge(
 				(b, c) -> new BooleanVertexLeaf(merge.apply(b.getValue(), c.getValue())),
@@ -1472,7 +1486,11 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildIf(Location<Bytecode.If> ifs) throws CompilerException {
-			graph.openIfBlock();
+			IfBlock block = graph.openIfBlock();
+
+			block.openCondition();
+			GraphBlock blockc = graph.openNestedBlock();
+
 			AccessibleVertexTree<?> cond = buildExpression(ifs.getOperand(0));
 
 			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
@@ -1483,8 +1501,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					}
 				});
 			HalfArrow<?> ifn = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
+			block.conditionNode = ifn;
+			blockc.close();
+			block.openTrueBranch();
 
-			graph.addConcurrentBlock();
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
 			vars.forEach(state::put);
 			HashMap<Integer, AccessibleVertexTree<?>> tbc = new HashMap<>();
@@ -1497,7 +1517,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			vars.clear();
 			state.forEach(vars::put);
 
-			graph.addConcurrentBlock();
+			block.openFalseBranch();
 
 			HashMap<Integer, AccessibleVertexTree<?>> fbc = new HashMap<>();
 
@@ -1508,7 +1528,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			state.forEach((i, t) -> {if (vars.get(i) != t) fbc.put(i, vars.get(i));});
 
 			vars.clear();
-			graph.closeBlock();
+
+			block.setCurrent();
 //
 //			debugLevel("True "+tbc.toString());
 //			debugLevel("False "+fbc.toString());
@@ -1529,16 +1550,18 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				trueReturn = new PartialReturn(ifs, ifn, trueReturn, partialReturn);
 			}
 			partialReturn = prevReturn != null ? prevReturn.completeReturn(trueReturn) : trueReturn;
+
+			block.close();
 		}
 
 
 
 		/*------ buildStartWhile ------*/
 
-		private BooleanVertexLeaf buildStartWhile(Location<Bytecode.While> whiles, BooleanVertexLeaf node) {
+		private BooleanVertexLeaf buildStartWhile(Location<Bytecode.While> whiles, BooleanVertexLeaf node) throws CompilerException {
 			return new BooleanVertexLeaf(graph.new WhileNode(whiles, node.getValue()));
 		}
-		private VertexLeaf<?> buildStartWhile(Location<Bytecode.While> whiles, VertexLeaf<?> node) {
+		private VertexLeaf<?> buildStartWhile(Location<Bytecode.While> whiles, VertexLeaf<?> node) throws CompilerException {
 			return new GeneralVertexLeaf(graph.new WhileNode(whiles, node.getValue()));
 		}
 		private VertexSimpleRecord buildStartWhile(Location<Bytecode.While> whiles, VertexSimpleRecord node) throws CompilerException {
@@ -1584,8 +1607,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		private AccessibleVertexTree<?> buildEndWhile(Location<Bytecode.While> whiles, HalfArrow<?> whilen, AccessibleVertexTree<?> previousValue, AccessibleVertexTree<?> nextValue) throws CompilerException {
 			return buildMerge((p,n) -> {
-				if (p.node != n.node) return graph.new EndWhileNode(whiles, whilen, p, n);
-				if (p.node.targets.size() != 0) graph.new EndWhileNode(whiles, whilen, p, n);
+				if (p.node != n.node) return graph.new EndWhileNode(whiles, whilen, new HalfArrow<>(graph.new Register(p), p.ident), n);
+				if (p.node.targets.size() != 0) graph.new EndWhileNode(whiles, whilen, new HalfArrow<>(graph.new Register(p), p.ident), n);
 				return p.node.sources.get(0).from;
 			}, previousValue, nextValue);
 		}
@@ -1597,14 +1620,14 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildWhile(Location<Bytecode.While> whiles) throws CompilerException {
-			graph.openWhileBlock();
+			WhileBlock block = graph.openWhileBlock();
 			HashMap<Integer, AccessibleVertexTree<?>> pstate = new HashMap<>();
 			Generators.fromMap(vars).forEach(pstate::put);
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
 			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(state::put);
 			Generators.fromMap(state).forEach(vars::put);
-			graph.openNestedBlock();
-
+			block.openCondition();
+			GraphBlock blockc = graph.openNestedBlock();
 			AccessibleVertexTree<?> cond = buildExpression(whiles.getOperand(0));
 			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
 				throw new CompilerException(new CompilerError() {
@@ -1616,10 +1639,12 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 			HalfArrow<?> whilen = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
 
-			graph.addConcurrentBlock();
+			blockc.close();
+			block.openBody();
 
 			build(whiles.getBlock(0));
-			graph.closeBlock();
+
+			block.setCurrent();
 
 			boolean m = false;
 			for (Integer v : state.keySet()) {
@@ -1635,7 +1660,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					public String info() {
 						return "The loop <"+whiles+"> is infinite.";
 					}});
-			graph.closeBlock();
+			block.close();
 		}
 	}
 

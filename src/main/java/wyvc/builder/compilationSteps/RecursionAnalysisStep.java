@@ -12,6 +12,7 @@ import wyvc.builder.DataFlowGraph;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.compilationSteps.CompileFunctionsStep.CompiledFunctions;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
+import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
 
@@ -72,10 +73,10 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 		data.func.forEach((String n, DataFlowGraph s) -> func.put(n, new FuncNode(s)));
 		for (FuncNode c : func.values())
 			c.findRank(func);
-		List<Pair<String, FuncNode>> fcts = new ArrayList<>();
-		func.forEach((s, n) -> fcts.add(new Pair<String, FuncNode>(s, n)));
+		List<Pair<String, FuncNode>> fcts = Generators.fromMap(func).toList();
 		func.forEach((s, n) -> logger.debug(s+" rang "+n.rank));
 		fcts.sort((e1, e2) -> e1.second.rank - e2.second.rank);
+		Generators.fromPairCollection(fcts).takeSecond().forEach_(n -> n.data.updateInvokeLatency(s -> func.containsKey(s) ? func.get(s).data : null));
 		return new OrderedFunction(data, Utils.convert(fcts, (Pair<String, FuncNode> p) -> new Pair<String, DataFlowGraph>(p.first, p.second.data)));
 	}
 }
