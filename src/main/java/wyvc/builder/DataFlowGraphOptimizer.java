@@ -8,6 +8,7 @@ import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.EndWhileNode;
 import wyvc.builder.DataFlowGraph.OutputNode;
+import wyvc.builder.DataFlowGraph.Register;
 
 public class DataFlowGraphOptimizer extends LoggedBuilder {
 
@@ -26,9 +27,9 @@ public class DataFlowGraphOptimizer extends LoggedBuilder {
 
 	private void checkVertexUsefull(DataFlowGraph graph, DataNode vertex) {
 		if (!(vertex instanceof EndWhileNode) && !(vertex instanceof OutputNode) && vertex.targets.size() == 0) {
-			debug(vertex + " nb targets "+ vertex.targets.size());
+			List<DataArrow> sources = new ArrayList<>(vertex.sources);
 			graph.removeNode(vertex);
-			for (DataArrow<?,?> a : vertex.sources)
+			for (DataArrow a : sources)
 				checkVertexUsefull(graph, a.from);
 		}
 	}

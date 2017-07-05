@@ -2,7 +2,6 @@ package wyvc.builder;
 
 import java.util.List;
 import java.util.Set;
-import java.util.Stack;
 
 import wyil.lang.Bytecode;
 import wyil.lang.SyntaxTree.Location;
@@ -12,7 +11,6 @@ import wyvc.io.GraphPrinter.PrintableGraph;
 import wyvc.lang.Type;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.utils.FunctionalInterfaces.Function;
-import wyvc.utils.FunctionalInterfaces.Supplier;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Utils;
@@ -22,13 +20,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 
-public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFlowGraph.DataArrow<?,?>> {
+public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFlowGraph.DataArrow> {
 
-	public abstract class DataArrow<T extends DataNode, U extends DataNode> extends PrintableGraph.PrintableArrow<DataArrow<?,?>, DataNode> {
-		public final T from;
-		public final U to;
+	public abstract class DataArrow extends PrintableGraph.PrintableArrow<DataArrow, DataNode> {
+		public final DataNode from;
+		public final DataNode to;
 
-		public DataArrow(T from, U to) {
+		public DataArrow(DataNode from, DataNode to) {
 			super(DataFlowGraph.this, from, to);
 			this.from = from;
 			this.to = to;
@@ -36,18 +34,18 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public List<String> getOptions() {
-			if (from.block != to.block)
-				return /*from.block.getParent() == to.block || from.block == to.block.getParent()
-					? */Arrays.asList("arrowhead=\"box\"","color=purple")/*
-					: Arrays.asList("arrowhead=\"box\"","color=green")*/;
-			if (from instanceof Register || to instanceof Register)
+//			if (from.block != to.block)
+//				return /*from.block.getParent() == to.block || from.block == to.block.getParent()
+//					? */Arrays.asList("arrowhead=\"box\"","color=purple")/*
+//					: Arrays.asList("arrowhead=\"box\"","color=green")*/;
+			if (from instanceof BackRegister && ((BackRegister)from).getPreviousValue() == this)
 				return Collections.singletonList("dir=\"back\"");
 			return Collections.emptyList();
 		}
 	}
 
-	public class UnamedDataArrow<T extends DataNode, U extends DataNode> extends DataArrow<T,U> {
-		public UnamedDataArrow(T from, U to) {
+	public class UnamedDataArrow extends DataArrow {
+		public UnamedDataArrow(DataNode from, DataNode to) {
 			super(from, to);
 		}
 
@@ -57,10 +55,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 	}
 
-	public class NamedDataArrow<T extends DataNode, U extends DataNode> extends DataArrow<T,U> {
+	public class NamedDataArrow extends DataArrow {
 		public final String ident;
 
-		public NamedDataArrow(String ident, T from, U to) {
+		public NamedDataArrow(String ident, DataNode from, DataNode to) {
 			super(from, to);
 			this.ident = ident;
 		}
@@ -73,28 +71,28 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 
-	public static class HalfArrow<T extends DataNode> {
-		public final T node;
+	public static class HalfArrow {
+		public final DataNode node;
 		public final String ident;
-		public DataArrow<T,?> arrow = null;
+		public DataArrow arrow = null;
 
-		public HalfArrow(T node, String ident) {
+		public HalfArrow(DataNode node, String ident) {
 			this.node = node;
 			this.ident = ident;
 		}
-		public HalfArrow(HalfArrow<T> other, String ident) {
+		public HalfArrow(HalfArrow other, String ident) {
 			this.node = other.node;
 			this.ident = ident;
 		}
 
-		public HalfArrow(T node) {
+		public HalfArrow(DataNode node) {
 			this(node,null);
 		}
 
-		public <U extends DataNode> DataArrow<T,U> complete(U toward) {
-			DataArrow<T,U> arrow = ident == null
-					? node.getGraph().new UnamedDataArrow<T,U>(node, toward)
-					: node.getGraph().new NamedDataArrow<T,U>(ident, node, toward);
+		public DataArrow complete(DataNode toward) {
+			DataArrow arrow = ident == null
+					? node.getGraph().new UnamedDataArrow(node, toward)
+					: node.getGraph().new NamedDataArrow(ident, node, toward);
 			this.arrow = arrow;
 			return arrow;
 		}
@@ -108,28 +106,54 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	@FunctionalInterface
 	public static interface Duplicator {
-		public <T extends DataNode> HalfArrow<T> duplicate(DataArrow<T, ?> arrow);
+		public HalfArrow duplicate(DataArrow arrow) throws CompilerException;
 	}
 
-	public abstract class DataNode extends PrintableGraph.PrintableNode<DataNode, DataArrow<?,?>> {
+	public static class UnsupportedDuplicationCompilerError extends CompilerError {
+		private final DataNode node;
+
+		public UnsupportedDuplicationCompilerError(DataNode node) {
+			this.node = node;
+		}
+
+		@Override
+		public String info() {
+			return "The duplication of the "+node.getClass().getSimpleName()+" <"+node+"> is unsupported";
+		}
+
+		public static CompilerException exception(DataNode node) {
+			return new CompilerException(new UnsupportedDuplicationCompilerError(node));
+		}
+
+	}
+
+
+	public abstract class DataNode extends PrintableGraph.PrintableNode<DataNode, DataArrow> {
 		public final Type type;
 		public final int part;
 		public final String nodeIdent;
 		public final NodeBlock block;
+		public final Location<?> location;
 
 
-		public DataNode(String label, Type type) throws CompilerException {
-			this(label, type, Collections.emptyList());
-		}
-
-		public DataNode(String label, Type type, List<HalfArrow<?>> sources) throws CompilerException {
+		public DataNode(String label, Type type, List<HalfArrow> sources, Location<?> location) throws CompilerException {
 			super(DataFlowGraph.this);
-			sources.forEach((HalfArrow<?> a) -> a.complete(this));
+			sources.forEach((HalfArrow a) -> a.complete(this));
 			this.type = type;
+			this.location = location;
 			part = separation;
 			nodeIdent = label;
 			block = DataFlowGraph.this.block;
 			block.addNode(this);
+		}
+		public DataNode(String label, Type type, List<HalfArrow> sources) throws CompilerException {
+			this(label, type, sources, null);
+		}
+		public DataNode(String label, Type type, Location<?> location) throws CompilerException {
+			this(label, type, Collections.emptyList(), location);
+		}
+		public DataNode(String label, Type type) throws CompilerException {
+			this(label, type, Collections.emptyList(), null);
 		}
 
 		private String getShortIdent() {
@@ -150,13 +174,21 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return DataFlowGraph.this;
 		}
 
-		protected void addSource(HalfArrow<?> source) {
+		public final Type getType() {
+			return type;
+		}
+		public final String getNodeIdent() {
+			return nodeIdent;
+		}
+
+
+		protected void addSource(HalfArrow source) {
 			source.complete(this);
 		}
 
 		public abstract boolean isStaticallyKnown();
 
-		public abstract DataNode duplicate(Duplicator duplicator) throws CompilerException;
+		public abstract DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException;
 
 		@Override
 		protected void removed() {
@@ -165,6 +197,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			} catch (CompilerException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
+				System.out.println(e.error.info());
 			}
 		}
 	}
@@ -177,7 +210,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			this.mode = mode;
 		}
 
-		public InterfaceNode(String ident, HalfArrow<?> node) throws CompilerException {
+		public InterfaceNode(String ident, HalfArrow node) throws CompilerException {
 			super(ident, node.node.type, Collections.singletonList(node));
 			this.mode = Mode.OUT;
 		}
@@ -194,38 +227,35 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new InputNode(nodeIdent, type);
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new InputNode(nodeIdent, type);
 		}
 
 	}
 
 	public class OutputNode extends InterfaceNode {
-		public final DataArrow<?,?> source;
+		public final DataArrow source;
 
-		public OutputNode(String ident, HalfArrow<?> data) throws CompilerException {
+		public OutputNode(String ident, HalfArrow data) throws CompilerException {
 			super(ident, data);
 			outputs.add(this);
 			this.source = data.arrow;
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new OutputNode(nodeIdent, duplicator.duplicate(source));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new OutputNode(nodeIdent, duplicator.duplicate(source));
 		}
 
 	}
 
 	public class FunctionReturnNode extends DataNode {
-		public final DataArrow<FuncCallNode, ?> fct;
+		public final FuncCallNode fct;
 
-		public FunctionReturnNode(String label, Type type, HalfArrow<FuncCallNode> fct) throws CompilerException {
-			super(label, type, Collections.singletonList(fct));
-			this.fct = fct.arrow;
-			fct.node.returns.add(this);
-		}
 		public FunctionReturnNode(String label, Type type, FuncCallNode fct) throws CompilerException {
-			this(label, type, new HalfArrow<>(fct));
+			super(label, type, Collections.singletonList(new HalfArrow(fct)));
+			this.fct = fct;
+			fct.returns.add(this);
 		}
 
 		@Override
@@ -234,41 +264,23 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new FunctionReturnNode(nodeIdent, type, duplicator.duplicate(fct));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			// TODO
+			throw UnsupportedDuplicationCompilerError.exception(this);
 		}
 	}
 
-	public abstract class WyilNode<T extends Bytecode> extends DataNode {
-		public final Location<T> location;
 
-		/*public WyilNode(Location<T> location, List<DataNode> sources) throws CompilerException {
-			super(DataFlowGraph.toString(location.getBytecode()),
-				getType(location.getType()), sources);
-			this.location = location;
-		}*/
-
-		public WyilNode(Location<T> location, Type type, List<HalfArrow<?>> sources) throws CompilerException {
-			super(DataFlowGraph.toString(location.getBytecode()), type, sources);
-			this.location = location;
-		}
-
-		public WyilNode(String ident, Location<T> location, Type type, List<HalfArrow<?>> sources) throws CompilerException {
-			super(ident, type, sources);
-			this.location = location;
-		}
-
-	}
-//	public abstract class InstructionNode<T extends Bytecode> extends WyilNode<T> {
-//		public InstructionNode(Location<T> location, Type type, List<HalfArrow<?>> sources) throws CompilerException {
-//			super(location, type, sources);
-//		}
-//
-//	}
-
-	public final class ConstNode extends WyilNode<Bytecode.Const> {
+	public class ConstNode extends DataNode {
 		public ConstNode(Location<Bytecode.Const> decl, Type type) throws CompilerException {
-			super(decl, type, Collections.emptyList());
+			super(decl.getBytecode().constant().toString(), type, Collections.emptyList(), decl);
+		}
+		public ConstNode(Type type, String value) throws CompilerException {
+			super(value, type, Collections.emptyList());
+		}
+
+		public ConstNode(String value, Type type, Location<?> location) throws CompilerException {
+			super(value, type, Collections.emptyList(), location);
 		}
 
 		@Override
@@ -277,28 +289,12 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new ConstNode(location, type);
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new ConstNode(nodeIdent, type, location);
 		}
 	}
 
-	public class ExternConstNode extends DataNode {
-		public ExternConstNode(Type type, String value) throws CompilerException {
-			super(value, type);
-		}
-
-		@Override
-		public boolean isStaticallyKnown() {
-			return true;
-		}
-
-		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new ExternConstNode(type, nodeIdent);
-		}
-	}
-
-	public final class UndefConstNode extends ExternConstNode {
+	public class UndefConstNode extends ConstNode {
 		public UndefConstNode(Type type) throws CompilerException {
 			super(type, type.getDefault());
 		}
@@ -309,26 +305,30 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 	}
 
-	public final ExternConstNode getTrue() throws CompilerException {
-		return new ExternConstNode(Type.Boolean, "true");
+	public final ConstNode getTrue() throws CompilerException {
+		return new ConstNode(Type.Boolean, "true");
 	}
-	public final ExternConstNode getFalse() throws CompilerException {
-		return new ExternConstNode(Type.Boolean, "false");
+	public final ConstNode getFalse() throws CompilerException {
+		return new ConstNode(Type.Boolean, "false");
 	}
 
 	public static enum UnaryOperation {
 		Not;
 	}
 
-	public final class UnaOpNode extends WyilNode<Bytecode.Operator> {
+	public final class UnaOpNode extends DataNode {
 		public final UnaryOperation kind;
-		public final DataArrow<?,?> op;
+		public final DataArrow op;
 
-		public UnaOpNode(Location<Bytecode.Operator> binOp, UnaryOperation kind, Type type, HalfArrow<?> op) throws CompilerException {
-			super(binOp, type, Arrays.asList(op));
+		public UnaOpNode(UnaryOperation kind, Type type, HalfArrow op, Location<?> location) throws CompilerException {
+			super(kind.name(), type, Collections.singletonList(op), location);
 			this.kind = kind;
 			this.op = op.arrow;
 		}
+		public UnaOpNode(UnaryOperation kind, Type type, HalfArrow op) throws CompilerException {
+			this(kind, type, op, null);
+		}
+
 
 		@Override
 		public boolean isStaticallyKnown() {
@@ -336,8 +336,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new UnaOpNode(location, kind, type, duplicator.duplicate(op));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new UnaOpNode(kind, type, duplicator.duplicate(op), location);
 		}
 	}
 
@@ -348,16 +348,19 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		Lt, Le, Gt, Ge;
 	}
 
-	public final class BinOpNode extends WyilNode<Bytecode.Operator> {
+	public final class BinOpNode extends DataNode {
 		public final BinaryOperation kind;
-		public final DataArrow<?,?> op1;
-		public final DataArrow<?,?> op2;
+		public final DataArrow op1;
+		public final DataArrow op2;
 
-		public BinOpNode(Location<Bytecode.Operator> binOp, BinaryOperation kind, Type type, HalfArrow<?> op1, HalfArrow<?> op2) throws CompilerException{
-			super(kind.toString(), binOp, type, Arrays.asList(op1, op2));
+		public BinOpNode(BinaryOperation kind, Type type, HalfArrow op1, HalfArrow op2, Location<?> location) throws CompilerException{
+			super(kind.toString(), type, Arrays.asList(op1, op2), location);
 			this.kind = kind;
 			this.op1 = op1.arrow;
 			this.op2 = op2.arrow;
+		}
+		public BinOpNode(BinaryOperation kind, Type type, HalfArrow op1, HalfArrow op2) throws CompilerException{
+			this(kind, type, op1, op2, null);
 		}
 
 
@@ -372,23 +375,26 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new BinOpNode(location, kind, type, duplicator.duplicate(op1), duplicator.duplicate(op2));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new BinOpNode(kind, type, duplicator.duplicate(op1), duplicator.duplicate(op2), location);
 		}
 	}
 
-	public final class FuncCallNode extends WyilNode<Bytecode.Invoke> {
+	public final class FuncCallNode extends DataNode {
 		public final String funcName;
 		public final List<FunctionReturnNode> returns = new ArrayList<>();
-		public final List<DataArrow<?, ?>> args;
+		public final List<DataArrow> args;
 
-
-
-		public FuncCallNode(Location<Bytecode.Invoke> call, List<HalfArrow<?>> args) throws CompilerException {
-			super(call, null, args);
+		public FuncCallNode(String funcName, List<HalfArrow> args, Location<?> location) throws CompilerException {
+			super(funcName + "()", null, args, location);
 			invokes.add(this);
-			funcName = call.getBytecode().name().name();
-			this.args = Utils.convert(args, (HalfArrow<?> a) -> a.arrow);
+			this.funcName = funcName;
+			this.args = Utils.convert(args, (HalfArrow a) -> a.arrow);
+		}
+
+
+		public FuncCallNode(Location<Bytecode.Invoke> call, List<HalfArrow> args) throws CompilerException {
+			this(call.getBytecode().name().name(), args, call);
 		}
 
 		public final Generator<FunctionReturnNode> getReturns() {
@@ -401,35 +407,26 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new FuncCallNode(location, Utils.convert(args, (DataArrow<?, ?> a) -> duplicator.duplicate(a)));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new FuncCallNode(funcName, Generators.fromCollection(args).map_(duplicator::duplicate).toList(), location);
 		}
-
-		/*public void inline(WyilSection func) throws CompilerException {
-			WyilSection cfunc = func.duplicate();
-			for (Pair<DataNode,LabelNode> a : Utils.gather(sources, cfunc.inputs)){
-				a.first.targets.replaceAll((DataNode n) -> n == this ? a.second : n);
-				a.second.sources.add(a.first);
-				//System.out.println("Argu "+a.first.label+" "+a.second.label+" "+a.first.targets.get(0)+" "+a.second);
-			}
-			for (Pair<DataNode,LabelNode> r : Utils.gather(getTargets(), cfunc.outputs)){
-				r.first.sources.replaceAll((DataNode n) -> n == this ? r.second : n);
-				r.second.targets.add(r.first);
-				//System.out.println("Sortie "+r.first.label+" "+r.second.label+" "+r.first.sources.get(0)+" "+r.second);
-			}
-		}*/
 	}
 
-	public final class EndIfNode extends WyilNode<Bytecode.If> {
-		public final DataArrow<?,?> condition;
-		public final DataArrow<?,?> trueNode;
-		public final DataArrow<?,?> falseNode;
+	public final class EndIfNode extends DataNode {
+		public final DataArrow condition;
+		public final DataArrow trueNode;
+		public final DataArrow falseNode;
 
-		public EndIfNode(Location<Bytecode.If> ifs, HalfArrow<?> condition, HalfArrow<?> trueNode, HalfArrow<?> falseNode) throws CompilerException {
-			super("mux", ifs, trueNode.node.type, Arrays.asList(condition, trueNode, falseNode));
+		public EndIfNode(HalfArrow condition, HalfArrow trueNode, HalfArrow falseNode, Location<?> location) throws CompilerException {
+			super("mux", trueNode.node.type, Arrays.asList(condition, trueNode, falseNode), location);
 			this.condition = condition.arrow;
 			this.trueNode  =  trueNode.arrow;
 			this.falseNode = falseNode.arrow;
+
+		}
+
+		public EndIfNode(HalfArrow condition, HalfArrow trueNode, HalfArrow falseNode) throws CompilerException {
+			this(condition, trueNode, falseNode, null);
 		}
 
 		@Override
@@ -444,19 +441,29 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new EndIfNode(location, duplicator.duplicate(condition), duplicator.duplicate(trueNode), duplicator.duplicate(falseNode));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new EndIfNode(duplicator.duplicate(condition), duplicator.duplicate(trueNode), duplicator.duplicate(falseNode), location);
 		}
 	}
 
 
-	public final class WhileNode extends WyilNode<Bytecode.While> {
-		public final DataArrow<?,?> value;
+	public final class WhileNode extends DataNode {
+		public final DataArrow value;
+		public final BackRegister register;
 
-		public WhileNode(Location<Bytecode.While> whiles, HalfArrow<?> value) throws CompilerException {
-			super("While", whiles, value.node.type, Collections.singletonList(value));
+
+		private WhileNode(HalfArrow value, BackRegister register, Location<?> location) throws CompilerException {
+			super("While", value.node.type, Arrays.asList(value, new HalfArrow(register, "reg_"+value.ident)), location);
 			this.value = value.arrow;
+			this.register = register;
 		}
+		public WhileNode(HalfArrow value, Location<?> location) throws CompilerException {
+			this(value, new BackRegister(value.node.type), location);
+		}
+		public WhileNode(HalfArrow value) throws CompilerException {
+			this(value, null);
+		}
+
 
 		@Override
 		public List<String> getOptions() {
@@ -470,22 +477,31 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new WhileNode(location, duplicator.duplicate(value));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new WhileNode(duplicator.duplicate(value), location);
 		}
 	}
 
-	public final class EndWhileNode extends WyilNode<Bytecode.While> {
-		public final DataArrow<?,?> condition;
-		public final DataArrow<?,?> previousValue;
-		public final DataArrow<?,?> nextValue;
+	public final class EndWhileNode extends DataNode {
+		public final DataArrow condition;
+		public final WhileNode previousValue;
+		public final DataArrow nextValue;
+		public final DataArrow register;
 
-		public EndWhileNode(Location<Bytecode.While> whiles, HalfArrow<?> condition, HalfArrow<?> previousValue, HalfArrow<?> nextValue) throws CompilerException {
-			super("EndWhile", whiles, previousValue.node.type, Arrays.asList(condition, previousValue, nextValue));
+		private EndWhileNode(HalfArrow condition, WhileNode previousValue, HalfArrow nextValue, HalfArrow register, Location<?> location) throws CompilerException {
+			super("EndWhile", previousValue.type, Arrays.asList(condition, new HalfArrow(previousValue, "pre_"+nextValue.ident), nextValue, register), location);
 			this.condition = condition.arrow;
-			this.previousValue  =  previousValue.arrow;
+			this.previousValue  =  previousValue;
 			this.nextValue = nextValue.arrow;
+			this.register = register.arrow;
+			previousValue.register.setPreviousValue(this.register);
 			updateLatency(Latency.UnknownDelay);
+		}
+		public EndWhileNode(HalfArrow condition, WhileNode previousValue, HalfArrow nextValue, Location<?> location) throws CompilerException {
+			this(condition, previousValue, nextValue, new HalfArrow(previousValue.register, "reg_"+nextValue.ident), location);
+		}
+		public EndWhileNode(HalfArrow condition, WhileNode previousValue, HalfArrow nextValue) throws CompilerException {
+			this(condition, previousValue, nextValue, null);
 		}
 
 		@Override
@@ -500,23 +516,57 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new EndWhileNode(location, duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue));
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			throw UnsupportedDuplicationCompilerError.exception(this);
+//			return graph.new EndWhileNode(duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue), duplicator.duplicate(register));
 		}
 	}
 
 
+	public final class BackRegister extends DataNode {
+		private DataArrow previousValue = null;
+
+		public BackRegister(Type type) throws CompilerException {
+			super("Reg", type, Collections.emptyList());
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"hexagon\"","style=filled","fillcolor=bisque");
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
+
+		DataArrow getPreviousValue() {
+			return previousValue;
+		}
+
+		public void setPreviousValue(DataArrow value) {
+			// TODO throw exception if already set !
+			this.previousValue = value;
+		}
+
+		@Override
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			throw UnsupportedDuplicationCompilerError.exception(this);
+//			return graph.new BackRegister(duplicator.duplicate(previousValue));
+		}
+	}
+
 	public final class Register extends DataNode {
-		public final DataArrow<?,?> previousValue;
+		public final DataArrow previousValue;
 		public final int delay;
 
-		public Register(HalfArrow<?> previousValue) throws CompilerException {
+		public Register(HalfArrow previousValue) throws CompilerException {
 			super("Reg", previousValue.node.type, Collections.singletonList(previousValue));
 			this.previousValue  =  previousValue.arrow;
 			this.delay = 1;
 		}
 
-		public Register(HalfArrow<?> previousValue, int delay) throws CompilerException {
+		public Register(HalfArrow previousValue, int delay) throws CompilerException {
 			super("Reg", previousValue.node.type, Collections.singletonList(previousValue));
 			this.previousValue  =  previousValue.arrow;
 			this.delay = delay; // TODO check delay > 0
@@ -534,16 +584,66 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 		@Override
-		public DataNode duplicate(Duplicator duplicator) throws CompilerException {
-			return new Register(duplicator.duplicate(previousValue), delay);
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new Register(duplicator.duplicate(previousValue), delay);
+		}
+	}
+	public final class BufferFlag extends DataNode {
+		public final DataArrow buffer;
+
+		public BufferFlag(HalfArrow buffer) throws CompilerException {
+			super("bFl", Type.Boolean, Collections.singletonList(buffer));
+			this.buffer = buffer.arrow;
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
+
+		@Override
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			throw UnsupportedDuplicationCompilerError.exception(this);
+		}
+	}
+
+	public final class Buffer extends DataNode {
+		public final DataArrow write;
+		public final DataArrow read;
+		public final DataArrow previousValue;
+		public final BufferFlag isEmpty = new BufferFlag(new HalfArrow(this, "isEmpty"));
+		public final BufferFlag isFull = new BufferFlag(new HalfArrow(this, "isFull"));
+		public final int size;
+
+		public Buffer(HalfArrow write, HalfArrow read, HalfArrow previousValue, int size) throws CompilerException {
+			super("Reg", previousValue.node.type, Arrays.asList(write, read, previousValue));
+			this.write  =  write.arrow;
+			this.read  =  read.arrow;
+			this.previousValue  =  previousValue.arrow;
+			this.size = size;
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"hexagon\"","style=filled","fillcolor=bisque");
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
+
+		@Override
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new Buffer(duplicator.duplicate(write), duplicator.duplicate(read), duplicator.duplicate(previousValue), size);
 		}
 	}
 
 
 //	public final class Queue extends DataNode {
-//		public final DataArrow<?,?> clock;
-//		public final DataArrow<?,?> write;
-//		public final DataArrow<?,?> read;
+//		public final DataArrow clock;
+//		public final DataArrow write;
+//		public final DataArrow read;
 //
 //
 //		public Queue(Type type) throws CompilerException {
@@ -658,7 +758,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	public class WhileBlock extends NodeBlock {
 		public final ComputationBlock condition = new ComputationBlock(this);
 		public final ComputationBlock body = new ComputationBlock(this);
-		private final Set<Register> registerNodes = new HashSet<>();
+		private final Set<BackRegister> registerNodes = new HashSet<>();
 		private final Set<WhileNode> whileNodes = new HashSet<>();
 		private final Set<EndWhileNode> endWhileNodes = new HashSet<>();
 
@@ -682,8 +782,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 				whileNodes.add((WhileNode) node);
 			else if (node instanceof EndWhileNode)
 				endWhileNodes.add((EndWhileNode) node);
-			else if (node instanceof Register)
-				registerNodes.add((Register) node);
+			else if (node instanceof BackRegister)
+				registerNodes.add((BackRegister) node);
 			else
 				throw UnsuitableNodeCompilerError.exception(this, node);
 		}
@@ -694,8 +794,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 				whileNodes.remove((WhileNode) node);
 			else if (node instanceof EndWhileNode)
 				endWhileNodes.remove((EndWhileNode) node);
-			else if (node instanceof Register)
-				registerNodes.remove((Register) node);
+			else if (node instanceof BackRegister)
+				registerNodes.remove((BackRegister) node);
 			else
 				throw UnsuitableNodeCompilerError.exception(this, node);
 		}
@@ -708,6 +808,15 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			setBlock(body);
 		}
 
+		public Generator<WhileNode> getWhileNodes() {
+			return Generators.fromCollection(whileNodes);
+		}
+		public Generator<EndWhileNode> getEndWhileNodes() {
+			return Generators.fromCollection(endWhileNodes);
+		}
+		public Generator<BackRegister> getRegisters() {
+			return Generators.fromCollection(registerNodes);
+		}
 		@Override
 		public Generator<DataNode> getNodes() {
 			return Generators.<DataNode>fromCollection(whileNodes).append(Generators.fromCollection(registerNodes)).append(Generators.fromCollection(endWhileNodes));
@@ -725,7 +834,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final ComputationBlock trueBranch = new ComputationBlock(this);
 		public final ComputationBlock falseBranch = new ComputationBlock(this);
 		public final Set<EndIfNode> endIfNode = new HashSet<>();
-		public HalfArrow<?> conditionNode = null;
+		public HalfArrow conditionNode = null;
 
 		public IfBlock(GraphBlock parent) {
 			super(parent);
@@ -843,6 +952,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public class ComputationBlock extends NodeBlock {
 		private final List<GraphBlock> nestedBlocks = new ArrayList<>();
+		private final List<Set<Register>> registers = new ArrayList<>();
 
 		public ComputationBlock(NodeBlock parent) {
 			super(parent);
@@ -864,12 +974,20 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public void addNode(DataNode node) throws CompilerException {
-			throw UnsuitableNodeCompilerError.exception(this, node);
+			System.out.println("Add "+node);
+			if (node instanceof Register)
+				registers.get(registers.size()-1).add((Register) node);
+			else
+				throw UnsuitableNodeCompilerError.exception(this, node);
 		}
 
 		@Override
 		public void removeNode(DataNode node) throws CompilerException {
-			throw UnsuitableNodeCompilerError.exception(this, node);
+			System.out.println("remove "+node);
+			if (node instanceof Register)
+				registers.remove((Register) node);
+			else
+				throw UnsuitableNodeCompilerError.exception(this, node);
 		}
 
 		@Override
@@ -882,6 +1000,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return 0;
 		}
 
+		@Override
+		public void setCurrent() {
+			registers.add(new HashSet<>());
+			setBlock(this);
+		}
 	}
 
 
@@ -1033,8 +1156,17 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public void openFollowingBlock() throws CompilerException {
 //		System.out.println(block + " --->");
+		if (block instanceof ComputationBlock)
+			setBlock(new GraphBlock((ComputationBlock)block, ((ComputationBlock)block).nestedBlocks.size()));
+		else
+			throw InvalidBlockOperationCompilationError.exception(block);
+//		System.out.println("  ---> "+block);
+	}
+
+	public void closeCurrentBlock() throws CompilerException {
+//		System.out.println(block + " --->");
 		if (block instanceof GraphBlock && block.parent != null)
-			setBlock(new GraphBlock(((GraphBlock)block).parent, ((GraphBlock)block).index+1));
+			((GraphBlock)block).parent.setCurrent();
 		else
 			throw InvalidBlockOperationCompilationError.exception(block);
 //		System.out.println("  ---> "+block);
@@ -1073,18 +1205,5 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	@Override
 	public List<DataNode> getOutputs() {
 		return Utils.convert(outputs);
-	}
-
-
-	static private String toString(Bytecode b) {
-		if (b instanceof Bytecode.Operator)
-			return ((Bytecode.Operator) b).kind().toString();
-		if (b instanceof Bytecode.Const)
-			return ((Bytecode.Const) b).constant().toString();
-		if (b instanceof Bytecode.If)
-			return "If";
-		if (b instanceof Bytecode.Invoke)
-			return ((Bytecode.Invoke) b).name().toString()+"()";
-		return b.toString();
 	}
 }

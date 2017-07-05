@@ -21,7 +21,6 @@ import wyvc.builder.DataFlowGraph.ConstNode;
 import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.EndIfNode;
-import wyvc.builder.DataFlowGraph.ExternConstNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.FunctionReturnNode;
 import wyvc.builder.DataFlowGraph.InputNode;
@@ -154,14 +153,14 @@ public class EntityCompiler {
 		 * @param name
 		 * @return
 		 */
-		private Signal getSignal(DataArrow<?,?> source, String name) { // TODO Obsolete ?
+		private Signal getSignal(DataArrow source, String name) { // TODO Obsolete ?
 			return Utils.addIfAbsent(created, source.from, () -> planCompilation(createSignal(name, source.from), source.from));
 		}
 		private Signal getSignal(DataNode source, String name) {
 			return Utils.addIfAbsent(created, source, () -> planCompilation(createSignal(name, source), source));
 		}
 
-		private Signal getSignal(NamedDataArrow<?,?> source) {
+		private Signal getSignal(NamedDataArrow source) {
 			return getSignal(source, source.ident);
 		}
 
@@ -174,13 +173,13 @@ public class EntityCompiler {
 
 
 
-		private Expression compileAcces(NamedDataArrow<?,?> arrow) throws CompilerException {
+		private Expression compileAcces(NamedDataArrow arrow) throws CompilerException {
 			return new Access(getSignal(arrow));
 		}
 
-		private Expression compileExpression(DataArrow<?,?> arrow) throws CompilerException {
+		private Expression compileExpression(DataArrow arrow) throws CompilerException {
 			if (arrow instanceof NamedDataArrow)
-				return compileAcces((NamedDataArrow<?,?>) arrow);
+				return compileAcces((NamedDataArrow) arrow);
 			return compileExpression(arrow.from);
 		}
 
@@ -193,16 +192,11 @@ public class EntityCompiler {
 				return compileBinOp((BinOpNode) node);
 			if (node instanceof ConstNode)
 				return compileConst((ConstNode) node);
-			if (node instanceof ExternConstNode)
-				return compileExternConst((ExternConstNode) node);
 			if (node instanceof InputNode)
 				return compileInput((InputNode) node);
 			throw new CompilerException(new UnsupportedDataNodeError(node));
 		}
 
-		private Expression compileExternConst(ExternConstNode node) throws CompilerException {
-			return new Value(node.type, node.nodeIdent);
-		}
 		private Expression compileConst(ConstNode node) throws CompilerException {
 			return new Value(node.type, node.nodeIdent);
 		}
@@ -256,7 +250,7 @@ public class EntityCompiler {
 				if (source.second instanceof EndIfNode)
 					return compileEndIf(source.first, (EndIfNode) source.second);
 				if (source.second instanceof FunctionReturnNode)
-					return compileInvoke(((FunctionReturnNode) source.second).fct.from);
+					return compileInvoke(((FunctionReturnNode) source.second).fct);
 				return new SignalAssignment(source.first, compileExpression(source.second));
 			}
 			throw new CompilerException(new UnsupportedDataNodeError(source.second));
