@@ -13,18 +13,13 @@ import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.DataFlowGraph.BinOpNode;
 import wyvc.builder.DataFlowGraph.BinaryOperation;
-import wyvc.builder.DataFlowGraph.ComputationBlock;
 import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.Duplicator;
 import wyvc.builder.DataFlowGraph.EndIfNode;
-import wyvc.builder.DataFlowGraph.FunctionBlock;
-import wyvc.builder.DataFlowGraph.GraphBlock;
 import wyvc.builder.DataFlowGraph.HalfArrow;
-import wyvc.builder.DataFlowGraph.IfBlock;
 import wyvc.builder.DataFlowGraph.Latency;
-import wyvc.builder.DataFlowGraph.NodeBlock;
-import wyvc.builder.DataFlowGraph.WhileBlock;
+import wyvc.builder.DataFlowGraph.UnaOpNode;
 import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.lang.Type;
 import wyvc.utils.FunctionalInterfaces.BiFunction_;
@@ -58,41 +53,23 @@ public class PipelineBuilder extends LoggedBuilder {
 		}
 	}
 
-	public static class UnsupportedNodeBlockCompilerError extends CompilerError {
-		private final NodeBlock nodeBlock;
+	public static class UnsupportedNodeCompilerError extends CompilerError {
+		private final DataNode node;
 
-		public UnsupportedNodeBlockCompilerError(NodeBlock nodeBlock) {
-			this.nodeBlock = nodeBlock;
+		public UnsupportedNodeCompilerError(DataNode node) {
+			this.node= node;
 		}
 
 		@Override
 		public String info() {
-			return "The block "+nodeBlock+" is not supported";
+			return "The time analysis for node "+node+" is not supported";
 		}
 
-		public static CompilerException exception(NodeBlock nodeBlock) {
-			return new CompilerException(new UnsupportedNodeBlockCompilerError(nodeBlock));
-		}
-	}
-
-
-
-	public static class UnknownBlockDelayCompilerError extends CompilerError {
-		private final NodeBlock nodeBlock;
-
-		public UnknownBlockDelayCompilerError(NodeBlock nodeBlock) {
-			this.nodeBlock = nodeBlock;
-		}
-
-		@Override
-		public String info() {
-			return "The delay of block "+nodeBlock+" is unknown";
-		}
-
-		public static CompilerException exception(NodeBlock nodeBlock) {
-			return new CompilerException(new UnknownBlockDelayCompilerError(nodeBlock));
+		public static CompilerException exception(DataNode node) {
+			return new CompilerException(new UnsupportedNodeCompilerError(node));
 		}
 	}
+
 
 
 
@@ -281,8 +258,8 @@ public class PipelineBuilder extends LoggedBuilder {
 
 
 	private class Builder extends LoggedBuilder {
-		private final Map<NodeBlock, Delay> blockDelays = new HashMap<>();
 		private final Map<DataNode, Delay> nodeDelays = new HashMap<>();
+		private final Map<DataNode, DataNode> convertedNodes = new HashMap<>();
 		private final DataFlowGraph newGraph = new DataFlowGraph();
 		private final DataFlowGraph graph;
 
@@ -292,21 +269,90 @@ public class PipelineBuilder extends LoggedBuilder {
 		public Builder(CompilerLogger logger, DataFlowGraph graph) throws CompilerException {
 			super(logger);
 			this.graph = graph;
-			buildPipeline(graph.topLevelBlock, graph.getLatency());
+			buildPipeline(graph, graph.getLatency());
 		}
 
 
-		private Delay setBlockDelay(NodeBlock block, Delay delay) {
-			blockDelays.put(block, delay);
-//			debugLevel("Delay block "+block+" : "+delay.toString());
-			return delay;
-		}
-		private Delay setNodeDelay(DataNode node, Delay delay) {
+		private Delay setNodeDelay(DataNode previous, DataNode node, Delay delay) {
+			convertedNodes.put(previous, node);
 			nodeDelays.put(node, delay);
-			//debugLevel("Delay "+node+" : "+delay.toString());
 			return delay;
 		}
+		
+		private Delay getNodeDelay(DataNode node) throws CompilerException {
+			// TODO check contains
+			return nodeDelays.get(node);
+		}
+		private Delay getNodeDelay(HalfArrow node) throws CompilerException {
+			return nodeDelays.get(node.node);
+		}
 
+		private DataNode synchronize(DataNode node, Delay delay) throws CompilerException {
+			
+		}
+		
+		
+		
+		private DataNode getConvertedNode(DataNode node, DelayFlags flags) throws CompilerException {
+			if (!convertedNodes.containsKey(node))
+				buildPipeline(node, flags);
+			return convertedNodes.get(node);
+		}
+
+		private HalfArrow getConvertedHalfArrow(DataArrow a, DelayFlags flags) throws CompilerException {
+			return new HalfArrow(getConvertedNode(a.from, flags), a.getIdent());
+		}
+
+		private Delay buildPipeline(BinOpNode node, DelayFlags flags) throws CompilerException {
+			
+		}
+		private Delay buildPipeline(UnaOpNode node, DelayFlags flags) throws CompilerException {
+			HalfArrow op = getConvertedHalfArrow(node.op, flags);
+			return setNodeDelay(node, newGraph.new UnaOpNode(node.kind, node.type, op), getNodeDelay(op));
+		}
+		private Delay buildPipeline(EndIfNode node, DelayFlags flags) throws CompilerException {
+			
+		}
+
+		private Delay buildPipeline(DataNode node, DelayFlags flags) throws CompilerException {
+			if (node instanceof BinOpNode)
+				return buildPipeline((BinOpNode) node, flags);
+			if (node instanceof UnaOpNode)
+				return buildPipeline((UnaOpNode) node, flags);
+			if (node instanceof EndIfNode)
+				return buildPipeline((EndIfNode) node, flags);
+			
+			throw UnsupportedNodeCompilerError.exception(node);
+		}
+
+
+		private DelayFlags getFlags(Latency latency) throws CompilerException {
+			switch (latency) {
+			case NullDelay:
+				return new NullDelayFlags(newGraph);
+			case KnownDelay:
+				return new KnownDelayFlags(newGraph);
+			case UnknownDelay:
+				return new UnknownDelayFlags(newGraph);
+			default:
+				throw UnsupportedDelayCompilerError.exception(null);
+			}
+		}
+
+		private void buildPipeline(DataFlowGraph graph, Latency latency) throws CompilerException {
+			DelayFlags flags = getFlags(latency);
+			graph.getInputNodes().forEach_(n -> newGraph.new InputNode(n.nodeIdent, n.type));
+		}
+
+	}
+
+
+	public DataFlowGraph buildPipeline(DataFlowGraph graph) throws CompilerException {
+		return new Builder(logger, graph).newGraph;
+	}
+
+/*
+ * 
 		private abstract class Synchronizer implements BiFunction_<HalfArrow, HalfArrow, Pair<HalfArrow, HalfArrow>, CompilerException> {
 			public final Delay delay;
 
@@ -566,66 +612,8 @@ public class PipelineBuilder extends LoggedBuilder {
 
 			throw UnsupportedNodeBlockCompilerError.exception(block);
 		}
-
-
-
-		private Delay buildPipeline(GraphBlock block, DelayFlags flags) throws CompilerException {
-			blockNodeDelays.clear();
-			block.getNodes().forEach_(n -> buildNodeDelay(n, block, flags));
-
-
-			throw UnsupportedNodeBlockCompilerError.exception(block);
-
-		}
-
-
-		private Delay buildPipeline(NodeBlock block, DelayFlags flags) throws CompilerException {
-			if (block instanceof WhileBlock)
-				return buildPipeline((WhileBlock) block, flags);
-			if (block instanceof IfBlock)
-				return buildPipeline((IfBlock) block, flags);
-			if (block instanceof ComputationBlock)
-				return buildPipeline((ComputationBlock) block, flags);
-			if (block instanceof GraphBlock)
-				return buildPipeline((GraphBlock) block, flags);
-			else
-				throw UnsupportedNodeBlockCompilerError.exception(block);
-		}
-
-
-		private DelayFlags getFlags(Latency latency) throws CompilerException {
-			switch (latency) {
-			case NullDelay:
-				return new NullDelayFlags(newGraph);
-			case KnownDelay:
-				return new KnownDelayFlags(newGraph);
-			case UnknownDelay:
-				return new UnknownDelayFlags(newGraph);
-			default:
-				throw UnsupportedDelayCompilerError.exception(null);
-			}
-		}
-
-		private void buildPipeline(FunctionBlock block, Latency latency) throws CompilerException {
-			newGraph.topLevelBlock.openInputs();
-			DelayFlags flags = getFlags(latency);
-			graph.getInputNodes().forEach_(n -> newGraph.new InputNode(n.nodeIdent, n.type));
-			newGraph.topLevelBlock.openBody();
-			//buildPipeline(block.body, flags);
-			newGraph.topLevelBlock.openOutputs();
-			// TODO
-			newGraph.topLevelBlock.setCurrent();
-		}
-
-
-	}
-
-
-	public DataFlowGraph buildPipeline(DataFlowGraph graph) throws CompilerException {
-		return new Builder(logger, graph).newGraph;
-	}
-
-
+		*/
+ 
 
 //
 //

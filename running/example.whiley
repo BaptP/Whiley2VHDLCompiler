@@ -30,6 +30,7 @@ function t(int a, int b) -> int:
   b = b-d
   return c+b
   
+  /*
 type Int is {int x, bool b}
 
 function s2(Int a, int b) -> int:
@@ -40,7 +41,7 @@ function s2(Int a, int b) -> int:
   if a.b:
     return c+b
   return a.x
-
+*/
 
 
 

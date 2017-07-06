@@ -75,7 +75,7 @@ public class GraphPrinter {
 			output.close();
 			logger.debug("inputs : "+graph.getInputs().size());
 			logger.debug("outputs : "+graph.getOutputs().size());
-			Process t = Runtime.getRuntime().exec("graph-viewer gr.dot");
+			Process t = Runtime.getRuntime().exec("xdot gr.dot");
 			Process u = Runtime.getRuntime().exec("dot -Goverlap=scale -Tps gr.dot -o "+name+".ps");
 			t.waitFor();
 			u.waitFor();

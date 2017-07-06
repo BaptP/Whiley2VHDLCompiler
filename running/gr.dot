@@ -1,39 +1,14 @@
 digraph {
-subgraph clouster_0{
-label = FunctionBlock;
-color=blue;
-subgraph clouster_1{
-label = ComputationBlock;
-color=blue;
-subgraph clouster_2{
-label = GraphBlock;
-color=blue;
-  n1 [label="a_b\nboolean", style=filled, fillcolor="0.0 0.2 0.999"];
-  n2 [label="clock\nboolean", style=filled, fillcolor="0.0 0.2 0.999"];
-  n3 [label="start\nboolean", style=filled, fillcolor="0.0 0.2 0.999"];
-  n4 [label="b\nsigned(31 downto 0)", style=filled, fillcolor="0.0 0.2 0.999"];
-  n5 [label="a_x\nsigned(31 downto 0)", style=filled, fillcolor="0.0 0.2 0.999"];
-}
-}
-subgraph clouster_3{
-label = ComputationBlock;
-color=blue;
-}
-subgraph clouster_4{
-label = ComputationBlock;
-color=blue;
-subgraph clouster_5{
-label = GraphBlock;
-color=blue;
-}
-}
-}
   inp [label="inputs",color=blue,shape=box];
+  n1 [label="Gt\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n2 [label="res\nboolean"];
+  n3 [label="a\nsigned(31 downto 0)"];
+  n4 [label="0\nsigned(31 downto 0)"];
   out [label="outputs",color=red,shape=box];
 
-  inp -> n2 [color=blue];
   inp -> n3 [color=blue];
-  inp -> n1 [color=blue];
-  inp -> n5 [color=blue];
-  inp -> n4 [color=blue];
+  n1 -> n2[label=""];
+  n3 -> n1[label=""];
+  n4 -> n1[label=""];
+  n2 -> out [color=red];
 }
