@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.tools.ant.taskdefs.Input;
+
 import wyil.lang.Bytecode;
 import wyil.lang.Bytecode.OperatorKind;
 import wyil.lang.Constant;
@@ -21,12 +23,11 @@ import wyvc.builder.CompilerLogger.UnsupportedCompilerError;
 import wyvc.builder.DataFlowGraph.BinaryOperation;
 import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
-import wyvc.builder.DataFlowGraph.GraphBlock;
 import wyvc.builder.DataFlowGraph.HalfArrow;
-import wyvc.builder.DataFlowGraph.IfBlock;
+import wyvc.builder.DataFlowGraph.InputNode;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
-import wyvc.builder.DataFlowGraph.WhileBlock;
 import wyvc.builder.DataFlowGraph.WhileNode;
+import wyvc.builder.DataFlowGraph.WhileNode2;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
@@ -37,12 +38,15 @@ import wyvc.builder.TypeCompiler.TypeSimpleUnion;
 import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.TypeCompiler.TypeUnion;
 import wyvc.builder.LexicalElementTree;
+import wyvc.lang.Expression.Ge;
 import wyvc.lang.Type;
 import wyvc.utils.FunctionalInterfaces.BiFunction;
 import wyvc.utils.FunctionalInterfaces.BiFunction_;
 import wyvc.utils.FunctionalInterfaces.Function_;
+import wyvc.utils.BiMap;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
+import wyvc.utils.Triple;
 import wyvc.utils.Utils;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.Generator;
@@ -532,7 +536,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private Map<Integer, String> identifiers = new HashMap<>();
 		private PartialReturn partialReturn = null;
 		private final List<AccessibleTypeTree> returnTypes;
-		private final DataFlowGraph graph;
+		private final DataFlowGraph graph = new DataFlowGraph();
 //		private Map<wyil.lang.Type, wyvc.lang.Type> compiledTypes = new HashMap<>();
 
 		/*------- Constructor -------*/
@@ -540,8 +544,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		@SuppressWarnings("unchecked")
 		public Builder(WyilFile.FunctionOrMethod func) throws CompilerException {
 			super(DataFlowGraphBuilder.this.logger);
-			graph = new DataFlowGraph();
-			graph.topLevelBlock.openInputs();
 			Generators.fromCollection(func.type().params()).enumerate().forEach_((Integer k, wyil.lang.Type t) -> {
 				identifiers.put(k, ((Location<Bytecode.VariableDeclaration>)func.getTree().getLocation(k)).getBytecode().getName());
 				vars.put(k, buildParameter(
@@ -549,39 +551,79 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					buildType(t)));});
 			returnTypes = Generators.fromCollection(func.type().returns()).map_(this::buildType).toList();
 
-			graph.topLevelBlock.openBody();
-
 			build(func.getBody());
-
-			graph.topLevelBlock.openOutputs();
 
 /**/			partialReturn.print("RET ");
 			partialReturn.getReturn().enumerate().mapFirst(Object::toString).mapFirst("ret_"::concat).forEach_(this::buildReturnValue);
-
-			graph.topLevelBlock.setCurrent();
 		}
 
 
-		private void buildReturnValue(String ident, VertexTree ret) throws CompilerException {
-			if (ret instanceof VertexLeaf)
-				graph.new OutputNode(ident, ((VertexLeaf<?>)ret).getValue());
-			else if (ret instanceof VertexNode)
-				((VertexNode<?>)ret).getComponents().forEach_((s, t) -> buildReturnValue(ident+"_"+s, t));
+		private Builder(Builder other) {
+			super(DataFlowGraphBuilder.this.logger);
+			returnTypes = other.returnTypes;
 		}
 
 
 		/*------- Classe content -------*/
 
-//		private Type isNodeType(TypeTree type) throws CompilerException {
-//			if (type instanceof CompoundType)
-//				CompoundTypeCompilerError.exception(type);
-//			return type.getValue();
-//		}
-//
-//		private Type getNodeType(wyil.lang.Type type) throws CompilerException {
-//			return Utils.checkedAddIfAbsent(compiledTypes, type, () -> isNodeType(buildType(type)));
-//
-//		}
+		private AccessibleVertexTree<?> buildInputMapping(BiMap<DataNode, InputNode> pairs,  String name, AccessibleVertexTree<?> source) throws CompilerException {
+			return buildNamedTransform((n,s) -> {
+				InputNode d = graph.new InputNode(n, s.node.type);
+				pairs.put(s.node, d);
+				debugLevel("AJOUT "+n+" "+s);
+				return d;
+			}, name, source);
+		}
+
+
+		private void buildSeparatedBlock(Location<Bytecode.While> location) throws CompilerException {
+			Builder conditionBuilder = new Builder(this);
+			Builder bodyBuilder = new Builder(this);
+
+			BiMap<DataNode, InputNode> conditionInputs = new BiMap<>();
+			BiMap<DataNode, InputNode> bodyInputs = new BiMap<>();
+
+			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
+				map23_((n,s) -> conditionBuilder.buildInputMapping(conditionInputs, n, s)).forEach(conditionBuilder.vars::put);
+			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
+				map23_((n,s) -> bodyBuilder.buildInputMapping(bodyInputs, n, s)).forEach(bodyBuilder.vars::put);
+
+			debug("Taille "+bodyInputs.size());
+
+			conditionBuilder.identifiers.putAll(identifiers);
+			bodyBuilder.identifiers.putAll(identifiers);
+
+			AccessibleVertexTree<?> result = conditionBuilder.buildReturnValue("res", conditionBuilder.buildExpression(location.getOperand(0)));
+			conditionBuilder.graph.getInputNodes().filter(d -> d.targets.size() == 0).forEach(conditionBuilder.graph::removeNode);
+
+			bodyBuilder.build(location.getBlock(0));
+			bodyBuilder.graph.getInputNodes().filter(d -> d.targets.size() == 0).forEach(bodyBuilder.graph::removeNode);
+
+			if (!(result instanceof VertexLeaf))
+				throw new CompilerException(null); // TODO
+
+			WhileNode2 node = graph.new WhileNode2(
+					conditionBuilder.graph, new BiMap<>(conditionInputs.getValues().filter((f,t) -> t.targets.size() != 0)),
+					((VertexLeaf<?>) result).getValue().node,
+					bodyBuilder.graph, new BiMap<>(bodyInputs.getValues().filter((f,t) -> t.targets.size() != 0)), location);
+
+
+			Generators.fromMap(vars).duplicateFirst().mapSecond(bodyBuilder.vars::get).<AccessibleVertexTree<?>, CompilerException>map32_(
+					(p,n) -> buildMerge(
+							(ph,nh)-> {return bodyInputs.containsKey(ph.node) && bodyInputs.get(ph.node) != nh.node
+								? node.createResult(bodyBuilder.graph.new OutputNode(nh.ident, nh))
+								: ph.node;},
+							p, n)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(vars::put);
+		}
+
+
+
+
+		private AccessibleVertexTree<?> buildReturnValue(String ident, AccessibleVertexTree<?> ret) throws CompilerException {
+			return buildNamedTransform((String n, HalfArrow h) -> graph.new OutputNode(n, h), ident, ret);
+		}
+
+
 
 
 		public DataFlowGraph getGraph() {
@@ -798,9 +840,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 		private void buildSkip() throws CompilerException {
-			graph.closeCurrentBlock();
-			Generators.fromMap(vars).mapSecond_(this::buildRegister).forEach(vars::put);
-			graph.openFollowingBlock();
+			Generators.fromMap(vars).mapSecond_(this::buildRegister).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(vars::put);
 		}
 
 		@SuppressWarnings("unchecked")
@@ -828,10 +868,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 		private void buildBlock(Location<Bytecode.Block> block) throws CompilerException {
-			GraphBlock blockn = graph.openNestedBlock();
 			for (Location<?> l : block.getOperands())
 				build(l);
-			blockn.close();
 		}
 
 
@@ -853,53 +891,11 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		/*------ buildNamedHalfArrow ------*/
-
-		private GeneralVertexLeaf buildNamedHalfArrow(String ident, VertexLeaf<?> val) {
-			return new GeneralVertexLeaf(val.getValue().node, ident);
-		}
-		private BooleanVertexLeaf buildNamedHalfArrow(String ident, BooleanVertexLeaf val) {
-			return new BooleanVertexLeaf(val.getValue().node, ident);
-		}
-		private VertexSimpleRecord buildNamedHalfArrow(String ident, VertexSimpleRecord val) throws CompilerException {
-			return new VertexSimpleRecord(val.getFields().duplicateFirst().mapSecond((ident+"_")::concat).map23_(this::buildNamedHalfArrow));
-		}
-		private VertexSimpleUnion buildNamedHalfArrow(String ident, VertexSimpleUnion val) throws CompilerException {
-			return new VertexSimpleUnion(val.getOptions().enumerate().mapFirst(val::getLabel).mapFirst((ident+"_")::concat).map(
-				(s, t) -> new VertexOption<>(
-					buildNamedHalfArrow(s+"_"+t.getFirstLabel(), t.getFirstOperand()),
-					buildNamedHalfArrow(s+"_"+t.getSecondLabel(), t.getSecondOperand()))));
-		}
-		private VertexRecordUnion buildNamedHalfArrow(String ident, VertexRecordUnion val) throws CompilerException {
-			return new VertexRecordUnion(
-				val.getSharedFields().biMap_(p -> p.first, p -> buildNamedHalfArrow(ident+"_"+p.first, p.second)),
-				val.getSpecificFields().computeSecond_((f, t) -> new VertexOption<>(
-						buildNamedHalfArrow(ident+"_"+f+"_"+t.getFirstLabel(), t.getFirstOperand()),
-						buildNamedHalfArrow(ident+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand()))));
-		}
-		private VertexUnion buildNamedHalfArrow(String ident, VertexUnion val) throws CompilerException {
-			return new VertexUnion(
-				buildNamedHalfArrow(ident+"_"+val.getFirstLabel(), val.getFirstOperand()),
-				new VertexOption<>(
-						buildNamedHalfArrow(ident+"_"+val.hasRecordLabel(), val.getHasRecords()),
-						buildNamedHalfArrow(ident+"_"+val.recordOptionsLabel(), val.getRecordOptions())));
-		}
 		private AccessibleVertexTree<?> buildNamedHalfArrow(String ident, AccessibleVertexTree<?> val) throws CompilerException {
-//			debug(val.toString(ident+" > "));
-			if (val instanceof BooleanVertexLeaf)
-				return buildNamedHalfArrow(ident, (BooleanVertexLeaf)val);
-			if (val instanceof VertexLeaf)
-				return buildNamedHalfArrow(ident, (VertexLeaf<?>)val);
-			if (val instanceof VertexSimpleRecord)
-				return buildNamedHalfArrow(ident, (VertexSimpleRecord)val);
-			if (val instanceof VertexSimpleUnion)
-				return buildNamedHalfArrow(ident, (VertexSimpleUnion)val);
-			if (val instanceof VertexRecordUnion)
-				return buildNamedHalfArrow(ident, (VertexRecordUnion)val);
-			if (val instanceof VertexUnion)
-				return buildNamedHalfArrow(ident, (VertexUnion)val);
-			throw UnsupportedTreeNodeCompilerError.exception(val);
+			return buildNamedTransform(
+					(n, b) -> new BooleanVertexLeaf(b.getValue().node, ident),
+					(n, b) -> new GeneralVertexLeaf(b.getValue().node, ident), ident, val);
 		}
-
 
 
 
@@ -1318,6 +1314,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
+
 		private GeneralVertexLeaf buildCallReturn(String ident, TypeLeaf type, FuncCallNode func) throws CompilerException {
 			return new GeneralVertexLeaf(graph.new FunctionReturnNode(ident, type.getValue(),func));
 		}
@@ -1402,6 +1399,86 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
+
+		/*------ buildNamedTransform ------*/
+
+		private BooleanVertexLeaf buildNamedTransform(
+				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				String name, BooleanVertexLeaf tree) throws CompilerException {
+			return mergeBoolean.apply(name, tree);
+		}
+		private VertexLeaf<?> buildNamedTransform(
+				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				String name, VertexLeaf<?> tree) throws CompilerException {
+			return mergeGeneral.apply(name, tree);
+		}
+		private VertexSimpleRecord buildNamedTransform(
+				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				String name, VertexSimpleRecord tree) throws CompilerException {
+			return new VertexSimpleRecord(tree.getFields().computeSecond_(
+				(n,t) -> buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+n, t)));
+		}
+		private VertexSimpleUnion buildNamedTransform(
+				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				String name, VertexSimpleUnion tree) throws CompilerException {
+			return new VertexSimpleUnion(tree.getOptions().map_(
+				o -> new VertexOption<>(
+						 buildNamedTransform(mergeBoolean, name+"_"+o.getFirstLabel(), o.getFirstOperand()),
+						 buildNamedTransform(mergeGeneral, name+"_"+o.getSecondLabel(), o.getSecondOperand()))));
+		}
+		private VertexRecordUnion buildNamedTransform(
+				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				String name, VertexRecordUnion tree) throws CompilerException {
+			return new VertexRecordUnion(
+				tree.getSharedFields().computeSecond_(
+					(n,t) -> buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getFirstLabel()+"_"+n, t)),
+				tree.getSpecificFields().mapSecond_(
+					t -> new VertexOption<>(
+							buildNamedTransform(mergeBoolean, name+"_"+tree.getSecondLabel()+"_"+t.getFirstLabel(), t.getFirstOperand()),
+							buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getSecondLabel()+"_"+t.getSecondLabel(), t.getSecondOperand()))));
+		}
+		private VertexUnion buildNamedTransform(
+				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				String name, VertexUnion tree) throws CompilerException {
+			return new VertexUnion(
+				buildNamedTransform(mergeBoolean, mergeGeneral, name, tree.getFirstOperand()),
+				new VertexOption<>(
+						buildNamedTransform(mergeBoolean, name+"_"+tree.getFirstLabel(), tree.getHasRecords()),
+						buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getSecondLabel(), tree.getRecordOptions())));
+		}
+		private AccessibleVertexTree<?> buildNamedTransform(
+				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
+				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
+				String name, AccessibleVertexTree<?> tree) throws CompilerException {
+			if (tree instanceof BooleanVertexLeaf)
+				return buildNamedTransform(mergeBoolean, name, (BooleanVertexLeaf)tree);
+			if (tree instanceof VertexLeaf)
+				return buildNamedTransform(mergeGeneral, name, (VertexLeaf<?>)tree);
+			if (tree instanceof VertexSimpleRecord)
+				return buildNamedTransform(mergeBoolean, mergeGeneral, name, (VertexSimpleRecord)tree);
+			if (tree instanceof VertexSimpleUnion)
+				return buildNamedTransform(mergeBoolean, mergeGeneral, name, (VertexSimpleUnion)tree);
+			if (tree instanceof VertexRecordUnion)
+				return buildNamedTransform(mergeBoolean, mergeGeneral, name, (VertexRecordUnion)tree);
+			if (tree instanceof VertexUnion)
+				return buildNamedTransform(mergeBoolean, mergeGeneral, name, (VertexUnion)tree);
+			throw UnsupportedTreeNodeCompilerError.exception(tree);
+		}
+
+
+
+		private AccessibleVertexTree<?> buildNamedTransform(
+				BiFunction_<String, HalfArrow, DataNode, CompilerException> merge,
+				String name, AccessibleVertexTree<?> tree) throws CompilerException {
+			return buildNamedTransform(
+				(n,t) -> new BooleanVertexLeaf(merge.apply(n,t.getValue())),
+				(n,t) -> new GeneralVertexLeaf(merge.apply(n,t.getValue())),
+				name, tree);
+		}
 
 
 
@@ -1589,10 +1666,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildIf(Location<Bytecode.If> ifs) throws CompilerException {
-			IfBlock block = graph.openIfBlock();
-
-			block.openCondition();
-			GraphBlock blockc = graph.openNestedBlock();
 
 			AccessibleVertexTree<?> cond = buildExpression(ifs.getOperand(0));
 
@@ -1604,9 +1677,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 					}
 				});
 			HalfArrow ifn = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
-			block.conditionNode = ifn;
-			blockc.close();
-			block.openTrueBranch();
 
 			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
 			vars.forEach(state::put);
@@ -1620,7 +1690,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			vars.clear();
 			state.forEach(vars::put);
 
-			block.openFalseBranch();
 
 			HashMap<Integer, AccessibleVertexTree<?>> fbc = new HashMap<>();
 
@@ -1632,8 +1701,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 			vars.clear();
 
-			block.setCurrent();
-//
 //			debugLevel("True "+tbc.toString());
 //			debugLevel("False "+fbc.toString());
 //			debugLevel("State "+state.toString());
@@ -1654,7 +1721,6 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			}
 			partialReturn = prevReturn != null ? prevReturn.completeReturn(trueReturn) : trueReturn;
 
-			block.close();
 		}
 
 
@@ -1690,47 +1756,42 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private void buildWhile(Location<Bytecode.While> whiles) throws CompilerException {
-			WhileBlock block = graph.openWhileBlock();
-			HashMap<Integer, AccessibleVertexTree<?>> pstate = new HashMap<>();
-			Generators.fromMap(vars).forEach(pstate::put);
-			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
-			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(state::put);
-			Generators.fromMap(state).forEach(vars::put);
-			block.openCondition();
-			GraphBlock blockc = graph.openNestedBlock();
-			AccessibleVertexTree<?> cond = buildExpression(whiles.getOperand(0));
-			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
-				throw new CompilerException(new CompilerError() {
-					@Override
-					public String info() {
-						return "The condition is not a Leaf...";
-					}
-				});
+			buildSeparatedBlock(whiles);
 
-			HalfArrow whilen = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
-
-			blockc.close();
-			block.openBody();
-
-			build(whiles.getBlock(0));
-
-			block.setCurrent();
-
-			boolean m = false;
-			for (Integer v : state.keySet()) {
-				AccessibleVertexTree<?> p = state.get(v);
-				AccessibleVertexTree<?> n = vars.get(v);
-				if (p != n) m = true;
-				vars.put(v, buildNamedHalfArrow(identifiers.get(v), buildEndWhile(whiles, whilen, p, n)));
-			}
-
-			if (!m)
-				logger.addMessage(new CompilerNotice() {
-					@Override
-					public String info() {
-						return "The loop <"+whiles+"> is infinite.";
-					}});
-			block.close();
+//			HashMap<Integer, AccessibleVertexTree<?>> pstate = new HashMap<>();
+//			Generators.fromMap(vars).forEach(pstate::put);
+//			HashMap<Integer, AccessibleVertexTree<?>> state = new HashMap<>();
+//			Generators.fromMap(vars).mapSecond_(t -> buildStartWhile(whiles, t)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(state::put);
+//			Generators.fromMap(state).forEach(vars::put);
+//			AccessibleVertexTree<?> cond = buildExpression(whiles.getOperand(0));
+//			if (!(cond instanceof VertexLeaf)) // TODO boolean ?
+//				throw new CompilerException(new CompilerError() {
+//					@Override
+//					public String info() {
+//						return "The condition is not a Leaf...";
+//					}
+//				});
+//
+//			HalfArrow whilen = ((VertexLeaf<?>)cond).getValue(); // TODO verif bool primitif.
+//
+//
+//			build(whiles.getBlock(0));
+//
+//
+//			boolean m = false;
+//			for (Integer v : state.keySet()) {
+//				AccessibleVertexTree<?> p = state.get(v);
+//				AccessibleVertexTree<?> n = vars.get(v);
+//				if (p != n) m = true;
+//				vars.put(v, buildNamedHalfArrow(identifiers.get(v), buildEndWhile(whiles, whilen, p, n)));
+//			}
+//
+//			if (!m)
+//				logger.addMessage(new CompilerNotice() {
+//					@Override
+//					public String info() {
+//						return "The loop <"+whiles+"> is infinite.";
+//					}});
 		}
 	}
 

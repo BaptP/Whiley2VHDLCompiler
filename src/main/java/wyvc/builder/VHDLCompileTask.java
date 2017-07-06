@@ -59,7 +59,7 @@ public class VHDLCompileTask implements Build.Task {
 			setNextStep(new ParsingStep()).
 			setNextStep(new CompileTypesStep()).
 			setNextStep(new CompileFunctionsStep()).
-			setNextStep(new GraphOptimizationStep()).
+//			setNextStep(new GraphOptimizationStep()).
 			setNextStep(new RecursionAnalysisStep()).
 			setNextStep(new InliningStep()).
 			setNextStep(new ProducingVHDLStep()).

@@ -157,6 +157,7 @@ public class Generators {
 		PairGenerator<S,T> filter(Predicate<? super S> firstTest, Predicate<? super T> secondTest);
 		TripleGenerator<S,S,T> duplicateFirst();
 		TripleGenerator<S,T,T> duplicateSecond();
+		PairGenerator<S, T> appendPair(PairGenerator<? extends S, ? extends T> other);
 		<U> TripleGenerator<S,T,U> addComponent(Generator<U> generator);
 		<U, E extends Exception> TripleGenerator_<S,T,U,E> addComponent(Generator_<U, E> generator);
 		PairGenerator<S,T> async();
@@ -735,8 +736,9 @@ public class Generators {
 					while (true) yield(This.next());
 				}};
 		}
-
-
+		@Override default PairGenerator<S, T> appendPair(PairGenerator<? extends S, ? extends T> other) { // TODO test other != this
+			return toPairGenerator(append(other.map((S s) -> s, (T t) -> t)));
+		}
 		/*------ With exceptions ------*/
 		@Override default <U, E extends Exception> PairGenerator_<U,T,E> mapFirst_(Function_<? super S, ? extends U,E> function) {
 			return this.<E>toChecked().mapFirst(function);
