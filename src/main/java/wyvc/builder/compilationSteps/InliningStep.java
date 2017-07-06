@@ -10,7 +10,6 @@ import wyvc.builder.DataFlowGraph;
 import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.DataFlowGraphBuilder;
 import wyvc.builder.PipelineBuilder;
-import wyvc.io.DataFlowGraphPrinter;
 import wyvc.io.GraphPrinter;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
 import wyvc.builder.compilationSteps.RecursionAnalysisStep.OrderedFunction;
