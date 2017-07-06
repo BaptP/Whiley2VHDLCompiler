@@ -9,7 +9,6 @@ import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
-import wyvc.builder.DataFlowGraph.EndWhileNode;
 import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.io.GraphPrinter.PrintableGraph;
 import wyvc.lang.Type;
@@ -275,7 +274,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public ConstNode(Location<Bytecode.Const> decl, Type type) throws CompilerException {
 			super(decl.getBytecode().constant().toString(), type, Collections.emptyList(), decl);
 		}
-		public ConstNode(Type type, String value) throws CompilerException {
+		public ConstNode(String value, Type type) throws CompilerException {
 			super(value, type, Collections.emptyList());
 		}
 
@@ -296,7 +295,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public class UndefConstNode extends ConstNode {
 		public UndefConstNode(Type type) throws CompilerException {
-			super(type, type.getDefault());
+			super(type.getDefault(), type);
 		}
 
 		@Override
@@ -306,10 +305,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 	public final ConstNode getTrue() throws CompilerException {
-		return new ConstNode(Type.Boolean, "true");
+		return new ConstNode("true", Type.Boolean);
 	}
 	public final ConstNode getFalse() throws CompilerException {
-		return new ConstNode(Type.Boolean, "false");
+		return new ConstNode("false", Type.Boolean);
 	}
 
 	public static enum UnaryOperation {
@@ -452,9 +451,9 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 	public final class WhileResultNode extends DataNode {
-		public final WhileNode2 whileNode;
+		public final WhileNode whileNode;
 
-		public WhileResultNode(WhileNode2 node, Type type, String ident) throws CompilerException {
+		public WhileResultNode(WhileNode node, Type type, String ident) throws CompilerException {
 			super(ident, type, Collections.singletonList(new HalfArrow(node)));
 			whileNode = node;
 		}
@@ -471,7 +470,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	}
 
-	public final class WhileNode2 extends DataNode {
+	public final class WhileNode extends DataNode {
 		public final DataFlowGraph condition;
 		public final BiMap<DataNode, InputNode> cInputs;
 		public final DataNode conditionValue;
@@ -479,7 +478,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final BiMap<DataNode, InputNode> bInputs;
 		public final BiMap<OutputNode, WhileResultNode> bOutputs = new BiMap<>();
 
-		public WhileNode2(DataFlowGraph condition, BiMap<DataNode, InputNode> cInputs, DataNode conditionValue,
+		public WhileNode(DataFlowGraph condition, BiMap<DataNode, InputNode> cInputs, DataNode conditionValue,
 				DataFlowGraph body, BiMap<DataNode, InputNode> bInputs, Location<Bytecode.While> location) throws CompilerException {
 			super("While", null,  cInputs.getValues().appendPair(bInputs.getValues().filter((i,f) -> !cInputs.containsKey(i))).mapSecond(InputNode::getNodeIdent).map_((n,s) -> new HalfArrow(n,s)).toList(), location);
 			this.condition = condition;
@@ -489,6 +488,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			this.bInputs = bInputs;
 			whileNodes.add(this);
 			updateLatency(Latency.UnknownDelay);
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=green");
 		}
 
 		@Override
@@ -508,80 +512,6 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return rNode;
 		}
 
-	}
-	public final class WhileNode extends DataNode {
-		public final DataArrow value;
-		public final BackRegister register;
-
-
-		private WhileNode(HalfArrow value, BackRegister register, Location<?> location) throws CompilerException {
-			super("While", value.node.type, Arrays.asList(value, new HalfArrow(register, "reg_"+value.ident)), location);
-			this.value = value.arrow;
-			this.register = register;
-		}
-		public WhileNode(HalfArrow value, Location<?> location) throws CompilerException {
-			this(value, new BackRegister(value.node.type), location);
-		}
-		public WhileNode(HalfArrow value) throws CompilerException {
-			this(value, null);
-		}
-
-
-		@Override
-		public List<String> getOptions() {
-			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=bisque");
-		}
-
-		@Override
-		public boolean isStaticallyKnown() {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
-			return graph.new WhileNode(duplicator.duplicate(value), location);
-		}
-	}
-
-	public final class EndWhileNode extends DataNode {
-		public final DataArrow condition;
-		public final WhileNode previousValue;
-		public final DataArrow nextValue;
-		public final DataArrow register;
-
-		private EndWhileNode(HalfArrow condition, WhileNode previousValue, HalfArrow nextValue, HalfArrow register, Location<?> location) throws CompilerException {
-			super("EndWhile", previousValue.type, Arrays.asList(condition, new HalfArrow(previousValue, "pre_"+nextValue.ident), nextValue, register), location);
-			this.condition = condition.arrow;
-			this.previousValue  =  previousValue;
-			this.nextValue = nextValue.arrow;
-			this.register = register.arrow;
-			previousValue.register.setPreviousValue(this.register);
-			updateLatency(Latency.UnknownDelay);
-		}
-		public EndWhileNode(HalfArrow condition, WhileNode previousValue, HalfArrow nextValue, Location<?> location) throws CompilerException {
-			this(condition, previousValue, nextValue, new HalfArrow(previousValue.register, "reg_"+nextValue.ident), location);
-		}
-		public EndWhileNode(HalfArrow condition, WhileNode previousValue, HalfArrow nextValue) throws CompilerException {
-			this(condition, previousValue, nextValue, null);
-		}
-
-		@Override
-		public List<String> getOptions() {
-			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=bisque");
-		}
-
-		@Override
-		public boolean isStaticallyKnown() {
-			return false;//TODO complex
-		}
-
-
-		@Override
-		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
-			throw UnsupportedDuplicationCompilerError.exception(this);
-//			return graph.new EndWhileNode(duplicator.duplicate(condition), duplicator.duplicate(previousValue), duplicator.duplicate(nextValue), duplicator.duplicate(register));
-		}
 	}
 
 
@@ -762,7 +692,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	public List<InputNode> inputs = new ArrayList<>();
 	public List<OutputNode> outputs = new ArrayList<>();
 	public List<FuncCallNode> invokes = new ArrayList<>();
-	public List<WhileNode2> whileNodes = new ArrayList<>();
+	public List<WhileNode> whileNodes = new ArrayList<>();
 
 	public enum Latency {
 		NullDelay,
