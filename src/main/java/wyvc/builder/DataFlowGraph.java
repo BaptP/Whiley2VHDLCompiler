@@ -7,6 +7,10 @@ import wyil.lang.Bytecode;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
+import wyvc.builder.DataFlowGraph.DataArrow;
+import wyvc.builder.DataFlowGraph.DataNode;
+import wyvc.builder.DataFlowGraph.EndWhileNode;
+import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.io.GraphPrinter.PrintableGraph;
 import wyvc.lang.Type;
 import wyvc.lang.TypedValue.Port.Mode;
@@ -786,6 +790,21 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	}
 
 
+	private void checkNodeUsefull(DataNode node) {
+		if (!(node instanceof InterfaceNode) && node.targets.size() == 0) {
+			List<DataArrow> sources = new ArrayList<>(node.sources);
+			removeNode(node);
+			for (DataArrow a : sources)
+				checkNodeUsefull(a.from);
+		}
+	}
+
+	public void removeUselessNodes() {
+		List<DataNode> nodes = new ArrayList<>();
+		nodes.addAll(this.nodes);
+		for (DataNode n : nodes)
+			checkNodeUsefull(n);
+	}
 
 	public Generator<InputNode> getInputNodes() {
 		return Generators.fromCollection(new ArrayList<>(inputs));

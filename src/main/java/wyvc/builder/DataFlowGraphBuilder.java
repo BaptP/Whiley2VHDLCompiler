@@ -25,6 +25,7 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.InputNode;
+import wyvc.builder.DataFlowGraph.Register;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
 import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.DataFlowGraph.WhileNode2;
@@ -576,6 +577,18 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
+		private boolean isModified(DataNode newNode, DataNode node) {
+			if (newNode == node) return false;
+			if (newNode instanceof Register)
+				return isModified(((Register)newNode).previousValue.from, node);
+			return true;
+		}
+
+
+		private boolean isUnused(DataNode node) {
+			return node.getTargets().forAll(t -> t instanceof Register && isUnused(t));
+		}
+
 		private void buildSeparatedBlock(Location<Bytecode.While> location) throws CompilerException {
 			Builder conditionBuilder = new Builder(this);
 			Builder bodyBuilder = new Builder(this);
@@ -594,26 +607,30 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			bodyBuilder.identifiers.putAll(identifiers);
 
 			AccessibleVertexTree<?> result = conditionBuilder.buildReturnValue("res", conditionBuilder.buildExpression(location.getOperand(0)));
-			conditionBuilder.graph.getInputNodes().filter(d -> d.targets.size() == 0).forEach(conditionBuilder.graph::removeNode);
+			conditionBuilder.graph.getInputNodes().filter(this::isUnused).forEach(conditionBuilder.graph::removeNode);
 
 			bodyBuilder.build(location.getBlock(0));
-			bodyBuilder.graph.getInputNodes().filter(d -> d.targets.size() == 0).forEach(bodyBuilder.graph::removeNode);
+			bodyBuilder.graph.getInputNodes().filter(this::isUnused).forEach(bodyBuilder.graph::removeNode);
 
 			if (!(result instanceof VertexLeaf))
 				throw new CompilerException(null); // TODO
 
 			WhileNode2 node = graph.new WhileNode2(
-					conditionBuilder.graph, new BiMap<>(conditionInputs.getValues().filter((f,t) -> t.targets.size() != 0)),
+					conditionBuilder.graph, new BiMap<>(conditionInputs.getValues().filter((f,t) -> !isUnused(t))),
 					((VertexLeaf<?>) result).getValue().node,
-					bodyBuilder.graph, new BiMap<>(bodyInputs.getValues().filter((f,t) -> t.targets.size() != 0)), location);
+					bodyBuilder.graph, new BiMap<>(bodyInputs.getValues().filter((f,t) -> !isUnused(t))), location);
 
 
 			Generators.fromMap(vars).duplicateFirst().mapSecond(bodyBuilder.vars::get).<AccessibleVertexTree<?>, CompilerException>map32_(
 					(p,n) -> buildMerge(
-							(ph,nh)-> {return bodyInputs.containsKey(ph.node) && bodyInputs.get(ph.node) != nh.node
+							(ph,nh)-> {return bodyInputs.containsKey(ph.node) && isModified(nh.node, bodyInputs.get(ph.node))
 								? node.createResult(bodyBuilder.graph.new OutputNode(nh.ident, nh))
 								: ph.node;},
 							p, n)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(vars::put);
+
+
+			conditionBuilder.graph.removeUselessNodes();
+			bodyBuilder.graph.removeUselessNodes();
 		}
 
 
