@@ -42,7 +42,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 //				return /*from.block.getParent() == to.block || from.block == to.block.getParent()
 //					? */Arrays.asList("arrowhead=\"box\"","color=purple")/*
 //					: Arrays.asList("arrowhead=\"box\"","color=green")*/;
-			if (from instanceof BackRegister && ((BackRegister)from).getPreviousValue() == this)
+			if (from instanceof BackRegister && to instanceof BackRegisterEnd)
 				return Collections.singletonList("dir=\"back\"");
 			return Collections.emptyList();
 		}
@@ -156,6 +156,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 
 		private String getShortIdent() {
+			if (nodeIdent == null)
+				return "NULL";
 			return nodeIdent.length() < 19 ? nodeIdent : nodeIdent.substring(0, 12)+"..."+nodeIdent.substring(nodeIdent.length()-4);
 		}
 
@@ -452,15 +454,21 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public final class WhileResultNode extends DataNode {
 		public final WhileNode whileNode;
+		public final DataNode previous;
 
-		public WhileResultNode(WhileNode node, Type type, String ident) throws CompilerException {
+		public WhileResultNode(WhileNode node, DataNode previous, Type type, String ident) throws CompilerException {
 			super(ident, type, Collections.singletonList(new HalfArrow(node)));
 			whileNode = node;
+			this.previous = previous;
 		}
 
 		@Override
 		public boolean isStaticallyKnown() {
 			return false;
+		}
+
+		public DataNode getPreviousValue() {
+			return previous;
 		}
 
 		@Override
@@ -473,12 +481,12 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	public final class WhileNode extends DataNode {
 		public final DataFlowGraph condition;
 		public final BiMap<DataNode, InputNode> cInputs;
-		public final DataNode conditionValue;
+		public final OutputNode conditionValue;
 		public final DataFlowGraph body;
 		public final BiMap<DataNode, InputNode> bInputs;
 		public final BiMap<OutputNode, WhileResultNode> bOutputs = new BiMap<>();
 
-		public WhileNode(DataFlowGraph condition, BiMap<DataNode, InputNode> cInputs, DataNode conditionValue,
+		public WhileNode(DataFlowGraph condition, BiMap<DataNode, InputNode> cInputs, OutputNode conditionValue,
 				DataFlowGraph body, BiMap<DataNode, InputNode> bInputs, Location<Bytecode.While> location) throws CompilerException {
 			super("While", null,  cInputs.getValues().appendPair(bInputs.getValues().filter((i,f) -> !cInputs.containsKey(i))).mapSecond(InputNode::getNodeIdent).map_((n,s) -> new HalfArrow(n,s)).toList(), location);
 			this.condition = condition;
@@ -505,9 +513,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			throw UnsupportedDuplicationCompilerError.exception(this);
 		}
 
-
-		public DataNode createResult(OutputNode node) throws CompilerException {
-			WhileResultNode rNode = new WhileResultNode(this, node.type, node.nodeIdent);
+		public DataNode createResult(OutputNode node, DataNode previous) throws CompilerException {
+			WhileResultNode rNode = new WhileResultNode(this, previous, node.type, node.nodeIdent);
 			bOutputs.put(node, rNode);
 			return rNode;
 		}
@@ -519,12 +526,13 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		private DataArrow previousValue = null;
 
 		public BackRegister(Type type) throws CompilerException {
-			super("Reg", type, Collections.emptyList());
+			super("BReg", type, Collections.emptyList());
 		}
+
 
 		@Override
 		public List<String> getOptions() {
-			return Arrays.asList("shape=\"hexagon\"","style=filled","fillcolor=bisque");
+			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=greenyellow 	");
 		}
 
 		@Override
@@ -547,21 +555,52 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 //			return graph.new BackRegister(duplicator.duplicate(previousValue));
 		}
 	}
+	public final class BackRegisterEnd extends DataNode {
+		public final BackRegister register;
+		public final DataArrow value;
+
+		private BackRegisterEnd(HalfArrow value, HalfArrow register) throws CompilerException {
+			super("BRegE", value.node.type, Arrays.asList(value, register));
+			this.register = (BackRegister) register.node;
+			this.value = value.arrow;
+			this.register.setPreviousValue(value.arrow);
+		}
+
+		public BackRegisterEnd(HalfArrow value, BackRegister register) throws CompilerException {
+			this(value, new HalfArrow(register, value.ident+"_reg"));
+		}
+
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=greenyellow 	");
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
+
+
+		@Override
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			throw UnsupportedDuplicationCompilerError.exception(this);
+		}
+	}
 
 	public final class Register extends DataNode {
 		public final DataArrow previousValue;
 		public final int delay;
 
-		public Register(HalfArrow previousValue) throws CompilerException {
-			super("Reg", previousValue.node.type, Collections.singletonList(previousValue));
-			this.previousValue  =  previousValue.arrow;
-			this.delay = 1;
-		}
 
 		public Register(HalfArrow previousValue, int delay) throws CompilerException {
-			super("Reg", previousValue.node.type, Collections.singletonList(previousValue));
+			super("Reg-"+delay, previousValue.node.type, Collections.singletonList(previousValue));
 			this.previousValue  =  previousValue.arrow;
 			this.delay = delay; // TODO check delay > 0
+		}
+
+		public Register(HalfArrow previousValue) throws CompilerException {
+			this(previousValue, 1);
 		}
 
 		@Override
@@ -721,7 +760,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 	private void checkNodeUsefull(DataNode node) {
-		if (!(node instanceof InterfaceNode) && node.targets.size() == 0) {
+		if (!(node instanceof InterfaceNode) && !(node instanceof WhileResultNode) && node.targets.size() == 0) {
 			List<DataArrow> sources = new ArrayList<>(node.sources);
 			removeNode(node);
 			for (DataArrow a : sources)

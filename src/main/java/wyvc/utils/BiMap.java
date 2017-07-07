@@ -2,6 +2,7 @@ package wyvc.utils;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import wyvc.utils.Generators.PairGenerator;
 import wyvc.utils.Generators.PairGenerator_;
@@ -9,7 +10,7 @@ import wyvc.utils.Generators.PairGenerator_;
 public class BiMap<K,V> {
 	private final Map<K, V> direct = new HashMap<>();
 	private final Map<V, K> inverse = new HashMap<>();
-	
+
 	public BiMap() {}
 	public BiMap(PairGenerator<K, V> values) {
 		values.forEach(this::put);
@@ -17,24 +18,28 @@ public class BiMap<K,V> {
 	public <E extends Exception> BiMap(PairGenerator_<K, V, E> values) throws E {
 		values.forEach(this::put);
 	}
-	
+
 	public void put(K key, V value) {
+		if (direct.containsKey(key))
+			direct.remove(key);
+		if (inverse.containsKey(value))
+			inverse.remove(value);
 		direct.put(key, value);
 		inverse.put(value, key);
 	}
-	
+
 	public int size() {
 		return direct.size();
 	}
-	
+
 	public V get(K key) {
 		return direct.get(key);
 	}
-	
+
 	public K getKey(V value) {
 		return inverse.get(value);
 	}
-	
+
 	public boolean containsKey(K key) {
 		return direct.containsKey(key);
 	}
@@ -42,12 +47,21 @@ public class BiMap<K,V> {
 	public boolean containsValue(V value) {
 		return inverse.containsKey(value);
 	}
-	
+
 	public void clear() {
 		direct.clear();
 		inverse.clear();
 	}
-	
+
+
+	public Set<K> keySet() {
+		return direct.keySet();
+	}
+
+	public Set<V> valueSet() {
+		return inverse.keySet();
+	}
+
 	public PairGenerator<K,V> getValues() {
 		return Generators.fromMap(direct);
 	}

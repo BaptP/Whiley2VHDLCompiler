@@ -5,8 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.tools.ant.taskdefs.Input;
-
 import wyil.lang.Bytecode;
 import wyil.lang.Bytecode.OperatorKind;
 import wyil.lang.Constant;
@@ -25,6 +23,7 @@ import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.InputNode;
+import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.builder.DataFlowGraph.Register;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
 import wyvc.builder.DataFlowGraph.WhileNode;
@@ -38,15 +37,12 @@ import wyvc.builder.TypeCompiler.TypeSimpleUnion;
 import wyvc.builder.TypeCompiler.TypeTree;
 import wyvc.builder.TypeCompiler.TypeUnion;
 import wyvc.builder.LexicalElementTree;
-import wyvc.lang.Expression.Ge;
 import wyvc.lang.Type;
-import wyvc.utils.FunctionalInterfaces.BiFunction;
 import wyvc.utils.FunctionalInterfaces.BiFunction_;
 import wyvc.utils.FunctionalInterfaces.Function_;
 import wyvc.utils.BiMap;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
-import wyvc.utils.Triple;
 import wyvc.utils.Utils;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.Generator;
@@ -239,15 +235,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			super(new HalfArrow(value, ident));
 		}
 
-//		public <U extends DataNode> VertexLeaf(U decl, String ident) {
-//			super(new HalfArrow<>(decl, ident));
-//			type = typeCompiler.new TypeLeaf(decl.type);
-//		}
-
-		public abstract T getType(); // TODO hum ?
-//		public final Type getType() {
-//			return type;
-//		}
+		public abstract T getType();
 	}
 
 	private final class GeneralVertexLeaf extends VertexLeaf<TypeLeaf> {
@@ -568,6 +556,11 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		/*------- Classe content -------*/
 
+		private void putVariable(int index, AccessibleVertexTree<?> value) throws CompilerException {
+			vars.put(index, buildNamedHalfArrow(identifiers.get(index), value));
+		}
+
+
 		private AccessibleVertexTree<?> buildInputMapping(BiMap<DataNode, InputNode> pairs,  String name, AccessibleVertexTree<?> source) throws CompilerException {
 			return buildNamedTransform((n,s) -> {
 				InputNode d = graph.new InputNode(n, s.node.type);
@@ -727,7 +720,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			else throw UnrelatedTypeCompilerError.exception(type, node);
 			return new VertexSimpleUnion(type.getOptions().map_(o -> {
 				for (VertexOption<VertexLeaf<?>> c : cpn) {
-					if (o.getSecondOperand().getValue().equals(c.getSecondOperand().getType()))
+					if (o.getSecondOperand().getValue().equals(c.getSecondOperand().getType().getValue()))
 						return c;
 				}
 				return new VertexOption<VertexLeaf<?>>(buildBoolean(false), buildUndefinedValue(o.getSecondOperand()));
@@ -814,7 +807,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 		private void buildSkip() throws CompilerException {
-			Generators.fromMap(vars).mapSecond_(this::buildRegister).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(vars::put);
+			Generators.fromMap(vars).mapSecond_(this::buildRegister).forEach(this::putVariable);
 		}
 
 		@SuppressWarnings("unchecked")
@@ -850,7 +843,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				build(l);
 			HashMap<Integer, AccessibleVertexTree<?>> endBlock = new HashMap<>(vars);
 			vars.clear();
-			Generators.fromMap(state).duplicateFirst().mapSecond(endBlock::get).map23_(this::getModifications).forEach(vars::put);
+			Generators.fromMap(state).duplicateFirst().mapSecond(endBlock::get).map23_(this::getModifications).forEach(this::putVariable);
 		}
 
 		private void buildBlock(Location<Bytecode.Block> block) throws CompilerException {
@@ -925,7 +918,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			@Override
 			public void buildAssign(AccessibleVertexTree<?> assign) throws CompilerException {
 				AccessibleVertexTree<?> r = buildTypedValue(assign, type);
-				vars.put(index, buildNamedHalfArrow(ident, r));
+				putVariable(index, r);
 //				debugLevel("Assign de " + ident);
 //				debugLevel(assign.toString("  "));
 //				debugLevel(r.toString("  "));
@@ -1038,9 +1031,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		private void buildDecl(Location<Bytecode.VariableDeclaration> decl) throws CompilerException {
 //			debug("Declaration de "+decl.getBytecode().getName()+" en "+decl.getIndex());
 			identifiers.put(decl.getIndex(), decl.getBytecode().getName());
-			vars.put(decl.getIndex(), decl.numberOfOperands() == 1
-				? buildNamedHalfArrow(decl.getBytecode().getName(),
-					buildTypedValue(buildExpression(decl.getOperand(0)), buildType(decl.getType())))
+			putVariable(decl.getIndex(), decl.numberOfOperands() == 1
+				? buildTypedValue(buildExpression(decl.getOperand(0)), buildType(decl.getType()))
 				: null);
 //			debug("Ajouté !");
 		}
@@ -1434,10 +1426,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				String name, VertexUnion tree) throws CompilerException {
 			return new VertexUnion(
-				buildNamedTransform(mergeBoolean, mergeGeneral, name, tree.getFirstOperand()),
+				buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getFirstLabel(), tree.getFirstOperand()),
 				new VertexOption<>(
-						buildNamedTransform(mergeBoolean, name+"_"+tree.getFirstLabel(), tree.getHasRecords()),
-						buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getSecondLabel(), tree.getRecordOptions())));
+						buildNamedTransform(mergeBoolean, name+"_"+tree.hasRecordLabel(), tree.getHasRecords()),
+						buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.recordOptionsLabel(), tree.getRecordOptions())));
 		}
 		private AccessibleVertexTree<?> buildNamedTransform(
 				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
@@ -1697,7 +1689,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			vars.clear();
 
 			Generators.fromMap(state).forEach_(
-				(i, t) -> vars.put(i, buildNamedHalfArrow(identifiers.get(i), buildEndIf(ifs, ifn, tbc.getOrDefault(i, t), fbc.getOrDefault(i, t)))));
+				(i, t) -> putVariable(i, buildEndIf(ifs, ifn, tbc.getOrDefault(i, t), fbc.getOrDefault(i, t))));
 			if (trueReturn != null || partialReturn != null) {
 				addMessage(new NestedReturnCompilerNotice());
 				trueReturn = new PartialReturn(ifs, ifn, trueReturn, partialReturn);
@@ -1720,15 +1712,14 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			BiMap<DataNode, InputNode> conditionInputs = new BiMap<>();
 			BiMap<DataNode, InputNode> bodyInputs = new BiMap<>();
 
-			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
-				map23_((n,s) -> conditionBuilder.buildInputMapping(conditionInputs, n, s)).forEach(conditionBuilder.vars::put);
-			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
-				map23_((n,s) -> bodyBuilder.buildInputMapping(bodyInputs, n, s)).forEach(bodyBuilder.vars::put);
-
-			debug("Taille "+bodyInputs.size());
-
 			conditionBuilder.identifiers.putAll(identifiers);
 			bodyBuilder.identifiers.putAll(identifiers);
+
+			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
+				map23_((n,s) -> conditionBuilder.buildInputMapping(conditionInputs, n, s)).forEach(conditionBuilder::putVariable);
+			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
+				map23_((n,s) -> bodyBuilder.buildInputMapping(bodyInputs, n, s)).forEach(bodyBuilder::putVariable);
+
 
 			AccessibleVertexTree<?> result = conditionBuilder.buildReturnValue("res", conditionBuilder.buildExpression(whiles.getOperand(0)));
 			conditionBuilder.graph.getInputNodes().filter(this::isUnused).forEach(conditionBuilder.graph::removeNode);
@@ -1738,19 +1729,24 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 			if (!(result instanceof VertexLeaf))
 				throw new CompilerException(null); // TODO
+			DataNode res = ((VertexLeaf<?>) result).getValue().node;
+
+			if (!(res instanceof OutputNode))
+				throw new CompilerException(null); // TODO
+			OutputNode condi = (OutputNode) res;
 
 			WhileNode node = graph.new WhileNode(
 					conditionBuilder.graph, new BiMap<>(conditionInputs.getValues().filter((f,t) -> !isUnused(t))),
-					((VertexLeaf<?>) result).getValue().node,
+					condi,
 					bodyBuilder.graph, new BiMap<>(bodyInputs.getValues().filter((f,t) -> !isUnused(t))), whiles);
 
 
 			Generators.fromMap(vars).duplicateFirst().mapSecond(bodyBuilder.vars::get).<AccessibleVertexTree<?>, CompilerException>map32_(
 					(p,n) -> buildMerge(
 							(ph,nh)-> bodyInputs.containsKey(ph.node) && isModified(nh.node, bodyInputs.get(ph.node))
-								? node.createResult(bodyBuilder.graph.new OutputNode(nh.ident, nh))
+								? node.createResult(bodyBuilder.graph.new OutputNode(nh.ident, nh), ph.node)
 								: ph.node,
-							p, n)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(vars::put);
+							p, n)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(this::putVariable);
 
 
 			conditionBuilder.graph.removeUselessNodes();

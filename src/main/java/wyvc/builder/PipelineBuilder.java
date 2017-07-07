@@ -4,19 +4,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import org.apache.tools.ant.taskdefs.Sync;
+import javax.xml.crypto.Data;
 
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
+import wyvc.builder.DataFlowGraph.BackRegister;
 import wyvc.builder.DataFlowGraph.BinOpNode;
-import wyvc.builder.DataFlowGraph.BinaryOperation;
 import wyvc.builder.DataFlowGraph.ConstNode;
 import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
-import wyvc.builder.DataFlowGraph.Duplicator;
 import wyvc.builder.DataFlowGraph.EndIfNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.InputNode;
@@ -24,17 +22,14 @@ import wyvc.builder.DataFlowGraph.Latency;
 import wyvc.builder.DataFlowGraph.Register;
 import wyvc.builder.DataFlowGraph.UnaOpNode;
 import wyvc.builder.DataFlowGraph.WhileNode;
+import wyvc.builder.DataFlowGraph.WhileResultNode;
 import wyvc.lang.Type;
-import wyvc.utils.FunctionalInterfaces.BiFunction_;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
 import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Pair;
 
 public class PipelineBuilder extends LoggedBuilder {
-	public final int NoDelay = 0;
-	public final int UnboundDelay = -1;
-	private final Map<DataNode, DataNode> converted = new HashMap<>();
 
 	public PipelineBuilder(CompilerLogger logger) {
 		super(logger);
@@ -194,6 +189,14 @@ public class PipelineBuilder extends LoggedBuilder {
 	}
 
 
+	public static class UnknownDelay extends Delay {
+		public final Map<UnknownDelay, Integer> synchronizedDelays = new HashMap<>();
+
+		public UnknownDelay(DataFlowGraph graph, int latencyMin) {
+			super(graph, latencyMin);
+		}
+
+	}
 
 //	public static class UnknownDelay extends Delay {
 //		public final UnknownDelayFlags flags;
@@ -238,7 +241,7 @@ public class PipelineBuilder extends LoggedBuilder {
 		private final Map<DataNode, Delay> nodeDelays = new HashMap<>();
 		private final Map<DataNode, DataNode> convertedNodes = new HashMap<>();
 		private final DataFlowGraph newGraph = new DataFlowGraph();
-		private final DataFlowGraph graph;
+//		private final DataFlowGraph graph;
 
 private InputNode clck = newGraph.new InputNode("clck", Type.Boolean);
 		private InputNode getClock() throws CompilerException {
@@ -248,7 +251,6 @@ private InputNode clck = newGraph.new InputNode("clck", Type.Boolean);
 
 		public Builder(CompilerLogger logger, DataFlowGraph graph) throws CompilerException {
 			super(logger);
-			this.graph = graph;
 			buildPipeline(graph, graph.getLatency());
 		}
 
@@ -336,6 +338,47 @@ private InputNode clck = newGraph.new InputNode("clck", Type.Boolean);
 			return new HalfArrow(getConvertedNode(a.from), a.getIdent());
 		}
 
+
+
+
+
+
+		private void buildWhilePipeline(WhileNode node) throws CompilerException {
+//			DataNode start;
+			HalfArrow start = new HalfArrow(newGraph.new InputNode("start", Type.Boolean)); // TODO
+			Delay delay = new NullDelay(newGraph); // TODO
+			Map<DataNode, BackRegister> registers = new HashMap<>();
+			//Generators.fromCollection(node.sources).biMap(DataArrow::getIdent, a -> a.from).duplicateSecond().mapThird(DataNode::getType);
+			node.getSources().compute(DataNode::getType).mapSecond_(t -> newGraph.new BackRegister(t)).forEach(registers::put);
+			Map<DataNode, EndIfNode> entries = new HashMap<>();
+			Generators.fromMap(registers).computeSecond_((n,r) -> newGraph.new EndIfNode(start,
+					new HalfArrow(getConvertedNode(n), node.bInputs.get(n).nodeIdent), new HalfArrow(r, node.bInputs.get(n).nodeIdent+"_reg"))).forEach(entries::put); // TODO name
+			node.bInputs.getValues().mapFirst(entries::get).forEach((e,i) -> setNodeDelay(i, e, delay));
+			node.cInputs.getValues().mapFirst(entries::get).forEach((e,i) -> setNodeDelay(i, e, delay));
+
+			DataNode condition = buildPipeline(node.conditionValue.source.from);
+
+			Delay conditionDelay = new KnownDelay(newGraph, getClock(), 1);
+			Delay bodyDelay = new KnownDelay(newGraph, getClock(), 2);
+
+			node.bOutputs.getValues().duplicateFirst().map_(o -> o.nodeIdent, o -> getConvertedNode(o.source.from), WhileResultNode::getPreviousValue).
+			mapThird(registers::get).map21(HalfArrow::new).forEach((h,r) -> newGraph.new BackRegisterEnd(h, r));
+
+			Delay finalDelay = new KnownDelay(newGraph, getClock(), 5);
+			node.bOutputs.getValues().takeSecond().compute(WhileResultNode::getPreviousValue).
+			mapSecond(entries::get).mapSecond_(n -> synchronizeNode(new HalfArrow(n), conditionDelay)).forEach((r,h) -> setNodeDelay(r, h.node, finalDelay));
+		}
+
+
+
+
+
+		private DataNode buildPipeline(WhileResultNode node) throws CompilerException {
+			buildWhilePipeline(node.whileNode);
+			return getConvertedNode(node);
+		}
+
+
 		private BinOpNode buildPipeline(BinOpNode node) throws CompilerException {
 			Delay delay = mergeSources(Generators.fromValues(node.op1, node.op2));
 			return setNodeDelay(node, newGraph.new BinOpNode(node.kind, node.type,
@@ -363,6 +406,8 @@ private InputNode clck = newGraph.new InputNode("clck", Type.Boolean);
 		}
 
 		private DataNode buildPipeline(DataNode node) throws CompilerException {
+			if (node instanceof WhileResultNode)
+				return buildPipeline((WhileResultNode) node);
 			if (node instanceof BinOpNode)
 				return buildPipeline((BinOpNode) node);
 			if (node instanceof UnaOpNode)
@@ -669,52 +714,5 @@ private InputNode clck = newGraph.new InputNode("clck", Type.Boolean);
 			throw UnsupportedNodeBlockCompilerError.exception(block);
 		}
 		*/
-
-
-//
-//
-//
-//		private Delay buildDelay(WhileBlock block) throws CompilerException {
-//			return setBlockDelay(block,new UnknownDelay(buildDelay(block.condition).merge(buildDelay(block.body)).getMinimumDelay()));
-//		}
-//		private Delay buildDelay(IfBlock block) throws CompilerException {
-//			return setBlockDelay(block,buildDelay(block.condition).merge(buildDelay(block.trueBranch).merge(buildDelay(block.falseBranch))));
-//		}
-//		private Delay buildStep(Delay d1, Delay d2) throws CompilerException {
-//			if (d2 == null)
-//				throw UnsupportedDelayCompilerError.exception(d2);
-//			if (d1 == null)
-//				return d2;
-//			return d1.compose(new KnownDelay(1)).compose(d2);
-//		}
-//		private Delay buildDelay(ComputationBlock block) throws CompilerException {
-//			openLevel("ComputationBlock");
-//			debugLevel("->"+block.getNumberOfNestedBlocks()+" "+block.getNestedBlocks().toList());
-//			return end(setBlockDelay(block, block.getNumberOfNestedBlocks() == 0
-//					? new NullDelay()
-//					: block.getNestedBlocks().map_(this::buildDelay).fold(this::buildStep, null)));
-//		}
-//		private Delay buildNodeDelay(DataNode node, GraphBlock block) throws CompilerException {
-//			if (nodeDelays.containsKey(node))
-//				return nodeDelays.get(node);
-//			if (node.block != block)
-//				return setNodeDelay(node, blockDelays.containsKey(node.block) ? blockDelays.get(node.block) : new NullDelay());
-//			return setNodeDelay(node, node.getSources().gather(Generators.constant(block)).map_(this::buildNodeDelay).fold(Delay::merge, new NullDelay()));
-//		}
-//		private Delay buildDelay(GraphBlock block) throws CompilerException {
-//			block.getNestedBlocks().forEach_(this::buildDelay);
-//			return block.getNodes().gather(Generators.constant(block)).map_(this::buildNodeDelay).fold(Delay::merge, new NullDelay());
-//		}
-//		private Delay buildDelay(NodeBlock block) throws CompilerException {
-//			if (block instanceof WhileBlock)
-//				return buildDelay((WhileBlock) block);
-//			if (block instanceof IfBlock)
-//				return buildDelay((IfBlock) block);
-//			if (block instanceof ComputationBlock)
-//				return buildDelay((ComputationBlock) block);
-//			if (block instanceof GraphBlock)
-//				return buildDelay((GraphBlock) block);
-//			throw UnsupportedNodeBlockCompilerError.exception(block);
-//		}
 
 }
