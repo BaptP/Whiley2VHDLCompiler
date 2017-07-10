@@ -28,11 +28,26 @@ import wyvc.utils.FunctionalInterfaces.Supplier;
 import wyvc.utils.FunctionalInterfaces.Supplier_;
 import wyvc.utils.FunctionalInterfaces.TriFunction;
 import wyvc.utils.FunctionalInterfaces.TriFunction_;
+import wyvc.utils.Generators.Generator;
 
 public class Generators {
 	private Generators() {}
 
-
+	public static interface GCollection<T> extends Collection<T> {
+		public default Generator<T> generate() {
+			return Generators.fromCollection(this);
+		}
+	}
+	public static interface GPairCollection<S,T> extends GCollection<Pair<S,T>> {
+		public default PairGenerator<S,T> generate() {
+			return Generators.fromPairCollection(this);
+		}
+	}
+	public static interface GTripleCollection<S,T,U> extends GCollection<Triple<S,T,U>> {
+		public default TripleGenerator<S,T,U> generate() {
+			return Generators.fromTripleCollection(this);
+		}
+	}
 
 
 
@@ -65,7 +80,7 @@ public class Generators {
 
 		/*------ Specific ------*/
 		T next() throws EndOfGenerationException;
-		List<T> toList();
+		GList<T> toList();
 		PairGenerator<Integer,T> enumerate();
 		<U> PairGenerator<T,U> cartesianProduct(Generator<U> generator);
 		<U> PairGenerator<T,U> gather(Generator<U> generator);
@@ -85,6 +100,9 @@ public class Generators {
 		<U,V> PairGenerator<U,V> biMap(
 				Function<? super T, ? extends U> firstMap,
 				Function<? super T, ? extends V> secondMap);
+		<U,V> TripleGenerator<T,U,V> biCompute(
+				Function<? super T, ? extends U> firstMap,
+				Function<? super T, ? extends V> secondMap);
 		<U> U fold(BiFunction<? super U, ? super T, ? extends U> function, U init);
 		void forEach(Consumer<? super T> function);
 		boolean forAll(Predicate<? super T> test);
@@ -95,6 +113,9 @@ public class Generators {
 		<U, E extends Exception> Generator_<U,E> map_(Function_<? super T, ? extends U, E> function);
 		<U, E extends Exception> PairGenerator_<T,U,E> compute_(Function_<? super T, ? extends U, E> function);
 		<U,V, E extends Exception> PairGenerator_<U,V,E> biMap_(
+				Function_<? super T, ? extends U,E> firstMap,
+				Function_<? super T, ? extends V,E> secondMap);
+		<U,V, E extends Exception> TripleGenerator_<T,U,V,E> biCompute_(
 				Function_<? super T, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap);
 		<U, E extends Exception> U fold_(BiFunction_<? super U, ? super T, ? extends U, E> function, U init) throws E;
@@ -112,7 +133,7 @@ public class Generators {
 
 		/*------ Specific ------*/
 		T next() throws EndOfGenerationException, E;
-		List<T> toList() throws E;
+		GList<T> toList() throws E;
 		PairGenerator_<Integer,T,E> enumerate();
 		<U> PairGenerator_<T,U,E> cartesianProduct(Generator_<U,E> generator) throws E;
 		<U> PairGenerator_<T,U,E> gather(Generator<U> generator);
@@ -130,6 +151,9 @@ public class Generators {
 		<U> Generator_<U,E> map(Function_<? super T, ? extends U, E> function);
 		<U> PairGenerator_<T,U,E> compute(Function_<? super T, ? extends U, E> function);
 		<U,V> PairGenerator_<U,V,E> biMap(
+				Function_<? super T, ? extends U,E> firstMap,
+				Function_<? super T, ? extends V,E> secondMap);
+		<U,V> TripleGenerator_<T,U,V,E> biCompute(
 				Function_<? super T, ? extends U,E> firstMap,
 				Function_<? super T, ? extends V,E> secondMap);
 		<U> U fold(BiFunction_<? super U, ? super T, ? extends U, E> function, U init) throws E;
@@ -150,6 +174,7 @@ public class Generators {
 	public static interface PairGenerator<S,T> extends Generator<Pair<S,T>> {
 
 		/*------ Specific ------*/
+		GPairList<S,T> toList();
 		Generator<S> takeFirst();
 		Generator<T> takeSecond();
 		PairGenerator<T,S> swap();
@@ -232,6 +257,7 @@ public class Generators {
 
 	public static interface PairGenerator_<S,T, E extends Exception> extends Generator_<Pair<S,T>,E> {
 		/*------ Specific ------*/
+		GPairList<S,T> toList() throws E;
 		Generator_<S,E> takeFirst();
 		Generator_<T,E> takeSecond();
 		PairGenerator_<T,S,E> swap();
@@ -277,6 +303,8 @@ public class Generators {
 
 	public static interface TripleGenerator<S,T,U> extends Generator<Triple<S,T,U>> {
 		/*------ Specific ------*/
+		GTripleList<S,T,U> toList();
+
 		Generator<S> takeFirst();
 		Generator<T> takeSecond();
 		Generator<U> takeThird();
@@ -335,6 +363,8 @@ public class Generators {
 
 	public static interface TripleGenerator_<S,T,U, E extends Exception> extends Generator_<Triple<S,T,U>,E> {
 		/*------ Specific ------*/
+		GTripleList<S,T,U> toList() throws E;
+
 		Generator_<S,E> takeFirst();
 		Generator_<T,E> takeSecond();
 		Generator_<U,E> takeThird();
@@ -389,8 +419,8 @@ public class Generators {
 	public static interface DefaultGenerator<T> extends Generator<T> {
 
 		/*------ Specific ------*/
-		@Override default List<T> toList() {
-			List<T> l = new ArrayList<>();
+		@Override default GList<T> toList() {
+			GList<T> l = new GList.GArrayList<>();
 			try {
 				while (true)
 					l.add(next());
@@ -528,6 +558,11 @@ public class Generators {
 				Function_<? super T, ? extends V,E> secondMap) {
 			return this.<E>toChecked().biMap(firstMap, secondMap);
 		}
+		@Override default <U,V, E extends Exception> TripleGenerator_<T,U,V,E> biCompute_(
+				Function_<? super T, ? extends U,E> firstMap,
+				Function_<? super T, ? extends V,E> secondMap) {
+			return this.<E>toChecked().biCompute(firstMap, secondMap);
+		}
 		@Override default <U, E extends Exception> U fold_(BiFunction_<? super U, ? super T, ? extends U, E> function, U init) throws E {
 			return this.<E>toChecked().fold(function, init);
 		}
@@ -546,8 +581,8 @@ public class Generators {
 	public static interface DefaultGenerator_<T, E extends Exception> extends Generator_<T,E> {
 
 		/*------ Specific ------*/
-		@Override default List<T> toList() throws E {
-			List<T> l = new ArrayList<>();
+		@Override default GList<T> toList() throws E {
+			GList<T> l = new GList.GArrayList<>();
 			try {
 				while (true)
 					l.add(next());
@@ -682,6 +717,15 @@ public class Generators {
 
 
 	private static interface DefaultPairGenerator<S,T> extends PairGenerator<S,T>, DefaultGenerator<Pair<S,T>> {
+		@Override default GPairList<S,T> toList() {
+			GPairList<S,T> l = new GPairList.GPairArrayList<>();
+			try {
+				while (true)
+					l.add(next());
+			}
+			catch (EndOfGenerationException e) {}
+			return l;
+		}
 
 		@Override default <U> TripleGenerator<S,T,U> addComponent(Generator<U> generator) {
 			return expandFirst(gather(generator));
@@ -789,6 +833,15 @@ public class Generators {
 	}
 
 	public static interface DefaultPairGenerator_<S,T, E extends Exception> extends PairGenerator_<S,T,E>, DefaultGenerator_<Pair<S,T>,E> {
+		@Override default GPairList<S,T> toList() throws E {
+			GPairList<S,T> l = new GPairList.GPairArrayList<>();
+			try {
+				while (true)
+					l.add(next());
+			}
+			catch (EndOfGenerationException e) {}
+			return l;
+		}
 
 		@Override default <U> TripleGenerator_<S,T,U,E> addComponent(Generator<U> generator) {
 			return expandFirst(gather(generator));
@@ -851,6 +904,15 @@ public class Generators {
 
 
 	public static interface DefaultTripleGenerator<S,T,U> extends TripleGenerator<S,T,U>, DefaultGenerator<Triple<S,T,U>> {
+		@Override default GTripleList<S,T,U> toList() {
+			GTripleList<S,T,U> l = new GTripleList.GTripleArrayList<>();
+			try {
+				while (true)
+					l.add(next());
+			}
+			catch (EndOfGenerationException e) {}
+			return l;
+		}
 
 		/*------ Without exceptions ------*/
 
@@ -913,6 +975,15 @@ public class Generators {
 
 
 	public static interface DefaultTripleGenerator_<S,T,U, E extends Exception> extends TripleGenerator_<S,T,U,E>, DefaultGenerator_<Triple<S,T,U>,E> {
+		@Override default GTripleList<S,T,U> toList() throws E {
+			GTripleList<S,T,U> l = new GTripleList.GTripleArrayList<>();
+			try {
+				while (true)
+					l.add(next());
+			}
+			catch (EndOfGenerationException e) {}
+			return l;
+		}
 
 		@Override default TripleGenerator_<S,T,U,E> async() {
 			TripleGenerator_<S,T,U,E> This = this;
@@ -956,6 +1027,9 @@ public class Generators {
 		@Override default <U> PairGenerator<T,U> compute(Function<? super T, ? extends U> function) {
 			return biMap(t->t, function);
 		}
+		@Override default <U,V> TripleGenerator<T, U,V> biCompute(Function<? super T, ? extends U> firstMap, Function<? super T, ? extends V> secondMap) {
+			return new TripleMapper<>(this, t -> t, firstMap, secondMap);
+		}
 	}
 
 	private static interface SourceGenerator_<T, E extends Exception> extends DefaultGenerator_<T, E> {
@@ -967,6 +1041,9 @@ public class Generators {
 		}
 		@Override default <U> PairGenerator_<T,U,E> compute(Function_<? super T, ? extends U, E> function) {
 			return biMap(t->t, function);
+		}
+		@Override default <U,V> TripleGenerator_<T, U,V,E> biCompute(Function_<? super T, ? extends U,E> firstMap, Function_<? super T, ? extends V,E> secondMap) {
+			return new TripleMapper_<>(this, t -> t, firstMap, secondMap);
 		}
 	}
 
@@ -1384,6 +1461,11 @@ public class Generators {
 		public final <U,V> PairGenerator<U,V> biMap(Function<? super T, ? extends U> firstMap, Function<? super T, ? extends V> secondMap) {
 			return new PairMapper<>(source, firstMap.p(map), secondMap.p(map));
 		}
+
+		@Override
+		public final <U,V> TripleGenerator<T,U,V> biCompute(Function<? super T, ? extends U> firstMap, Function<? super T, ? extends V> secondMap) {
+			return new TripleMapper<>(source, map, firstMap.p(map), secondMap.p(map));
+		}
 	}
 
 	private static class Mapper_<S,T,E extends Exception> extends SimpleGenerator_<T,E> {
@@ -1427,6 +1509,11 @@ public class Generators {
 		public final <U, V> PairGenerator_<U, V, E> biMap(Function_<? super T, ? extends U, E> firstMap,
 				Function_<? super T, ? extends V, E> secondMap) {
 			return new PairMapper_<>(generator,  source, firstMap.p(map), secondMap.p(map));
+		}
+		@Override
+		public final <U, V> TripleGenerator_<T, U, V, E> biCompute(Function_<? super T, ? extends U, E> firstMap,
+				Function_<? super T, ? extends V, E> secondMap) {
+			return new TripleMapper_<>(generator,  source, map, firstMap.p(map), secondMap.p(map));
 		}
 	}
 
@@ -2446,12 +2533,12 @@ public class Generators {
 
 
 	public static <S> Generator<Generator<S>> cartesianProduct(Generator<? extends Generator<S>> generators) {
-		final List<List<S>> values = generators.map(Generator::toList).toList();
+		final GList<GList<S>> values = generators.map(Generator::toList).toList();
 		final int noc = values.size();
 		Integer[] index = new Integer[noc];
 		Arrays.fill(index, 0);
 		int[] lenghts = new int[noc];
-		Generators.fromCollection(values).enumerate().forEach((Integer k, List<S> l) -> lenghts[k] = l.size());
+		fromCollection(values).enumerate().forEach((Integer k, List<S> l) -> lenghts[k] = l.size());
 		return noc == 0 ? emptyGenerator() : new SimpleSourceGenerator<Generator<S>>() {
 
 			@Override

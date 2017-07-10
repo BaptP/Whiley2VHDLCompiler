@@ -1182,12 +1182,12 @@ public class TypeCompiler extends LexicalElementTree {
 	}
 
 	public TypeLeaf getByte() {
-		return new TypeLeaf(new Type.Std_logic_vector(7,0));
+		return new TypeLeaf(new Type.Std_logic_vector(8));
 	}
 
 	private TypeLeaf compileType(SimpleType type) throws CompilerException {
 		if (type == Int)
-			return new TypeLeaf(new Type.Signed(31,0));
+			return new TypeLeaf(new Type.Signed(32));
 		if (type == Bool)
 			return new BooleanTypeLeaf();
 		if (type == Byte)

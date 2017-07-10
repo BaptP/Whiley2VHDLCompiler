@@ -87,6 +87,10 @@ public abstract class Type implements LexicalElement {
 			this.end = end;
 		}
 
+		protected VectorType(int size){
+			this(size-1,0);
+		}
+
 		public final int lenght(){
 			return Math.abs(end - start)+1;
 		}
@@ -126,8 +130,12 @@ public abstract class Type implements LexicalElement {
 
 	public static final class Std_logic_vector extends VectorType {
 
-		public Std_logic_vector(int start, int end) {
+		protected Std_logic_vector(int start, int end) {
 			super(start, end);
+		}
+
+		public Std_logic_vector(int size) {
+			super(size);
 		}
 
 		@Override
@@ -148,8 +156,12 @@ public abstract class Type implements LexicalElement {
 
 	public static final class Unsigned extends VectorType {
 
-		public Unsigned(int start, int end) {
+		protected Unsigned(int start, int end) {
 			super(start, end);
+		}
+
+		public Unsigned(int size) {
+			super(size);
 		}
 
 		@Override
@@ -170,8 +182,12 @@ public abstract class Type implements LexicalElement {
 
 	public static final class Signed extends VectorType {
 
-		public Signed(int start, int end) {
+		protected Signed(int start, int end) {
 			super(start, end);
+		}
+
+		public Signed(int size) {
+			super(size);
 		}
 
 		@Override

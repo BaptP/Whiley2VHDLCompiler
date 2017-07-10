@@ -14,6 +14,7 @@ import wyvc.io.GraphPrinter.PrintableGraph;
 import wyvc.lang.Type;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.utils.FunctionalInterfaces.Function;
+import wyvc.utils.GList;
 import wyvc.utils.BiMap;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
@@ -647,7 +648,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final int size;
 
 		public Buffer(HalfArrow write, HalfArrow read, HalfArrow previousValue, int size) throws CompilerException {
-			super("Reg", previousValue.node.type, Arrays.asList(write, read, previousValue));
+			super("Buff", previousValue.node.type, Arrays.asList(write, read, previousValue));
 			this.write  =  write.arrow;
 			this.read  =  read.arrow;
 			this.previousValue  =  previousValue.arrow;
@@ -670,6 +671,35 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 	}
 
+	public final class Counter extends DataNode {
+		public final DataArrow add;
+		public final DataArrow sub;
+		public final int size;
+		public final DataNode isNonZero;
+
+		public Counter(HalfArrow add, HalfArrow sub, int size) throws CompilerException {
+			super("Ctr", new Type.Unsigned((int) (Math.log(size+1)/Math.log(2))), Arrays.asList(add, sub));
+			this.add  =  add.arrow;
+			this.sub  =  sub.arrow;
+			this.size = size;
+			isNonZero = new BinOpNode(BinaryOperation.Ne, Type.Boolean, new HalfArrow(this), new HalfArrow(new ConstNode("0", type)));
+		}
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"hexagon\"","style=filled","fillcolor=bisque");
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
+
+		@Override
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			return graph.new Counter(duplicator.duplicate(add), duplicator.duplicate(sub), size);
+		}
+	}
 
 //	public final class Queue extends DataNode {
 //		public final DataArrow clock;
@@ -728,10 +758,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 
-	public List<InputNode> inputs = new ArrayList<>();
-	public List<OutputNode> outputs = new ArrayList<>();
-	public List<FuncCallNode> invokes = new ArrayList<>();
-	public List<WhileNode> whileNodes = new ArrayList<>();
+	public GList<InputNode> inputs = new GList.GArrayList<>();
+	public GList<OutputNode> outputs = new GList.GArrayList<>();
+	public GList<FuncCallNode> invokes = new GList.GArrayList<>();
+	public GList<WhileNode> whileNodes = new GList.GArrayList<>();
 
 	public enum Latency {
 		NullDelay,
@@ -779,10 +809,10 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		return Generators.fromCollection(new ArrayList<>(inputs));
 	}
 	public Generator<OutputNode> getOutputNodes() {
-		return Generators.fromCollection(outputs);
+		return outputs.generate();
 	}
 	public Generator<FuncCallNode> getInvokesNodes() {
-		return Generators.fromCollection(invokes);
+		return invokes.generate();
 	}
 
 
