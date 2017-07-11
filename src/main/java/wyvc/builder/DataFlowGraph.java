@@ -43,7 +43,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 //				return /*from.block.getParent() == to.block || from.block == to.block.getParent()
 //					? */Arrays.asList("arrowhead=\"box\"","color=purple")/*
 //					: Arrays.asList("arrowhead=\"box\"","color=green")*/;
-			if (from instanceof BackRegister && to instanceof BackRegisterEnd)
+			if (to instanceof BackRegisterEnd && ((BackRegisterEnd)to).register == from)
 				return Collections.singletonList("dir=\"back\"");
 			return Collections.emptyList();
 		}
@@ -486,6 +486,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final DataFlowGraph body;
 		public final BiMap<DataNode, InputNode> bInputs;
 		public final BiMap<OutputNode, WhileResultNode> bOutputs = new BiMap<>();
+		public final BiMap<DataNode, OutputNode> modification = new BiMap<>();
 
 		public WhileNode(DataFlowGraph condition, BiMap<DataNode, InputNode> cInputs, OutputNode conditionValue,
 				DataFlowGraph body, BiMap<DataNode, InputNode> bInputs, Location<Bytecode.While> location) throws CompilerException {
@@ -517,6 +518,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public DataNode createResult(OutputNode node, DataNode previous) throws CompilerException {
 			WhileResultNode rNode = new WhileResultNode(this, previous, node.type, node.nodeIdent);
 			bOutputs.put(node, rNode);
+			modification.put(previous, node);
 			return rNode;
 		}
 
@@ -643,8 +645,8 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final DataArrow write;
 		public final DataArrow read;
 		public final DataArrow previousValue;
-		public final BufferFlag isEmpty = new BufferFlag(new HalfArrow(this, "isEmpty"));
-		public final BufferFlag isFull = new BufferFlag(new HalfArrow(this, "isFull"));
+//		public final BufferFlag isEmpty = new BufferFlag(new HalfArrow(this, "isEmpty"));
+//		public final BufferFlag isFull = new BufferFlag(new HalfArrow(this, "isFull"));
 		public final int size;
 
 		public Buffer(HalfArrow write, HalfArrow read, HalfArrow previousValue, int size) throws CompilerException {
