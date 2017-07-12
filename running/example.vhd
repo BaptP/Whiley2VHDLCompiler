@@ -5,150 +5,132 @@
 
 
 ------------------------------------------------------------
--- Entity e
+-- Entity test
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity e is
+entity test is
   port (
-    c              : in  signed(31 downto 0);
-    ret_0_opt0_has : out boolean;
-    ret_0_opt0_val : out boolean;
-    ret_0_opt1_has : out boolean;
-    ret_0_opt1_val : out signed(31 downto 0)
+    a       : in  signed(31 downto 0);
+    clock   : in  boolean;
+    start   : in  boolean;
+    ret_0   : out boolean;
+    done    : out boolean;
+    clock_2 : in  boolean
   );
-end entity e;
+end entity test;
 
 
-architecture Behavioural of e is
+architecture Behavioural of test is
 
-  signal ret_0_opt0_has1 : boolean;
-  signal ret_0_opt0_has0 : boolean;
-  signal ret_0_opt0_has2 : boolean;
-  signal ret_0_opt0_val1 : boolean;
-  signal ret_0_opt0_val0 : boolean;
-  signal ret_0_opt1_has1 : boolean;
-  signal ret_0_opt1_has0 : boolean;
-  signal ret_0_opt1_val1 : signed(31 downto 0);
-  signal ret_0_opt1_val0 : signed(31 downto 0);
+  signal a_2         : signed(31 downto 0);
+  signal Unknown     : signed(31 downto 0);
+  signal Rstart_reg0 : boolean;
+  signal Rstart_reg1 : boolean;
+  signal Ra          : signed(31 downto 0);
+  signal Ra_reg0     : signed(31 downto 0);
+  signal a_3         : signed(31 downto 0);
+  signal Unknown_2   : signed(31 downto 0);
+  signal Ra_2        : signed(31 downto 0);
+  signal Ra_reg0_2   : signed(31 downto 0);
+  signal Unknown_3   : signed(31 downto 0);
 
 begin
-  ret_0_opt1_val0 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
+  Unknown_3   <= to_signed(1, 32);
 
-  ret_0_opt1_val1 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
+  Ra_2        <= a + Unknown_3;
 
-  ret_0_opt1_has0 <= false;
+  Unknown_2   <= to_signed(1, 32);
 
-  ret_0_opt1_has1 <= false;
+  Ra_reg0_2   <= Ra_2;
 
-  ret_0_opt0_val0 <= 'X';
+  Ra          <= a_3 - Unknown_2;
 
-  ret_0_opt0_val1 <= 'X';
+  Unknown     <= to_signed(0, 32);
 
-  ret_0_opt0_has2 <= c = to_signed(0, 32);
+  Ra_reg0     <= Ra;
 
-  ret_0_opt0_has0 <= false;
+  Rstart_reg1 <= start;
 
-  ret_0_opt0_has1 <= false;
+  ret_0       <= a_2 = Unknown;
 
-  ret_0_opt1_val  <= 
-      ret_0_opt1_val1 when ret_0_opt0_has2 else 
-      ret_0_opt1_val0
-
-  ret_0_opt1_has  <= 
-      ret_0_opt1_has1 when ret_0_opt0_has2 else 
-      ret_0_opt1_has0
-
-  ret_0_opt0_val  <= 
-      ret_0_opt0_val1 when ret_0_opt0_has2 else 
-      ret_0_opt0_val0
-
-  ret_0_opt0_has  <= 
-      ret_0_opt0_has1 when ret_0_opt0_has2 else 
-      ret_0_opt0_has0
+  Registers: process(clock_2)
+  begin
+    done        <= Rstart_reg0;
+    Rstart_reg0 <= Rstart_reg1;
+    a_2         <= Ra_reg0;
+    a_3         <= Ra_reg0_2;
+  end process Registers;
 end architecture Behavioural;
--- Entity e
+-- Entity test
 ------------------------------------------------------------
 
 
 
 ------------------------------------------------------------
--- Entity inc2
+-- Entity main
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity inc2 is
+entity main is
   port (
-    t_x_opt0_has         : in  boolean;
-    t_x_opt0_val         : in  boolean;
-    t_x_opt1_has         : in  boolean;
-    t_x_opt1_val         : in  signed(31 downto 0);
-    t_y_has              : in  boolean;
-    t_y_val              : in  std_logic_vector(7 downto 0);
-    t_z_has              : in  boolean;
-    t_z_val_a            : in  signed(31 downto 0);
-    t_z_val_b            : in  boolean;
-    ret_0_sha_x_opt0_has : out boolean;
-    ret_0_sha_x_opt0_val : out boolean;
-    ret_0_sha_x_opt1_has : out boolean;
-    ret_0_sha_x_opt1_val : out signed(31 downto 0);
-    ret_0_spe_y_has      : out boolean;
-    ret_0_spe_y_val      : out std_logic_vector(7 downto 0);
-    ret_0_spe_z_has      : out boolean;
-    ret_0_spe_z_val_a    : out signed(31 downto 0);
-    ret_0_spe_z_val_b    : out boolean
+    a       : in  signed(31 downto 0);
+    clock   : in  boolean;
+    start   : in  boolean;
+    ret_0   : out signed(31 downto 0);
+    done    : out boolean;
+    clock_2 : in  boolean
   );
-end entity inc2;
+end entity main;
 
 
-architecture Behavioural of inc2 is
+architecture Behavioural of main is
+  component test
+    port (
+      a       : in  signed(31 downto 0);
+      clock   : in  boolean;
+      start   : in  boolean;
+      ret_0   : out boolean;
+      done    : out boolean;
+      clock_2 : in  boolean
+    );
+  end component test;
 
-  signal ret_0_sha_x_opt0_has1 : boolean;
-  signal ret_0_sha_x_opt0_has2 : boolean;
-  signal ret_0_sha_x_opt0_val1 : boolean;
-  signal ret_0_sha_x_opt1_has1 : boolean;
-  signal ret_0_sha_x_opt1_val1 : signed(31 downto 0);
+  signal ret_01      : signed(31 downto 0);
+  signal ret_00      : signed(31 downto 0);
+  signal ret_02      : boolean;
+  signal Rstart_reg0 : boolean;
+  signal Rstart_reg1 : boolean;
+  signal source_reg0 : signed(31 downto 0);
+  signal source_reg1 : signed(31 downto 0);
 
 begin
-  ret_0_sha_x_opt1_val1 <= to_signed("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", 32);
+  test_2: test port map (
+    a     => a,
+    clock => ret_02
+  );
 
-  ret_0_sha_x_opt1_has1 <= false;
+  ret_00      <= to_signed(42, 32);
 
-  ret_0_sha_x_opt0_val1 <= 'X';
+  source_reg1 <= a;
 
-  ret_0_sha_x_opt0_has2 <= true and t_x_opt1_has and (t_z_has and true);
+  Rstart_reg1 <= start;
 
-  ret_0_sha_x_opt0_has1 <= false;
+  ret_0       <= 
+      ret_01 when ret_02 else 
+      ret_00
 
-  ret_0_spe_z_val_b     <= t_z_val_b;
-
-  ret_0_spe_z_val_a     <= t_z_val_a;
-
-  ret_0_spe_z_has       <= t_z_has;
-
-  ret_0_spe_y_val       <= t_y_val;
-
-  ret_0_spe_y_has       <= t_y_has;
-
-  ret_0_sha_x_opt1_val  <= 
-      ret_0_sha_x_opt1_val1 when ret_0_sha_x_opt0_has2 else 
-      t_x_opt1_val
-
-  ret_0_sha_x_opt1_has  <= 
-      ret_0_sha_x_opt1_has1 when ret_0_sha_x_opt0_has2 else 
-      t_x_opt1_has
-
-  ret_0_sha_x_opt0_val  <= 
-      ret_0_sha_x_opt0_val1 when ret_0_sha_x_opt0_has2 else 
-      t_x_opt0_val
-
-  ret_0_sha_x_opt0_has  <= 
-      ret_0_sha_x_opt0_has1 when ret_0_sha_x_opt0_has2 else 
-      t_x_opt0_has
+  Registers: process(clock_2)
+  begin
+    done        <= Rstart_reg0;
+    Rstart_reg0 <= Rstart_reg1;
+    ret_01      <= source_reg0;
+    source_reg0 <= source_reg1;
+  end process Registers;
 end architecture Behavioural;
--- Entity inc2
+-- Entity main
 ------------------------------------------------------------
 
 

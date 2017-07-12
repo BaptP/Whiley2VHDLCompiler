@@ -1,14 +1,30 @@
 digraph {
   inp [label="inputs",color=blue,shape=box];
-  n1 [label="Gt\nboolean",shape="rectangle",style=filled,fillcolor=lemonchiffon];
-  n2 [label="res\nboolean"];
-  n3 [label="a\nsigned(31 downto 0)"];
-  n4 [label="0\nsigned(31 downto 0)"];
+  n1 [label="test()\nUntyped"];
+  n2 [label="Reg-2\nsigned(31 downto 0)",shape="hexagon",style=filled,fillcolor=bisque];
+  n3 [label="start\nboolean"];
+  n4 [label="done\nboolean"];
+  n5 [label="mux\nsigned(31 downto 0)",shape="rectangle",style=filled,fillcolor=lemonchiffon];
+  n6 [label="ret_0\nsigned(31 downto 0)"];
+  n7 [label="42\nsigned(31 downto 0)"];
+  n8 [label="ret_0\nboolean"];
+  n9 [label="clock\nboolean"];
+  n10 [label="a\nsigned(31 downto 0)"];
+  n11 [label="Reg-2\nboolean",shape="hexagon",style=filled,fillcolor=bisque];
   out [label="outputs",color=red,shape=box];
 
+  inp -> n10 [color=blue];
+  inp -> n9 [color=blue];
   inp -> n3 [color=blue];
-  n1 -> n2[label=""];
-  n3 -> n1[label=""];
-  n4 -> n1[label=""];
-  n2 -> out [color=red];
+  n11 -> n4[label=""];
+  n1 -> n8[label=""];
+  n7 -> n5[label="c"];
+  n5 -> n6[label="c"];
+  n8 -> n5[label=""];
+  n10 -> n1[label="arg0"];
+  n2 -> n5[label="c"];
+  n3 -> n11[label="start"];
+  n10 -> n2[label=""];
+  n6 -> out [color=red];
+  n4 -> out [color=red];
 }

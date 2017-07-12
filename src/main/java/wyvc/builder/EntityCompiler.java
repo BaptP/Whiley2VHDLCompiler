@@ -27,6 +27,7 @@ import wyvc.builder.DataFlowGraph.InputNode;
 import wyvc.builder.DataFlowGraph.InterfaceNode;
 import wyvc.builder.DataFlowGraph.NamedDataArrow;
 import wyvc.builder.DataFlowGraph.OutputNode;
+import wyvc.builder.DataFlowGraph.Register;
 import wyvc.lang.Architecture;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
@@ -76,8 +77,10 @@ public class EntityCompiler {
 		private Set<Component> components = new HashSet<>();
 		private Set<FuncCallNode> compiled = new HashSet<>();
 		private Set<String> used = new HashSet<>();
-		private boolean portsIn;
-		private boolean portsOut;
+		private List<SignalAssignment> registers = new ArrayList<>();
+		private Port clock = null;
+//		private boolean portsIn;
+//		private boolean portsOut;
 		//private String fctName;
 
 		public Compiler(CompilerLogger logger, Map<String, Component> fcts) {
@@ -91,6 +94,8 @@ public class EntityCompiler {
 		}
 
 		public String getFreshLabel(String l) {
+			if (l == "")
+				l = "Unknown";
 			if (used.contains(l)) {
 				int k = 1;
 				while (used.contains(l+"_"+ ++k));
@@ -135,15 +140,16 @@ public class EntityCompiler {
 			return signal;
 		}
 
-		private Signal createPort(InputNode input) {
-			return portsIn ? createPort(input.nodeIdent, input, Mode.IN)
-			               : createSignal(input.nodeIdent, input);
+		private Port createPort(InputNode input) {
+			return createPort(input.nodeIdent, input, Mode.IN);
+//			               : createSignal(input.nodeIdent, input);
 		}
 
-		private Signal createPort(OutputNode output) {
-			Signal port = portsOut ? createPort(output.nodeIdent, output, Mode.OUT)
-				                   : createSignal(output.nodeIdent, output);
-			return planCompilation(port, output.source.from);
+		private Port createPort(OutputNode output) {
+			Port port =  createPort(output.nodeIdent, output, Mode.OUT);
+//				                   : createSignal(output.nodeIdent, output);
+			planCompilation(port, output.source.from);
+			return port;
 		}
 
 		/**
@@ -186,6 +192,20 @@ public class EntityCompiler {
 		private Expression compileInput(InputNode input) throws CompilerException {
 			return new Access(created.get(input));
 		}
+		
+		private ConcurrentStatement compileRegister(Signal to, Register register) throws CompilerException {
+			String name = register.previousValue instanceof NamedDataArrow ?
+					"R"+((NamedDataArrow) register.previousValue).ident : "source";
+			Signal source = getSignal(register.previousValue.from, name);
+			if (clock == null)
+				clock = createPort(register.clock);
+			for (int k = 0; k<register.delay; ++k) {
+				Signal e = createSignal(name+"_reg"+k, register);
+				registers.add(new SignalAssignment(to, new Access(e)));
+				to = e;
+			}
+			return new SignalAssignment(to, new Access(source));
+		}
 
 		private Expression compileExpression(DataNode node) throws CompilerException {
 			if (node instanceof BinOpNode)
@@ -194,6 +214,8 @@ public class EntityCompiler {
 				return compileConst((ConstNode) node);
 			if (node instanceof InputNode)
 				return compileInput((InputNode) node);
+//			if (node instanceof Register)
+//				return compileRegister((Register) node);
 			throw new CompilerException(new UnsupportedDataNodeError(node));
 		}
 
@@ -228,7 +250,7 @@ public class EntityCompiler {
 			Signal sf = getSignal(endIf.falseNode, s.ident+"0");
 			Signal cd = getSignal(endIf.condition, s.ident+"2");
 			return new ConditionalSignalAssignment(s,
-				Arrays.asList(new Pair<Expression, Expression>(new Access(st), new Access(cd))),
+				Arrays.asList(new Pair<>(new Access(st), new Access(cd))),
 				new Access(sf));
 		}
 
@@ -251,6 +273,8 @@ public class EntityCompiler {
 					return compileEndIf(source.first, (EndIfNode) source.second);
 				if (source.second instanceof FunctionReturnNode)
 					return compileInvoke(((FunctionReturnNode) source.second).fct);
+				if (source.second instanceof Register)
+					return compileRegister(source.first, ((Register) source.second));
 				return new SignalAssignment(source.first, compileExpression(source.second));
 			}
 			throw new CompilerException(new UnsupportedDataNodeError(source.second));
@@ -268,9 +292,8 @@ public class EntityCompiler {
 //			}
 //		} TODO move !
 
-		public List<ConcurrentStatement> compile(String name, DataFlowGraph sec, boolean portsIn, boolean portsOut) throws CompilerException {
-			this.portsIn = portsIn;
-			this.portsOut = portsOut;
+		public List<ConcurrentStatement> compile(String name, DataFlowGraph sec) throws CompilerException {
+
 			//this.fctName = name;
 			sec.getInputNodes().forEach(this::createPort);
 			sec.getOutputNodes().forEach(this::createPort);
@@ -310,19 +333,10 @@ public class EntityCompiler {
 	}
 
 	public static Entity compile(CompilerLogger logger, String name, DataFlowGraph graph, Map<String, Component> fcts) throws CompilerException {
-		if (parts.isEmpty())
-			throw new CompilerException(new EmptyEntityError(name));
 		Compiler cmp = new Compiler(logger, fcts);
 		List<ConcurrentStatement> statements = new ArrayList<>();
-		DataFlowGraph pSec = parts.get(0);
-		statements.addAll(cmp.compile(name, pSec, true, parts.size() == 1));
-		for (DataFlowGraph sec : parts.subList(1, parts.size())) {
-			statements.addAll(cmp.compile(name, sec, false, sec == parts.get(parts.size()-1)));
-			statements.add(new Process(cmp.getFreshLabel("Cycle"), new Variable[0], new Signal[0],
-				pSec.getOutputNodes().map(cmp::getIO).gather(sec.getInputNodes().map(cmp::getIO)).
-				mapSecond_(Access::new).map(SignalAssignment::new).toList().toArray(new SequentialStatement[pSec.outputs.size()])));
-			pSec = sec;
-		}
+		statements.addAll(cmp.compile(name, graph));
+		statements.add(new Process("Registers", new Variable[0], new Signal[]{cmp.clock}, cmp.registers.toArray(new SequentialStatement[cmp.registers.size()])));
 		Entity entity = new Entity(name, cmp.getInterface());
 		entity.addArchitectures(new Architecture(entity, "Behavioural", cmp.getSignals(), cmp.getConstants(), cmp.getComponent(),
 			statements.toArray(new ConcurrentStatement[statements.size()])));

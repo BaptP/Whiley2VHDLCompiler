@@ -1,54 +1,31 @@
-
+/*
 function s(int a, int b) -> int:
   int c = 0
   while a > 0:
     a = a - 1
     c = c + a
   return c+b
-  
-function t(int a, int b) -> int:
-  int c = a+b
-  if a==b:
-    c = a+b
+  */
+
+
+
+
+function test(int a) -> bool:
+    a = a+1
     skip
-    c = c + 1
-  else:
-    c = a-b
-  int d
-  d = c * a
-  skip
-  c = c*2
-  int e = 0
-  while a > 0:
-    a = a - 1
-    int f = a - d
+    a = a-1
     skip
-    if f == 0:
-      c = c + f
+    return a == 0
+
+    
+function main(int a) -> int:
+    int c
+    if test(a):
+        c = a
     else:
-      e = a
-  b = b-d
-  return c+b
-  
-  /*
-type Int is {int x, bool b}
-
-function s2(Int a, int b) -> int:
-  int c = 0
-  while a.x > 0:
-    a.x = a.x - 1
-    c = c + a.x
-  if a.b:
-    return c+b
-  return a.x
-*/
-
-
-
-
-
-
-
+        c = 42
+    return c
+    
 
 
 

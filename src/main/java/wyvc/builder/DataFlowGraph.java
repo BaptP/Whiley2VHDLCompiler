@@ -590,9 +590,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public final class BackRegister extends DataNode {
 		private DataArrow previousValue = null;
+		public final InputNode clock;
 
-		public BackRegister(Type type) throws CompilerException {
+		public BackRegister(InputNode clock, Type type) throws CompilerException {
 			super("BReg", type, Collections.emptyList());
+			this.clock = clock;
 		}
 
 
@@ -657,12 +659,22 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 	public final class Register extends DataNode {
 		public final DataArrow previousValue;
 		public final int delay;
+		public final InputNode clock;
 
 
-		public Register(HalfArrow previousValue, int delay) throws CompilerException {
+		public Register(InputNode clock, HalfArrow previousValue, int delay) throws CompilerException {
 			super("Reg-"+delay, previousValue.node.type, Collections.singletonList(previousValue));
+			this.clock = clock;
 			this.previousValue  =  previousValue.arrow;
 			this.delay = delay; // TODO check delay > 0
+		}
+		
+		public Register(InputNode clock, HalfArrow previousValue) throws CompilerException {
+			this(clock, previousValue, 1);
+		}
+
+		public Register(HalfArrow previousValue, int delay) throws CompilerException {
+			this(null, previousValue, delay);
 		}
 
 		public Register(HalfArrow previousValue) throws CompilerException {

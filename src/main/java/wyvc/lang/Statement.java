@@ -142,7 +142,7 @@ public interface Statement extends LexicalElement {
 
 		@Override
 		public void addTokens(Token t) {
-			t.n(ident+": process(").n(signals, (Signal s, Token to) -> to.n(s.ident), ", ").n(")").indent().endLine();
+			t.merge().n(ident+": process(").n(signals, (Signal s, Token to) -> to.n(s.ident), ", ").n(")").indent().endLine();
 			t.n(variables).dedent().n("begin").indent().endLine();
 			t.n(statements).dedent().n("end process "+ident).semiColon();
 		}

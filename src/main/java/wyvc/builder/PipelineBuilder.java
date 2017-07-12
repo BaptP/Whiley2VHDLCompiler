@@ -329,7 +329,7 @@ public class PipelineBuilder extends LoggedBuilder {
 
 					@Override
 					protected DataNode computeDone() throws CompilerException {
-						return newGraph.new Register(This.getDone(), delay);
+						return newGraph.new Register(getClock(), This.getDone(), delay);
 					}
 				};
 			}
@@ -373,7 +373,7 @@ public class PipelineBuilder extends LoggedBuilder {
 		private final InputSource input = new InputSource();
 		private final NodeTimeline timeline;
 		private HalfArrow start = null;
-		private HalfArrow clock = null;
+		private InputNode clock = null;
 
 
 		public Builder(CompilerLogger logger, DataFlowGraph graph, Map<String, Delay> funcDelays) throws CompilerException {
@@ -416,9 +416,9 @@ public class PipelineBuilder extends LoggedBuilder {
 		}
 
 
-		private HalfArrow getClock() throws CompilerException {
+		private InputNode getClock() throws CompilerException {
 			if (clock == null)
-				clock = new HalfArrow(newGraph.new InputNode("clock", Type.Boolean), "clock");
+				clock = newGraph.new InputNode("clock", Type.Boolean);
 			return clock;
 		}
 
@@ -433,7 +433,7 @@ public class PipelineBuilder extends LoggedBuilder {
 		private Map<DataNode, Map<NodeTimeline, DataNode>> versions = new HashMap<>();
 
 		private HalfArrow delayNode(HalfArrow node, int delay) throws CompilerException {
-			return delay == 0 ? node : new HalfArrow(newGraph.new Register(node, delay));
+			return delay == 0 ? node : new HalfArrow(newGraph.new Register(getClock(), node, delay));
 		}
 
 		private class Synchronizer {
@@ -497,7 +497,7 @@ public class PipelineBuilder extends LoggedBuilder {
 			private HalfArrow backDone = null;
 			private HalfArrow getDoneRegister() throws CompilerException {
 				if (backDone == null) {
-					BackRegister reg = newGraph.new BackRegister(Type.Boolean);
+					BackRegister reg = newGraph.new BackRegister(getClock(), Type.Boolean);
 					newGraph.new BackRegisterEnd(timeline.getDone(), reg);
 					backDone = new HalfArrow(reg);
 				}
@@ -524,7 +524,7 @@ public class PipelineBuilder extends LoggedBuilder {
 						sync = true;
 				}
 				return end(sync ? newGraph.new Buffer(nt.getDone(), getDoneRegister(), new HalfArrow(node), CONCURRENCY)
-						: diff == 0 ? node : newGraph.new Register(new HalfArrow(node), diff));
+						: diff == 0 ? node : newGraph.new Register(getClock(), new HalfArrow(node), diff));
 			}
 
 			private DataNode synchronizeNode(DataNode node) throws CompilerException {
@@ -578,8 +578,8 @@ public class PipelineBuilder extends LoggedBuilder {
 			openLevel("While");
 			Synchronizer startDelay = mergeSources(Generators.fromCollection(node.sources));
 //			debugLevel(" Début "+startDelay.timeline.toString(""));
-			BackRegister rWorking = newGraph.new BackRegister(Type.Boolean);
-			BackRegister rStart = newGraph.new BackRegister(Type.Boolean);
+			BackRegister rWorking = newGraph.new BackRegister(getClock(), Type.Boolean);
+			BackRegister rStart = newGraph.new BackRegister(getClock(), Type.Boolean);
 			InnerEmptySource source = new InnerEmptySource(newGraph.new BinOpNode(BinaryOperation.Or, Type.Boolean,
 					startDelay.timeline.getDone(),
 					new HalfArrow(newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
@@ -588,7 +588,7 @@ public class PipelineBuilder extends LoggedBuilder {
 			InputTimeline whileSourceTimeline = new InputTimeline(source);
 
 			Map<WhileEntry, BackRegister> registers = new HashMap<>();
-			node.entries.generate().compute(e -> e.source.type).mapSecond_(t -> newGraph.new BackRegister(t)).forEach(registers::put);
+			node.entries.generate().compute(e -> e.source.type).mapSecond_(t -> newGraph.new BackRegister(getClock(), t)).forEach(registers::put);
 			Map<WhileEntry, EndIfNode> entries = new HashMap<>();
 			node.entries.generate().compute_(e -> newGraph.new EndIfNode(getStart(),
 					new HalfArrow(startDelay.synchronizeNode(getConvertedNode(e.source)), e.ident),
@@ -727,7 +727,7 @@ public class PipelineBuilder extends LoggedBuilder {
 		}
 		private Register buildPipeline(Register node) throws CompilerException {
 			NodeTimeline delay = getTimeline(node.previousValue).delay(node.delay);
-			return setNodeDelay(node, newGraph.new Register(getConvertedHalfArrow(node.previousValue), node.delay), delay);
+			return setNodeDelay(node, newGraph.new Register(getClock(), getConvertedHalfArrow(node.previousValue), node.delay), delay);
 		}
 		private InputNode buildPipeline(InputNode node) throws CompilerException {
 			return setNodeDelay(node, newGraph.new InputNode(node.nodeIdent, node.type), new InputTimeline(input));
