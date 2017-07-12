@@ -1,16 +1,11 @@
 package wyvc.builder;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import javax.xml.crypto.Data;
-
-import wyal.lang.WyalFile.Type.Int;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
@@ -18,15 +13,17 @@ import wyvc.builder.DataFlowGraph.BackRegister;
 import wyvc.builder.DataFlowGraph.BinOpNode;
 import wyvc.builder.DataFlowGraph.BinaryOperation;
 import wyvc.builder.DataFlowGraph.ConstNode;
-import wyvc.builder.DataFlowGraph.Counter;
 import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
 import wyvc.builder.DataFlowGraph.EndIfNode;
+import wyvc.builder.DataFlowGraph.FuncCallNode;
+import wyvc.builder.DataFlowGraph.FunctionReturnNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.InputNode;
-import wyvc.builder.DataFlowGraph.Latency;
 import wyvc.builder.DataFlowGraph.Register;
 import wyvc.builder.DataFlowGraph.UnaOpNode;
+import wyvc.builder.DataFlowGraph.UnaryOperation;
+import wyvc.builder.DataFlowGraph.WhileEntry;
 import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.DataFlowGraph.WhileResultNode;
 import wyvc.lang.Type;
@@ -34,7 +31,6 @@ import wyvc.utils.GList;
 import wyvc.utils.GPairList;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
-import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
 import wyvc.utils.Generators.PairGenerator_;
 import wyvc.utils.Pair;
@@ -329,7 +325,7 @@ public class PipelineBuilder extends LoggedBuilder {
 			}
 			public NodeTimeline delay(int delay) throws CompilerException {
 				NodeTimeline This = this;
-				return new NodeTimeline(Generators.fromMap(sources).mapSecond_(d -> new KnownDelay(d.latency + delay))) {
+				return delay == 0 ? this : new NodeTimeline(Generators.fromMap(sources).mapSecond_(d -> new KnownDelay(d.latency + delay))) {
 
 					@Override
 					protected DataNode computeDone() throws CompilerException {
@@ -370,18 +366,24 @@ public class PipelineBuilder extends LoggedBuilder {
 
 
 
-
+		private final Map<String, Delay> funcDelays;
 		private final Map<DataNode, NodeTimeline> nodeDelays = new HashMap<>();
 		private final Map<DataNode, DataNode> convertedNodes = new HashMap<>();
 		private final DataFlowGraph newGraph = new DataFlowGraph();
 		private final InputSource input = new InputSource();
+		private final NodeTimeline timeline;
 		private HalfArrow start = null;
 		private HalfArrow clock = null;
 
 
-		public Builder(CompilerLogger logger, DataFlowGraph graph) throws CompilerException {
+		public Builder(CompilerLogger logger, DataFlowGraph graph, Map<String, Delay> funcDelays) throws CompilerException {
 			super(logger);
-			buildPipeline(graph);
+			this.funcDelays = funcDelays;
+			timeline = buildPipeline(graph);
+		}
+
+		public Pair<DataFlowGraph,Delay> getResult() throws CompilerException {
+			return new Pair<>(newGraph, timeline.getDelay(input));
 		}
 
 
@@ -392,7 +394,8 @@ public class PipelineBuilder extends LoggedBuilder {
 		}
 
 		private <T extends DataNode> T setNodeDelay(DataNode previous, T node, NodeTimeline delay) {
-			debugLevel("SET : " +node.getClass().getSimpleName() +" -> "+ node.nodeIdent + " " + delay.toString(""));
+			debugLevel("SET : de" +previous+" à "+node);
+			debugLevel("SET : " +node/*.getClass().getSimpleName()*/ +" -> "+ node.nodeIdent + " " + delay.toString(""));
 			convertedNodes.put(previous, node);
 			nodeDelays.put(node, delay);
 			return node;
@@ -427,7 +430,7 @@ public class PipelineBuilder extends LoggedBuilder {
 
 
 
-
+		private Map<DataNode, Map<NodeTimeline, DataNode>> versions = new HashMap<>();
 
 		private HalfArrow delayNode(HalfArrow node, int delay) throws CompilerException {
 			return delay == 0 ? node : new HalfArrow(newGraph.new Register(node, delay));
@@ -447,7 +450,7 @@ public class PipelineBuilder extends LoggedBuilder {
 				timelines.forEach(t -> nodeSources.addAll(t.sources.keySet()));
 
 				openLevel("Sources");
-				Generators.fromCollection(nodeSources).map(s -> s.timeline.toString()).forEach(Builder.this::debugLevel);
+				Generators.fromCollection(nodeSources).map(s -> s.getClass().getSimpleName() + ":"+s.timeline.toString()).forEach(Builder.this::debugLevel);
 				closeLevel();
 
 				for (CalculationSource s : nodeSources) {
@@ -501,11 +504,12 @@ public class PipelineBuilder extends LoggedBuilder {
 				return backDone;
 			}
 
-			private DataNode synchronizeNode(DataNode node) throws CompilerException {
+			private DataNode synchronizeNodeP(DataNode node) throws CompilerException {
 				openLevel("Sync node "+node.nodeIdent);
 				NodeTimeline nt = getTimeline(node);
 				if (nt.sources.size() == 0)
 					return end(node);
+
 				int diff = -1;
 				boolean sync = false;
 				for (CalculationSource s : timeline.sources.keySet()) {
@@ -523,6 +527,13 @@ public class PipelineBuilder extends LoggedBuilder {
 						: diff == 0 ? node : newGraph.new Register(new HalfArrow(node), diff));
 			}
 
+			private DataNode synchronizeNode(DataNode node) throws CompilerException {
+				if (!versions.containsKey(node))
+					versions.put(node, new HashMap<>());
+				if (!versions.get(node).containsKey(timeline))
+					versions.get(node).put(timeline, synchronizeNodeP(node));
+				return versions.get(node).get(timeline);
+			}
 
 			private HalfArrow synchronizeSource(DataArrow source) throws CompilerException {
 				return new HalfArrow(synchronizeNode(getConvertedNode(source.from)), source.getIdent());
@@ -530,12 +541,21 @@ public class PipelineBuilder extends LoggedBuilder {
 		}
 
 
+		Map<Set<NodeTimeline>, Synchronizer> syncs = new HashMap<>();
 
 
-
+		Synchronizer getSynchronizer(GList<NodeTimeline> timelines) throws CompilerException {
+			Set<NodeTimeline> ts = new HashSet<>();
+			ts.addAll(timelines);
+			if (syncs.containsKey(ts))
+				return syncs.get(ts);
+			Synchronizer s = new Synchronizer(timelines);
+			syncs.put(ts, s);
+			return s;
+		}
 
 		private Synchronizer mergeSources(Generator<DataArrow> sources) throws CompilerException {
-			return new Synchronizer(sources.map_(this::getTimeline).toList());
+			return getSynchronizer(sources.map_(this::getTimeline).toList());
 		}
 
 
@@ -555,22 +575,28 @@ public class PipelineBuilder extends LoggedBuilder {
 
 		private void buildWhilePipeline(WhileNode node) throws CompilerException {
 
-//			openLevel("WHILE");
+			openLevel("While");
 			Synchronizer startDelay = mergeSources(Generators.fromCollection(node.sources));
 //			debugLevel(" Début "+startDelay.timeline.toString(""));
+			BackRegister rWorking = newGraph.new BackRegister(Type.Boolean);
 			BackRegister rStart = newGraph.new BackRegister(Type.Boolean);
 			InnerEmptySource source = new InnerEmptySource(newGraph.new BinOpNode(BinaryOperation.Or, Type.Boolean,
-					new HalfArrow(rStart, "next_start"),
-					startDelay.timeline.getDone()));
-			InputTimeline whileSourceTimeLine = new InputTimeline(source);
+					startDelay.timeline.getDone(),
+					new HalfArrow(newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
+							new HalfArrow(rStart, "next_start"),
+							new HalfArrow(rWorking, "in_proc")), "step_start")));
+			InputTimeline whileSourceTimeline = new InputTimeline(source);
 
-			Map<DataNode, BackRegister> registers = new HashMap<>();
-			node.getSources().compute(DataNode::getType).mapSecond_(t -> newGraph.new BackRegister(t)).forEach(registers::put);
-			Map<DataNode, EndIfNode> entries = new HashMap<>();
-			Generators.fromCollection(node.sources).biMap_(a -> a.from, a -> newGraph.new EndIfNode(getStart(),
-					startDelay.synchronizeSource(a), new HalfArrow(registers.get(a.from), a.getIdent()+"_reg"))).forEach(entries::put); // TODO name
-			node.bInputs.getValues().mapFirst(entries::get).forEach((e,i) -> setNodeDelay(i, e, whileSourceTimeLine));
-			node.cInputs.getValues().mapFirst(entries::get).forEach((e,i) -> setNodeDelay(i, e, whileSourceTimeLine));
+			Map<WhileEntry, BackRegister> registers = new HashMap<>();
+			node.entries.generate().compute(e -> e.source.type).mapSecond_(t -> newGraph.new BackRegister(t)).forEach(registers::put);
+			Map<WhileEntry, EndIfNode> entries = new HashMap<>();
+			node.entries.generate().compute_(e -> newGraph.new EndIfNode(getStart(),
+					new HalfArrow(startDelay.synchronizeNode(getConvertedNode(e.source)), e.ident),
+					new HalfArrow(registers.get(e), e.ident+"_reg"))).forEach(entries::put);
+
+
+			node.getBodyEntries().compute(entries::get).forEach((i,e) -> setNodeDelay(i.bodyInput, e, whileSourceTimeline));
+			node.getConditionEntries().compute(entries::get).forEach((i,e) -> setNodeDelay(i.conditionInput, e, whileSourceTimeline));
 
 
 			DataNode condition = buildPipeline(node.conditionValue.source.from);
@@ -579,7 +605,10 @@ public class PipelineBuilder extends LoggedBuilder {
 
 			HalfArrow conditionReady = conditionDelay.getDone(); // TODO use proper ready signal
 //
+
 			Synchronizer bodyDelay = mergeSources(node.bOutputs.getValues().takeFirst().map(o -> o.source));
+
+			debugLevel(conditionDelay.toString() +" "+source);
 
 
 			Delay condD = conditionDelay.getDelay(source);
@@ -606,29 +635,67 @@ public class PipelineBuilder extends LoggedBuilder {
 //			mapThird(registers::get).map21(HalfArrow::new).forEach((h,r) -> newGraph.new BackRegisterEnd(h, r));
 //
 
+			DataNode done = newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean, conditionDelay.getDone(), new HalfArrow(condition));
+
+			newGraph.new BackRegisterEnd(new HalfArrow(newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
+					new HalfArrow(newGraph.new UnaOpNode(UnaryOperation.Not, Type.Boolean,
+							new HalfArrow(done))),
+					new HalfArrow(newGraph.new BinOpNode(BinaryOperation.Or, Type.Boolean,
+							startDelay.timeline.getDone(),
+							new HalfArrow(rWorking))))), rWorking);
 
 			NodeTimeline finalDelay = new InputTimeline(
-					new InnerSource(startDelay.timeline,
-							newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean, conditionDelay.getDone(), new HalfArrow(condition)),
+					new InnerSource(startDelay.timeline,done,
 							new UnknownDelay(conditionDelay.getDelay(source).latency)));
 			if (bodyToSync)
-				node.getSources().<DataNode, CompilerException>compute_(n -> node.modification.containsKey(n)
-						? getConvertedHalfArrow(node.modification.get(n).source).node
-						: entries.get(n)).map(registers::get, bodyDelay::synchronizeNode);
+				node.bodyEntries.generate().takeSecond().<DataNode, CompilerException>compute_(e -> node.modification.containsKey(e.bodyInput)
+						? getConvertedHalfArrow(node.modification.get(e.bodyInput).source).node
+						: entries.get(e)).map(registers::get, bodyDelay::synchronizeNode);
 			else
-				node.getSources().<DataNode, CompilerException>compute_(n -> node.modification.containsKey(n)
-						? getConvertedHalfArrow(node.modification.get(n).source).node
-						: entries.get(n)).map(registers::get, bodyDelay::synchronizeNode).forEach((r,h) -> newGraph.new BackRegisterEnd(new HalfArrow(h), r));;
+				node.bodyEntries.generate().takeSecond().<DataNode, CompilerException>compute_(e -> node.modification.containsKey(e.bodyInput)
+						? getConvertedHalfArrow(node.modification.get(e.bodyInput).source).node
+						: entries.get(e)).map(registers::get, bodyDelay::synchronizeNode).forEach((r,h) -> newGraph.new BackRegisterEnd(new HalfArrow(h), r));;
 
-//			DelayFlags<?> finalDelay = new UnknownDelayFlags(new UnknownDelay(conditionDelay.delay.latency),
-//					newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean, conditionDone, new HalfArrow(condition)));
-			node.bOutputs.getValues().takeSecond().compute(WhileResultNode::getPreviousValue).
+
+			node.bOutputs.getValues().takeSecond().compute(WhileResultNode::getPreviousValue).mapSecond(node.bodyEntries::get).
 			mapSecond(entries::get).mapSecond_(n -> synchronizeOuputput(n, conditionDelay, source)).
 			forEach((r,h) -> setNodeDelay(r, h.node, finalDelay));
-//			setStart(savStart);
 
-//			closeLevel();
+
+			closeLevel();
 		}
+
+
+
+
+		void buildFuncCallPipeline(FuncCallNode node) throws CompilerException {
+
+			openLevel("FuncCall");
+			Synchronizer startDelay = mergeSources(Generators.fromCollection(node.sources));
+
+			if (!funcDelays.containsKey(node.funcName))
+				throw null; // TODO
+
+			Delay funcDelay = funcDelays.get(node.funcName);
+
+			FuncCallNode c = newGraph.new FuncCallNode(node.funcName, node.sources.generate().map_(startDelay::synchronizeSource).toList() ,node.location);
+			NodeTimeline resultDelay;
+			if (funcDelay instanceof KnownDelay)
+				resultDelay = startDelay.timeline.delay(funcDelay.latency);
+			else if (funcDelay instanceof UnknownDelay) {
+				resultDelay = new InputTimeline(
+						new InnerSource(startDelay.timeline, newGraph.new FunctionReturnNode("Done", Type.Boolean, c),
+						new UnknownDelay(funcDelay.latency)));
+			}
+			else
+				throw UnsupportedDelayCompilerError.exception(funcDelay);
+			node.returns.generate().forEach_(r -> setNodeDelay(r,
+					newGraph.new FunctionReturnNode(r.nodeIdent, r.type, c),
+					resultDelay));
+			closeLevel();
+		}
+
+
 
 
 
@@ -638,7 +705,10 @@ public class PipelineBuilder extends LoggedBuilder {
 			buildWhilePipeline(node.whileNode);
 			return getConvertedNode(node);
 		}
-
+		private DataNode buildPipeline(FunctionReturnNode node) throws CompilerException {
+			buildFuncCallPipeline(node.fct);
+			return getConvertedNode(node);
+		}
 
 		private BinOpNode buildPipeline(BinOpNode node) throws CompilerException {
 			Synchronizer delay = mergeSources(Generators.fromValues(node.op1, node.op2));
@@ -681,6 +751,8 @@ public class PipelineBuilder extends LoggedBuilder {
 				return buildPipeline((InputNode) node);
 			if (node instanceof ConstNode)
 				return buildPipeline((ConstNode) node);
+			if (node instanceof FunctionReturnNode)
+				return buildPipeline((FunctionReturnNode) node);
 
 			throw UnsupportedNodeCompilerError.exception(node);
 		}
@@ -700,8 +772,8 @@ public class PipelineBuilder extends LoggedBuilder {
 	}
 
 
-	public DataFlowGraph buildPipeline(DataFlowGraph graph) throws CompilerException {
-		return new Builder(logger, graph).newGraph;
+	public Pair<DataFlowGraph,Delay> buildPipeline(DataFlowGraph graph, Map<String, Delay> funcDelays) throws CompilerException {
+		return new Builder(logger, graph, funcDelays).getResult();
 	}
 
 }

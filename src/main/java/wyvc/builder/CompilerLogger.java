@@ -127,6 +127,8 @@ public class CompilerLogger {
 
 		public LoggedBuilder(LoggedBuilder parent) {
 			logger = parent.logger;
+			level = parent.level;
+			block.addAll(parent.block);
 		}
 
 		public LoggedBuilder(CompilerLogger logger) {

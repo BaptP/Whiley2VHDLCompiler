@@ -9,8 +9,8 @@ import wyvc.utils.Generators.Generator;
 
 public abstract class OrientedGraph<N extends OrientedGraph.Node<N,A>, A extends OrientedGraph.Arrow<A,N>> {
 	public abstract static class Node<N extends Node<N,A>, A extends Arrow<A,N>> {
-		public final List<A> sources = new ArrayList<>();
-		public final List<A> targets = new ArrayList<>();
+		public final GList<A> sources = new GList.GArrayList<>();
+		public final GList<A> targets = new GList.GArrayList<>();
 		public final OrientedGraph<N,A> graph;
 
 		@SuppressWarnings("unchecked")

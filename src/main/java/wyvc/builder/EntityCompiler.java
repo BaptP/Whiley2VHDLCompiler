@@ -309,7 +309,7 @@ public class EntityCompiler {
 
 	}
 
-	public static Entity compile(CompilerLogger logger, String name, List<DataFlowGraph> parts, Map<String, Component> fcts) throws CompilerException {
+	public static Entity compile(CompilerLogger logger, String name, DataFlowGraph graph, Map<String, Component> fcts) throws CompilerException {
 		if (parts.isEmpty())
 			throw new CompilerException(new EmptyEntityError(name));
 		Compiler cmp = new Compiler(logger, fcts);

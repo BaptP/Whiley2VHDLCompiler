@@ -179,7 +179,8 @@ public class Generators {
 		Generator<T> takeSecond();
 		PairGenerator<T,S> swap();
 		PairGenerator<S,T> filter(BiPredicate<? super S, ? super T> test);
-		PairGenerator<S,T> filter(Predicate<? super S> firstTest, Predicate<? super T> secondTest);
+		PairGenerator<S,T> filterAnd(Predicate<? super S> firstTest, Predicate<? super T> secondTest);
+		PairGenerator<S,T> filterOr(Predicate<? super S> firstTest, Predicate<? super T> secondTest);
 		TripleGenerator<S,S,T> duplicateFirst();
 		TripleGenerator<S,T,T> duplicateSecond();
 		PairGenerator<S, T> appendPair(PairGenerator<? extends S, ? extends T> other);
@@ -262,7 +263,8 @@ public class Generators {
 		Generator_<T,E> takeSecond();
 		PairGenerator_<T,S,E> swap();
 		PairGenerator_<S,T,E> filter(BiPredicate_<? super S, ? super T,E> test);
-		PairGenerator_<S,T,E> filter(Predicate_<? super S, E> firstTest, Predicate_<? super T, E> secondTest);
+		PairGenerator_<S,T,E> filterAnd(Predicate_<? super S, E> firstTest, Predicate_<? super T, E> secondTest);
+		PairGenerator_<S,T,E> filterOr(Predicate_<? super S, E> firstTest, Predicate_<? super T, E> secondTest);
 		TripleGenerator_<S,S,T,E> duplicateFirst();
 		TripleGenerator_<S,T,T,E> duplicateSecond();
 		<U> TripleGenerator_<S,T,U,E> addComponent(Generator<U> generator);
@@ -769,8 +771,11 @@ public class Generators {
 		@Override default PairGenerator<S,T> filter(BiPredicate<? super S, ? super T> test) {
 			return Generators.toPairGenerator(filter((Pair<S,T> p) -> test.test(p.first, p.second)));
 		}
-		@Override default PairGenerator<S,T> filter(Predicate<? super S> firstTest, Predicate<? super T> secondTest) {
+		@Override default PairGenerator<S,T> filterAnd(Predicate<? super S> firstTest, Predicate<? super T> secondTest) {
 			return Generators.toPairGenerator(filter((Pair<S,T> p) -> firstTest.test(p.first) && secondTest.test(p.second)));
+		}
+		@Override default PairGenerator<S,T> filterOr(Predicate<? super S> firstTest, Predicate<? super T> secondTest) {
+			return Generators.toPairGenerator(filter((Pair<S,T> p) -> firstTest.test(p.first) || secondTest.test(p.second)));
 		}
 		@Override default PairGenerator<S,T> async() {
 			PairGenerator<S,T> This = this;
@@ -885,8 +890,11 @@ public class Generators {
 		@Override default PairGenerator_<S,T,E> filter(BiPredicate_<? super S, ? super T,E> test) {
 			return Generators.toPairGenerator(filter((Pair<S,T> p) -> test.test(p.first, p.second)));
 		}
-		@Override default PairGenerator_<S,T,E> filter(Predicate_<? super S,E> firstTest, Predicate_<? super T,E> secondTest) {
+		@Override default PairGenerator_<S,T,E> filterAnd(Predicate_<? super S,E> firstTest, Predicate_<? super T,E> secondTest) {
 			return Generators.toPairGenerator(filter((Pair<S,T> p) -> firstTest.test(p.first) && secondTest.test(p.second)));
+		}
+		@Override default PairGenerator_<S,T,E> filterOr(Predicate_<? super S,E> firstTest, Predicate_<? super T,E> secondTest) {
+			return Generators.toPairGenerator(filter((Pair<S,T> p) -> firstTest.test(p.first) || secondTest.test(p.second)));
 		}
 		@Override default PairGenerator<S,T> check() throws E {
 			return Generators.fromPairCollection(toList());
@@ -2531,6 +2539,9 @@ public class Generators {
 		return generators.fold((Generator<S> g, Generator<S> t) -> g.append(t), emptyGenerator());
 	}
 
+	public static <S> Generator<S> concat2(Generator<S> g1, Generator<S> g2) {
+		return g1.append(g2);
+	}
 
 	public static <S> Generator<Generator<S>> cartesianProduct(Generator<? extends Generator<S>> generators) {
 		final GList<GList<S>> values = generators.map(Generator::toList).toList();

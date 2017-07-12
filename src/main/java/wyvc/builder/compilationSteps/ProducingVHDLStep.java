@@ -7,13 +7,13 @@ import wyvc.builder.CompilerLogger;
 import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.EntityCompiler;
 import wyvc.builder.VHDLCompileTask.CompilationUnit;
-import wyvc.builder.compilationSteps.InliningStep.SplittedFunctions;
+import wyvc.builder.compilationSteps.TimingStep.TimedFunctions;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
 import wyvc.lang.VHDLFile;
 import wyvc.utils.Generators;
 
-public class ProducingVHDLStep extends CompilationStep<SplittedFunctions, ProducingVHDLStep.CompiledFile> {
+public class ProducingVHDLStep extends CompilationStep<TimedFunctions, ProducingVHDLStep.CompiledFile> {
 	public static class CompiledFile extends CompilationUnit {
 		public final VHDLFile file;
 
@@ -29,9 +29,9 @@ public class ProducingVHDLStep extends CompilationStep<SplittedFunctions, Produc
 	}
 
 	@Override
-	protected CompiledFile compile(CompilerLogger logger, SplittedFunctions data) throws CompilerException {
+	protected CompiledFile compile(CompilerLogger logger, TimedFunctions data) throws CompilerException {
 		Map<String,Component> fcts = new HashMap<>();
-		return new CompiledFile(data, new VHDLFile(Generators.fromPairCollection(data.func).
+		return new CompiledFile(data, new VHDLFile(data.func.generate().
 			map_((n,g) -> EntityCompiler.compile(logger, n, g, fcts)).toList().toArray(new Entity[data.func.size()])));
 	}
 }

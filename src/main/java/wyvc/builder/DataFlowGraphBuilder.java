@@ -28,6 +28,7 @@ import wyvc.builder.DataFlowGraph.InputNode;
 import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.builder.DataFlowGraph.Register;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
+import wyvc.builder.DataFlowGraph.WhileEntry;
 import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
@@ -42,6 +43,9 @@ import wyvc.builder.LexicalElementTree;
 import wyvc.lang.Type;
 import wyvc.utils.FunctionalInterfaces.BiFunction_;
 import wyvc.utils.FunctionalInterfaces.Function_;
+import wyvc.utils.GList;
+import wyvc.utils.GMap;
+import wyvc.utils.GPairList;
 import wyvc.utils.BiMap;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
@@ -522,9 +526,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
-		private Map<Integer, AccessibleVertexTree<?>> vars = new HashMap<>();
+		private GMap<Integer, AccessibleVertexTree<?>> vars = new GMap.GHashMap<>();
 		private Set<Integer> modified = new HashSet<>();
-		private Map<Integer, String> identifiers = new HashMap<>();
+		private GMap<Integer, String> identifiers = new GMap.GHashMap<>();
 		private PartialReturn partialReturn = null;
 		private final List<AccessibleTypeTree> returnTypes;
 		private final DataFlowGraph graph = new DataFlowGraph();
@@ -552,7 +556,7 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 		private Builder(Builder other) {
-			super(DataFlowGraphBuilder.this.logger);
+			super(other);
 			returnTypes = other.returnTypes;
 		}
 
@@ -565,17 +569,18 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 		}
 
 
-		private AccessibleVertexTree<?> buildInputMapping(BiMap<DataNode, InputNode> pairs,  String name, AccessibleVertexTree<?> source) throws CompilerException {
+		private AccessibleVertexTree<?> buildInputMapping(Map<String, Pair<InputNode,DataNode>> pairs,  String name, AccessibleVertexTree<?> source) throws CompilerException {
 			return buildNamedTransform((n,s) -> {
 				InputNode d = graph.new InputNode(n, s.node.type);
-				pairs.put(s.node, d);
-				debugLevel("AJOUT "+n+" "+s);
+				pairs.put(n,new Pair<>(d,s.node));
+				debug("AJOUT "+n+" "+s+" "+d);
 				return d;
 			}, name, source);
 		}
 
 
 		private boolean isModified(DataNode newNode, DataNode node) {
+			debug("IsModif "+newNode+" "+node);
 			if (newNode == node) return false;
 			if (newNode instanceof Register)
 				return isModified(((Register)newNode).previousValue.from, node);
@@ -585,6 +590,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 		private boolean isUnused(DataNode node) {
 			return node.getTargets().forAll(t -> t instanceof Register && isUnused(t));
+		}
+		private boolean isUsed(DataNode node) {
+			return !isUnused(node);
 		}
 
 
@@ -1636,6 +1644,9 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 
 
 
+
+
+
 		private AccessibleVertexTree<?> buildEndIf(Location<Bytecode.If> ifs, HalfArrow ifn, AccessibleVertexTree<?> trueLab, AccessibleVertexTree<?> falseLab) throws CompilerException {
 			return buildMerge((t,f) -> t.node == f.node ? t.node : graph.new EndIfNode(ifn, t, f, ifs), trueLab, falseLab);
 		}
@@ -1713,8 +1724,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			Builder conditionBuilder = new Builder(this);
 			Builder bodyBuilder = new Builder(this);
 
-			BiMap<DataNode, InputNode> conditionInputs = new BiMap<>();
-			BiMap<DataNode, InputNode> bodyInputs = new BiMap<>();
+			GMap<String, Pair<InputNode,DataNode>> conditionInputs = new GMap.GHashMap<>();
+			GMap<String, Pair<InputNode,DataNode>> bodyInputs = new GMap.GHashMap<>();
 
 			conditionBuilder.identifiers.putAll(identifiers);
 			bodyBuilder.identifiers.putAll(identifiers);
@@ -1724,12 +1735,20 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			Generators.fromMap(vars).duplicateFirst().mapSecond(identifiers::get).
 				map23_((n,s) -> bodyBuilder.buildInputMapping(bodyInputs, n, s)).forEach(bodyBuilder::putVariable);
 
-
 			AccessibleVertexTree<?> result = conditionBuilder.buildReturnValue("res", conditionBuilder.buildExpression(whiles.getOperand(0)));
 			conditionBuilder.graph.getInputNodes().filter(this::isUnused).forEach(conditionBuilder.graph::removeNode);
 
-			bodyBuilder.build(whiles.getBlock(0));
-			bodyBuilder.graph.getInputNodes().filter(this::isUnused).forEach(bodyBuilder.graph::removeNode);
+			debug("AVANT " + ((VertexLeaf<?>)vars.get(0)).getValue().node);
+			debug("AVANT " + ((VertexLeaf<?>)bodyBuilder.vars.get(0)).getValue().node);
+
+			GMap<Integer, AccessibleVertexTree<?>> bVars = new GMap.GHashMap<>(bodyBuilder.vars);
+
+			for (Location<?> l : whiles.getBlock(0).getOperands())
+				bodyBuilder.build(l);
+			debug("APRES " + ((VertexLeaf<?>)bodyBuilder.vars.get(0)).getValue().node);
+
+//			bodyBuilder.build(whiles.getBlock(0));
+
 
 			if (!(result instanceof VertexLeaf))
 				throw new CompilerException(null); // TODO
@@ -1738,20 +1757,29 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			if (!(res instanceof OutputNode))
 				throw new CompilerException(null); // TODO
 			OutputNode condi = (OutputNode) res;
+//			conditionInputs.generate().filter((f,t) -> !isUnused(f)).forEach((f,t) -> debug("Condition use "+f.nodeIdent+" "+t));
+//			bodyInputs.generate().filter((f,t) -> !isUnused(f)).forEach((f,t) -> debug("Body use "+f.nodeIdent+" "+t));
+			GList<WhileEntry> entries = bodyInputs.generate().mapFirst(conditionInputs::get).
+					map((c,b) -> new WhileEntry(
+							isUsed(c.first) ? c.first : null,
+							isUsed(b.first) ? b.first : null,
+							c.second)).filter(e -> e.conditionInput != null || e.bodyInput != null).toList(); // Should have c.second = b.second !
+			WhileNode node = graph.new WhileNode(entries,
+					conditionBuilder.graph, condi,
+					bodyBuilder.graph, whiles);
 
-			WhileNode node = graph.new WhileNode(
-					conditionBuilder.graph, new BiMap<>(conditionInputs.getValues().filter((f,t) -> !isUnused(t))),
-					condi,
-					bodyBuilder.graph, new BiMap<>(bodyInputs.getValues().filter((f,t) -> !isUnused(t))), whiles);
+			GMap<InputNode, DataNode> previousValue = new GMap.GHashMap<>(Generators.toPairGenerator(bodyInputs.generate().takeSecond()));
 
-
-			Generators.fromMap(vars).duplicateFirst().mapSecond(bodyBuilder.vars::get).<AccessibleVertexTree<?>, CompilerException>map32_(
+			bVars.generate().duplicateFirst().mapSecond(bodyBuilder.vars::get).<AccessibleVertexTree<?>, CompilerException>map32_(
 					(p,n) -> buildMerge(
-							(ph,nh)-> bodyInputs.containsKey(ph.node) && isModified(nh.node, bodyInputs.get(ph.node))
-								? node.createResult(bodyBuilder.graph.new OutputNode(nh.ident, nh), ph.node)
-								: ph.node,
+							(ph,nh)-> isModified(nh.node, ph.node)
+								? node.createResult(bodyBuilder.graph.new OutputNode(nh.ident, nh), (InputNode) ph.node)
+								: previousValue.get((InputNode) ph.node),
 							p, n)).duplicateFirst().mapSecond(identifiers::get).map23(this::buildNamedHalfArrow).forEach(this::putVariable);
 
+
+			bodyBuilder.graph.getInputNodes().filter(this::isUnused).forEach(i -> debug("Dégage "+i.nodeIdent));
+			bodyBuilder.graph.getInputNodes().filter(this::isUnused).forEach(bodyBuilder.graph::removeNode);
 
 			conditionBuilder.graph.removeUselessNodes();
 			bodyBuilder.graph.removeUselessNodes();

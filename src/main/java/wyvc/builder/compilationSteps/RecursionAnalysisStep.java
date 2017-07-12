@@ -12,15 +12,16 @@ import wyvc.builder.DataFlowGraph;
 import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.compilationSteps.CompileFunctionsStep.CompiledFunctions;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
+import wyvc.utils.GPairList;
 import wyvc.utils.Generators;
 import wyvc.utils.Pair;
 import wyvc.utils.Utils;
 
 public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, RecursionAnalysisStep.OrderedFunction> {
 	public static class OrderedFunction extends CompiledTypes {
-		public final List<Pair<String, DataFlowGraph>> func;
+		public final GPairList<String, DataFlowGraph> func;
 
-		public OrderedFunction(CompiledTypes cmp, List<Pair<String, DataFlowGraph>> func) {
+		public OrderedFunction(CompiledTypes cmp, GPairList<String, DataFlowGraph> func) {
 			super(cmp);
 			this.func = func;
 		}
@@ -54,14 +55,12 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 		public int findRank(Map<String, FuncNode> func) throws CompilerException {
 			if (rank < 0) {
 				rank = -2;
-				int r = 0;
-				for (FuncCallNode f : data.invokes) {
+				rank = data.getInvokesNodes().fold_((r,f) -> {
 					FuncNode fc = func.get(f.funcName);
 					if (fc.rank == -2)
 						throw new CompilerException(new RecursiveCallError(f));
-					r = Math.max(r, fc.findRank(func)+1);
-				}
-				rank = r;
+					return Math.max(r, fc.findRank(func)+1);
+				}, 0);
 			}
 			return rank;
 		}
@@ -73,10 +72,10 @@ public class RecursionAnalysisStep extends CompilationStep<CompiledFunctions, Re
 		data.func.forEach((String n, DataFlowGraph s) -> func.put(n, new FuncNode(s)));
 		for (FuncNode c : func.values())
 			c.findRank(func);
-		List<Pair<String, FuncNode>> fcts = Generators.fromMap(func).toList();
+		GPairList<String, FuncNode> fcts = Generators.fromMap(func).toList();
 		func.forEach((s, n) -> logger.debug(s+" rang "+n.rank));
 		fcts.sort((e1, e2) -> e1.second.rank - e2.second.rank);
 		Generators.fromPairCollection(fcts).takeSecond().forEach_(n -> n.data.updateInvokeLatency(s -> func.containsKey(s) ? func.get(s).data : null));
-		return new OrderedFunction(data, Utils.convert(fcts, (Pair<String, FuncNode> p) -> new Pair<String, DataFlowGraph>(p.first, p.second.data)));
+		return new OrderedFunction(data, fcts.generate().mapSecond(f -> f.data).toList());
 	}
 }

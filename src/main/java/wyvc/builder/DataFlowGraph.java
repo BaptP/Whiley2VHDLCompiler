@@ -1,27 +1,30 @@
 package wyvc.builder;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import wyil.lang.Bytecode;
 import wyil.lang.SyntaxTree.Location;
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
-import wyvc.builder.DataFlowGraph.DataArrow;
-import wyvc.builder.DataFlowGraph.DataNode;
-import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.io.GraphPrinter.PrintableGraph;
 import wyvc.lang.Type;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.utils.FunctionalInterfaces.Function;
 import wyvc.utils.GList;
+import wyvc.utils.GMap;
 import wyvc.utils.BiMap;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
+import wyvc.utils.Generators.PairGenerator;
+import wyvc.utils.Generators.TripleGenerator;
+import wyvc.utils.Pair;
 import wyvc.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 
@@ -139,20 +142,20 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final Location<?> location;
 
 
-		public DataNode(String label, Type type, List<HalfArrow> sources, Location<?> location) throws CompilerException {
+		public DataNode(String label, Type type, List<HalfArrow> sources, Location<?> location) {
 			super(DataFlowGraph.this);
 			sources.forEach((HalfArrow a) -> a.complete(this));
 			this.type = type;
 			this.location = location;
 			nodeIdent = label;
 		}
-		public DataNode(String label, Type type, List<HalfArrow> sources) throws CompilerException {
+		public DataNode(String label, Type type, List<HalfArrow> sources) {
 			this(label, type, sources, null);
 		}
-		public DataNode(String label, Type type, Location<?> location) throws CompilerException {
+		public DataNode(String label, Type type, Location<?> location) {
 			this(label, type, Collections.emptyList(), location);
 		}
-		public DataNode(String label, Type type) throws CompilerException {
+		public DataNode(String label, Type type) {
 			this(label, type, Collections.emptyList(), null);
 		}
 
@@ -333,6 +336,11 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"rectangle\"","style=filled","fillcolor=lemonchiffon");
+		}
+
+		@Override
 		public boolean isStaticallyKnown() {
 			return op.from.isStaticallyKnown();
 		}
@@ -384,18 +392,18 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public final class FuncCallNode extends DataNode {
 		public final String funcName;
-		public final List<FunctionReturnNode> returns = new ArrayList<>();
-		public final List<DataArrow> args;
+		public final GList<FunctionReturnNode> returns = new GList.GArrayList<>();
+		public final GList<DataArrow> args;
 
-		public FuncCallNode(String funcName, List<HalfArrow> args, Location<?> location) throws CompilerException {
+		public FuncCallNode(String funcName, GList<HalfArrow> args, Location<?> location) throws CompilerException {
 			super(funcName + "()", null, args, location);
 			invokes.add(this);
 			this.funcName = funcName;
-			this.args = Utils.convert(args, (HalfArrow a) -> a.arrow);
+			this.args = args.generate().map(h -> h.arrow).toList();
 		}
 
 
-		public FuncCallNode(Location<Bytecode.Invoke> call, List<HalfArrow> args) throws CompilerException {
+		public FuncCallNode(Location<Bytecode.Invoke> call, GList<HalfArrow> args) throws CompilerException {
 			this(call.getBytecode().name().name(), args, call);
 		}
 
@@ -453,11 +461,12 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		}
 	}
 
+
 	public final class WhileResultNode extends DataNode {
 		public final WhileNode whileNode;
-		public final DataNode previous;
+		public final InputNode previous;
 
-		public WhileResultNode(WhileNode node, DataNode previous, Type type, String ident) throws CompilerException {
+		public WhileResultNode(WhileNode node, InputNode previous, Type type, String ident) throws CompilerException {
 			super(ident, type, Collections.singletonList(new HalfArrow(node)));
 			whileNode = node;
 			this.previous = previous;
@@ -468,7 +477,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return false;
 		}
 
-		public DataNode getPreviousValue() {
+		public InputNode getPreviousValue() {
 			return previous;
 		}
 
@@ -479,23 +488,52 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	}
 
+	private static GList<HalfArrow> getUniqueList(Collection<DataNode> c1, Collection<DataNode> c2) {
+		Set<DataNode> set = new HashSet<>();
+		set.addAll(c1);
+		set.addAll(c2);
+		set.forEach(n -> System.out.println("Et "+n.nodeIdent));
+		return Generators.fromCollection(set).map(HalfArrow::new).toList();
+	}
+
+	public static class WhileEntry {
+		public final InputNode conditionInput;
+		public final InputNode bodyInput;
+		public final DataNode source;
+		public final String ident;
+
+		public WhileEntry(InputNode conditionInput, InputNode bodyInput, DataNode source) {
+			this.conditionInput = conditionInput;
+			this.bodyInput = bodyInput;
+			this.source = source;
+			ident = conditionInput != null ? conditionInput.nodeIdent : bodyInput != null ? bodyInput.nodeIdent : "Unknown";
+		}
+
+		public Type getType() {
+			return source.type;
+		}
+	}
+
 	public final class WhileNode extends DataNode {
+		public final GList<WhileEntry> entries;
+		public final GMap<InputNode, WhileEntry> conditionEntries;
+		public final GMap<InputNode, WhileEntry> bodyEntries;
 		public final DataFlowGraph condition;
-		public final BiMap<DataNode, InputNode> cInputs;
 		public final OutputNode conditionValue;
 		public final DataFlowGraph body;
-		public final BiMap<DataNode, InputNode> bInputs;
 		public final BiMap<OutputNode, WhileResultNode> bOutputs = new BiMap<>();
-		public final BiMap<DataNode, OutputNode> modification = new BiMap<>();
+		public final BiMap<InputNode, OutputNode> modification = new BiMap<>();
 
-		public WhileNode(DataFlowGraph condition, BiMap<DataNode, InputNode> cInputs, OutputNode conditionValue,
-				DataFlowGraph body, BiMap<DataNode, InputNode> bInputs, Location<Bytecode.While> location) throws CompilerException {
-			super("While", null,  cInputs.getValues().appendPair(bInputs.getValues().filter((i,f) -> !cInputs.containsKey(i))).mapSecond(InputNode::getNodeIdent).map_((n,s) -> new HalfArrow(n,s)).toList(), location);
+		public WhileNode(GList<WhileEntry> entries,
+				DataFlowGraph condition, OutputNode conditionValue,
+				DataFlowGraph body, Location<Bytecode.While> location) throws CompilerException {
+			super("While", null, entries.generate().map(i -> i.source).map(HalfArrow::new).toList(), location);
+			this.entries = entries;
 			this.condition = condition;
-			this.cInputs = cInputs;
 			this.conditionValue = conditionValue;
 			this.body = body;
-			this.bInputs = bInputs;
+			conditionEntries = new GMap.GHashMap<>(entries.generate().compute(e -> e.conditionInput).swap().filter((i,e) -> i != null));
+			bodyEntries = new GMap.GHashMap<>(entries.generate().compute(e -> e.bodyInput).swap().filter((i,e) -> i != null));
 			whileNodes.add(this);
 			updateLatency(Latency.UnknownDelay);
 		}
@@ -515,11 +553,36 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			throw UnsupportedDuplicationCompilerError.exception(this);
 		}
 
-		public DataNode createResult(OutputNode node, DataNode previous) throws CompilerException {
+		public DataNode createResult(OutputNode node, InputNode previous) throws CompilerException {
 			WhileResultNode rNode = new WhileResultNode(this, previous, node.type, node.nodeIdent);
 			bOutputs.put(node, rNode);
 			modification.put(previous, node);
 			return rNode;
+		}
+
+		public Generator<WhileEntry> getConditionEntries() {
+			return conditionEntries.generate().takeSecond();
+		}
+		public Generator<WhileEntry> getBodyEntries() {
+			return bodyEntries.generate().takeSecond();
+		}
+
+	}
+
+	public final class InvalideNode extends DataNode {
+
+		public InvalideNode() {
+			super("INVALIDE", null);
+		}
+
+		@Override
+		public boolean isStaticallyKnown() {
+			return false;
+		}
+
+		@Override
+		public DataNode duplicate(DataFlowGraph graph, Duplicator duplicator) throws CompilerException {
+			throw UnsupportedDuplicationCompilerError.exception(this);
 		}
 
 	}
@@ -535,7 +598,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public List<String> getOptions() {
-			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=greenyellow 	");
+			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=greenyellow");
 		}
 
 		@Override
@@ -576,7 +639,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public List<String> getOptions() {
-			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=greenyellow 	");
+			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=palegreen1");
 		}
 
 		@Override
@@ -762,8 +825,9 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 	public GList<InputNode> inputs = new GList.GArrayList<>();
 	public GList<OutputNode> outputs = new GList.GArrayList<>();
-	public GList<FuncCallNode> invokes = new GList.GArrayList<>();
+	private GList<FuncCallNode> invokes = new GList.GArrayList<>();
 	public GList<WhileNode> whileNodes = new GList.GArrayList<>();
+
 
 	public enum Latency {
 		NullDelay,
@@ -814,7 +878,9 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		return outputs.generate();
 	}
 	public Generator<FuncCallNode> getInvokesNodes() {
-		return invokes.generate();
+		return whileNodes.generate().biMap(w -> w.condition, w -> w.body).
+				map(DataFlowGraph::getInvokesNodes, DataFlowGraph::getInvokesNodes).map(Generators::concat2).
+				fold(Generators::concat2, invokes.generate());
 	}
 
 
