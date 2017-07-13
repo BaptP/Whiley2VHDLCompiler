@@ -247,7 +247,6 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			return graph.new OutputNode(nodeIdent, duplicator.duplicate(source));
 		}
 
-
 		@Override
 		protected void removed() {
 			outputs.remove(this);
@@ -414,6 +413,12 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		@Override
 		public boolean isStaticallyKnown() {
 			return false;
+		}
+
+
+		@Override
+		public List<String> getOptions() {
+			return Arrays.asList("shape=\"octagon\"","style=filled","fillcolor=powderblue");
 		}
 
 		@Override
@@ -668,7 +673,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 			this.previousValue  =  previousValue.arrow;
 			this.delay = delay; // TODO check delay > 0
 		}
-		
+
 		public Register(InputNode clock, HalfArrow previousValue) throws CompilerException {
 			this(clock, previousValue, 1);
 		}

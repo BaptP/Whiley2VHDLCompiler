@@ -16,7 +16,10 @@ import wyvc.builder.CompilerLogger.CompilerException;
 import wyvc.builder.CompilerLogger.CompilerWarning;
 import wyvc.builder.CompilerLogger.LoggedBuilder;
 import wyvc.builder.CompilerLogger.UnsupportedCompilerError;
+import wyvc.builder.DataFlowGraph.BackRegister;
+import wyvc.builder.DataFlowGraph.BackRegisterEnd;
 import wyvc.builder.DataFlowGraph.BinOpNode;
+import wyvc.builder.DataFlowGraph.Buffer;
 import wyvc.builder.DataFlowGraph.ConstNode;
 import wyvc.builder.DataFlowGraph.DataArrow;
 import wyvc.builder.DataFlowGraph.DataNode;
@@ -28,16 +31,24 @@ import wyvc.builder.DataFlowGraph.InterfaceNode;
 import wyvc.builder.DataFlowGraph.NamedDataArrow;
 import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.builder.DataFlowGraph.Register;
+import wyvc.builder.DataFlowGraph.UnaOpNode;
+import wyvc.builder.PipelineBuilder.DelayFlags;
+import wyvc.builder.PipelineBuilder.InputDelayFlags;
+import wyvc.builder.PipelineBuilder.NullDelayFlags;
+import wyvc.builder.PipelineBuilder.TimedDataFlowGraph;
 import wyvc.lang.Architecture;
 import wyvc.lang.Component;
 import wyvc.lang.Entity;
 import wyvc.lang.Expression;
 import wyvc.lang.Expression.Access;
+import wyvc.lang.Expression.FunctionCall;
 import wyvc.lang.Expression.Value;
 import wyvc.lang.Interface;
+import wyvc.lang.Type;
 import wyvc.lang.Statement.ComponentInstance;
 import wyvc.lang.Statement.ConcurrentStatement;
 import wyvc.lang.Statement.ConditionalSignalAssignment;
+import wyvc.lang.Statement.IfStatement;
 import wyvc.lang.Statement.NotAStatement;
 import wyvc.lang.Statement.Process;
 import wyvc.lang.Statement.SequentialStatement;
@@ -78,7 +89,7 @@ public class EntityCompiler {
 		private Set<FuncCallNode> compiled = new HashSet<>();
 		private Set<String> used = new HashSet<>();
 		private List<SignalAssignment> registers = new ArrayList<>();
-		private Port clock = null;
+		private DelayFlags delayFlags;
 //		private boolean portsIn;
 //		private boolean portsOut;
 		//private String fctName;
@@ -192,13 +203,11 @@ public class EntityCompiler {
 		private Expression compileInput(InputNode input) throws CompilerException {
 			return new Access(created.get(input));
 		}
-		
+
 		private ConcurrentStatement compileRegister(Signal to, Register register) throws CompilerException {
 			String name = register.previousValue instanceof NamedDataArrow ?
 					"R"+((NamedDataArrow) register.previousValue).ident : "source";
 			Signal source = getSignal(register.previousValue.from, name);
-			if (clock == null)
-				clock = createPort(register.clock);
 			for (int k = 0; k<register.delay; ++k) {
 				Signal e = createSignal(name+"_reg"+k, register);
 				registers.add(new SignalAssignment(to, new Access(e)));
@@ -207,13 +216,39 @@ public class EntityCompiler {
 			return new SignalAssignment(to, new Access(source));
 		}
 
+		private ConcurrentStatement compileBuffer(Signal to, Buffer buffer) throws CompilerException {
+			// TODO
+
+			String name = buffer.previousValue instanceof NamedDataArrow ?
+					"B"+((NamedDataArrow) buffer.previousValue).ident : "source";
+			Signal source = getSignal(buffer.previousValue.from, name);
+			Signal write = getSignal(buffer.write, "write");
+			Signal e = createSignal(name+"_reg", buffer);
+			registers.add(new SignalAssignment(e, new Access(to)));
+			return new ConditionalSignalAssignment(to, Collections.singletonList(new Pair<>(new Access(source), new Access(write))), new Access(e));
+		}
+
+		private ConcurrentStatement compileBackRegister(Signal to, BackRegister register) throws CompilerException {
+			String name = register.getPreviousValue() instanceof NamedDataArrow ?
+					"BR"+((NamedDataArrow) register.getPreviousValue()).ident : "source";
+			Signal source = getSignal(register.getPreviousValue().from, name);
+			Signal e = createSignal(name+"_reg", register);
+			registers.add(new SignalAssignment(to, new Access(e)));
+			to = e;
+			return new SignalAssignment(to, new Access(source));
+		}
+
 		private Expression compileExpression(DataNode node) throws CompilerException {
 			if (node instanceof BinOpNode)
 				return compileBinOp((BinOpNode) node);
+			if (node instanceof UnaOpNode)
+				return compileUnaOp((UnaOpNode) node);
 			if (node instanceof ConstNode)
 				return compileConst((ConstNode) node);
 			if (node instanceof InputNode)
 				return compileInput((InputNode) node);
+			if (node instanceof BackRegisterEnd)
+				return compileExpression( ((BackRegisterEnd)node).value.from);
 //			if (node instanceof Register)
 //				return compileRegister((Register) node);
 			throw new CompilerException(new UnsupportedDataNodeError(node));
@@ -241,6 +276,14 @@ public class EntityCompiler {
 			case Le:  return new Expression.Le(e1, e2);
 			case Gt:  return new Expression.Gt(e1, e2);
 			case Ge:  return new Expression.Ge(e1, e2);
+			default:  throw new CompilerException(new UnsupportedDataNodeError(node));
+			}
+		}
+
+		private Expression compileUnaOp(UnaOpNode node) throws CompilerException {
+			Expression e = compileExpression(node.op);
+			switch (node.kind) {
+			case Not: return new Expression.Not(e);
 			default:  throw new CompilerException(new UnsupportedDataNodeError(node));
 			}
 		}
@@ -275,6 +318,10 @@ public class EntityCompiler {
 					return compileInvoke(((FunctionReturnNode) source.second).fct);
 				if (source.second instanceof Register)
 					return compileRegister(source.first, ((Register) source.second));
+				if (source.second instanceof Buffer)
+					return compileBuffer(source.first, ((Buffer) source.second));
+				if (source.second instanceof BackRegister)
+					return compileBackRegister(source.first, ((BackRegister) source.second));
 				return new SignalAssignment(source.first, compileExpression(source.second));
 			}
 			throw new CompilerException(new UnsupportedDataNodeError(source.second));
@@ -292,14 +339,19 @@ public class EntityCompiler {
 //			}
 //		} TODO move !
 
-		public List<ConcurrentStatement> compile(String name, DataFlowGraph sec) throws CompilerException {
-
+		public List<ConcurrentStatement> compile(String name, TimedDataFlowGraph sec) throws CompilerException {
+			this.delayFlags = sec.delayFlags;
 			//this.fctName = name;
+			sec.getInputNodes().forEach(i -> debug("input "+i.nodeIdent));
 			sec.getInputNodes().forEach(this::createPort);
 			sec.getOutputNodes().forEach(this::createPort);
 			compileSignals();
 			Collections.reverse(statements);
 			return statements;
+		}
+
+		public Signal getClock() throws CompilerException {
+			return getSignal(delayFlags.getInputFlag(InputDelayFlags.Clock), "start");
 		}
 	}
 
@@ -332,11 +384,15 @@ public class EntityCompiler {
 
 	}
 
-	public static Entity compile(CompilerLogger logger, String name, DataFlowGraph graph, Map<String, Component> fcts) throws CompilerException {
+	public static Entity compile(CompilerLogger logger, String name, TimedDataFlowGraph graph, Map<String, Component> fcts) throws CompilerException {
 		Compiler cmp = new Compiler(logger, fcts);
 		List<ConcurrentStatement> statements = new ArrayList<>();
 		statements.addAll(cmp.compile(name, graph));
-		statements.add(new Process("Registers", new Variable[0], new Signal[]{cmp.clock}, cmp.registers.toArray(new SequentialStatement[cmp.registers.size()])));
+		if (!cmp.registers.isEmpty())
+			statements.add(new Process("Registers", new Variable[0], new Signal[]{cmp.getClock()},
+				new SequentialStatement[] {new IfStatement(
+						new FunctionCall(Type.Boolean, "rising_edge", new Access(cmp.getClock())),
+						Utils.convert(cmp.registers))}));
 		Entity entity = new Entity(name, cmp.getInterface());
 		entity.addArchitectures(new Architecture(entity, "Behavioural", cmp.getSignals(), cmp.getConstants(), cmp.getComponent(),
 			statements.toArray(new ConcurrentStatement[statements.size()])));

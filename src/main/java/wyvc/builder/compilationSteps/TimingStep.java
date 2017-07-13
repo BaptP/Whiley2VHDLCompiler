@@ -13,6 +13,7 @@ import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.DataFlowGraphBuilder;
 import wyvc.builder.PipelineBuilder;
 import wyvc.builder.PipelineBuilder.Delay;
+import wyvc.builder.PipelineBuilder.TimedDataFlowGraph;
 import wyvc.io.GraphPrinter;
 import wyvc.builder.compilationSteps.CompileTypesStep.CompiledTypes;
 import wyvc.builder.compilationSteps.RecursionAnalysisStep.OrderedFunction;
@@ -23,9 +24,9 @@ import wyvc.utils.Triple;
 
 public class TimingStep extends CompilationStep<OrderedFunction, TimingStep.TimedFunctions> {
 	public static class TimedFunctions extends CompiledTypes {
-		public final GPairList<String, DataFlowGraph> func;
+		public final GPairList<String, TimedDataFlowGraph> func;
 
-		public TimedFunctions(CompiledTypes cmp, GPairList<String, DataFlowGraph> func) {
+		public TimedFunctions(CompiledTypes cmp, GPairList<String, TimedDataFlowGraph> func) {
 			super(cmp);
 			this.func = func;
 		}
@@ -59,15 +60,15 @@ public class TimingStep extends CompilationStep<OrderedFunction, TimingStep.Time
 			}
 		}
 
-		private DataFlowGraph analyse(String funcName, DataFlowGraph func) throws CompilerException {
+		private TimedDataFlowGraph analyse(String funcName, DataFlowGraph func) throws CompilerException {
 			print(func, funcName);
-			Pair<DataFlowGraph,Delay> r = pipelining.buildPipeline(func, funcDelays);
+			Pair<TimedDataFlowGraph,Delay> r = pipelining.buildPipeline(func, funcDelays);
 			print(r.first, funcName);
 			funcDelays.put(funcName, r.second);
 			return r.first;
 		}
 
-		public GPairList<String, DataFlowGraph> build(GPairList<String, DataFlowGraph> functions) throws CompilerException {
+		public GPairList<String, TimedDataFlowGraph> build(GPairList<String, DataFlowGraph> functions) throws CompilerException {
 			return functions.generate().computeSecond_(this::analyse).toList();
 		}
 	}

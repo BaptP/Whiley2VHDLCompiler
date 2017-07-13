@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.Delayed;
 
 import wyvc.builder.CompilerLogger.CompilerError;
 import wyvc.builder.CompilerLogger.CompilerException;
@@ -20,6 +21,7 @@ import wyvc.builder.DataFlowGraph.FuncCallNode;
 import wyvc.builder.DataFlowGraph.FunctionReturnNode;
 import wyvc.builder.DataFlowGraph.HalfArrow;
 import wyvc.builder.DataFlowGraph.InputNode;
+import wyvc.builder.DataFlowGraph.OutputNode;
 import wyvc.builder.DataFlowGraph.Register;
 import wyvc.builder.DataFlowGraph.UnaOpNode;
 import wyvc.builder.DataFlowGraph.UnaryOperation;
@@ -28,15 +30,16 @@ import wyvc.builder.DataFlowGraph.WhileNode;
 import wyvc.builder.DataFlowGraph.WhileResultNode;
 import wyvc.lang.Type;
 import wyvc.utils.GList;
+import wyvc.utils.GMap;
 import wyvc.utils.GPairList;
 import wyvc.utils.Generators;
 import wyvc.utils.Generators.Generator;
+import wyvc.utils.Generators.Generator_;
 import wyvc.utils.Generators.PairGenerator;
 import wyvc.utils.Generators.PairGenerator_;
 import wyvc.utils.Pair;
 
 public class PipelineBuilder extends LoggedBuilder {
-
 	public PipelineBuilder(CompilerLogger logger) {
 		super(logger);
 	}
@@ -131,13 +134,108 @@ public class PipelineBuilder extends LoggedBuilder {
 
 
 
-	private static <T> Set<T> union(Set<T> s1, Set<T> s2) {
-		Set<T> r = new HashSet<>();
-		r.addAll(s1);
-		r.addAll(s2);
-		return r;
+
+	public static class UnavailableDelayFlagCompilerError extends CompilerError {
+		private final DelayFlags flags;
+		private final DelayFlag flag;
+
+		public UnavailableDelayFlagCompilerError(DelayFlags flags, DelayFlag flag) {
+			this.flags = flags;
+			this.flag = flag;
+		}
+
+		@Override
+		public String info() {
+			return "The "+flag.getFlagType().type+" flag "+flag.name()+" does not exist in "+flags.getClass().getSimpleName();
+		}
+
+		public static CompilerException exception(DelayFlags flags, DelayFlag flag) {
+			return new CompilerException(new UnavailableDelayFlagCompilerError(flags, flag));
+		}
 	}
 
+	public static enum DelayFlagType {
+		InputFlag("input"),
+		OutputFlag("output");
+
+		public final String type;
+		private DelayFlagType(String type) {
+			this.type = type;
+		}
+	}
+
+	public static interface DelayFlag {
+		String name();
+		DelayFlagType getFlagType();
+	}
+
+	public static enum InputDelayFlags implements DelayFlag {
+		Clock,
+		Start;
+
+		@Override
+		public DelayFlagType getFlagType() {
+			return DelayFlagType.InputFlag;
+		}
+	}
+	public static enum OutputDelayFlags implements DelayFlag {
+		Done,
+		Ready;
+
+		@Override
+		public DelayFlagType getFlagType() {
+			return DelayFlagType.OutputFlag;
+		}
+	}
+
+	public static class DelayFlags {
+		protected final GMap<InputDelayFlags, InputNode> inputFlags = new GMap.GHashMap<>();
+		protected final GMap<OutputDelayFlags, OutputNode> outputFlags = new GMap.GHashMap<>();
+
+		public InputNode getInputFlag(InputDelayFlags flag) throws CompilerException {
+			if (inputFlags.containsKey(flag))
+				return inputFlags.get(flag);
+			throw UnavailableDelayFlagCompilerError.exception(this, flag);
+		}
+		public OutputNode getOutputFlag(OutputDelayFlags flag) throws CompilerException {
+			if (outputFlags.containsKey(flag))
+				return outputFlags.get(flag);
+			throw UnavailableDelayFlagCompilerError.exception(this, flag);
+		}
+
+		public PairGenerator<InputDelayFlags, InputNode> getInputFlags() {
+			return inputFlags.generate();
+		}
+
+		public PairGenerator<OutputDelayFlags, OutputNode> getOutputFlags() {
+			return outputFlags.generate();
+		}
+	}
+
+	public static class NullDelayFlags extends DelayFlags {
+
+	}
+
+	public static class KnownDelayFlags extends DelayFlags {
+		public KnownDelayFlags(InputNode clock) {
+			inputFlags.put(InputDelayFlags.Clock, clock);
+		}
+	}
+
+	public static class UnknownDelayFlags extends DelayFlags {
+		public UnknownDelayFlags(InputNode clock, InputNode start, OutputNode done) {
+			inputFlags.put(InputDelayFlags.Clock, clock);
+			inputFlags.put(InputDelayFlags.Start, start);
+			outputFlags.put(OutputDelayFlags.Done, done);
+		}
+	}
+
+
+
+
+	public static class TimedDataFlowGraph extends DataFlowGraph {
+		public DelayFlags delayFlags = new NullDelayFlags();
+	}
 
 
 
@@ -211,7 +309,7 @@ public class PipelineBuilder extends LoggedBuilder {
 		}
 
 
-	private static int CONCURRENCY = 4;
+	private static int CONCURRENCY = 1;
 
 
 
@@ -369,10 +467,10 @@ public class PipelineBuilder extends LoggedBuilder {
 		private final Map<String, Delay> funcDelays;
 		private final Map<DataNode, NodeTimeline> nodeDelays = new HashMap<>();
 		private final Map<DataNode, DataNode> convertedNodes = new HashMap<>();
-		private final DataFlowGraph newGraph = new DataFlowGraph();
+		private final TimedDataFlowGraph newGraph = new TimedDataFlowGraph();
 		private final InputSource input = new InputSource();
 		private final NodeTimeline timeline;
-		private HalfArrow start = null;
+		private InputNode start = null;
 		private InputNode clock = null;
 
 
@@ -382,7 +480,11 @@ public class PipelineBuilder extends LoggedBuilder {
 			timeline = buildPipeline(graph);
 		}
 
-		public Pair<DataFlowGraph,Delay> getResult() throws CompilerException {
+		public Pair<TimedDataFlowGraph,Delay> getResult() throws CompilerException {
+			if (start != null)
+				newGraph.delayFlags = new UnknownDelayFlags(clock, start, newGraph.new OutputNode("done", timeline.getDone()));
+			else if (clock != null)
+				newGraph.delayFlags = new KnownDelayFlags(clock);
 			return new Pair<>(newGraph, timeline.getDelay(input));
 		}
 
@@ -418,14 +520,15 @@ public class PipelineBuilder extends LoggedBuilder {
 
 		private InputNode getClock() throws CompilerException {
 			if (clock == null)
-				clock = newGraph.new InputNode("clock", Type.Boolean);
+				clock = newGraph.new InputNode("clock", Type.Std_logic);
 			return clock;
 		}
 
 		private HalfArrow getStart() throws CompilerException {
+			getClock();
 			if (start == null)
-				start = new HalfArrow(newGraph.new InputNode("start", Type.Boolean), "start");
-			return start;
+				start = newGraph.new InputNode("start", Type.Boolean);
+			return new HalfArrow(start, "start");
 		}
 
 
@@ -499,7 +602,7 @@ public class PipelineBuilder extends LoggedBuilder {
 				if (backDone == null) {
 					BackRegister reg = newGraph.new BackRegister(getClock(), Type.Boolean);
 					newGraph.new BackRegisterEnd(timeline.getDone(), reg);
-					backDone = new HalfArrow(reg);
+					backDone = new HalfArrow(reg,"Done_reg");
 				}
 				return backDone;
 			}
@@ -635,14 +738,16 @@ public class PipelineBuilder extends LoggedBuilder {
 //			mapThird(registers::get).map21(HalfArrow::new).forEach((h,r) -> newGraph.new BackRegisterEnd(h, r));
 //
 
-			DataNode done = newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean, conditionDelay.getDone(), new HalfArrow(condition));
+			DataNode done = newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
+					conditionDelay.getDone(),
+					new HalfArrow(newGraph.new UnaOpNode(UnaryOperation.Not, Type.Boolean, new HalfArrow(condition))));
 
 			newGraph.new BackRegisterEnd(new HalfArrow(newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
 					new HalfArrow(newGraph.new UnaOpNode(UnaryOperation.Not, Type.Boolean,
 							new HalfArrow(done))),
 					new HalfArrow(newGraph.new BinOpNode(BinaryOperation.Or, Type.Boolean,
 							startDelay.timeline.getDone(),
-							new HalfArrow(rWorking))))), rWorking);
+							new HalfArrow(rWorking, "in_proc"))))), rWorking);
 
 			NodeTimeline finalDelay = new InputTimeline(
 					new InnerSource(startDelay.timeline,done,
@@ -677,14 +782,18 @@ public class PipelineBuilder extends LoggedBuilder {
 				throw null; // TODO
 
 			Delay funcDelay = funcDelays.get(node.funcName);
-
-			FuncCallNode c = newGraph.new FuncCallNode(node.funcName, node.sources.generate().map_(startDelay::synchronizeSource).toList() ,node.location);
+			Generator_<HalfArrow, CompilerException> inputs = node.sources.generate().map_(startDelay::synchronizeSource);
+			if (funcDelay instanceof KnownDelay)
+				inputs = inputs.append(Generators.fromSingleton(new HalfArrow(getClock(), "clock")).toChecked());
+			else if (funcDelay instanceof UnknownDelay)
+				inputs = inputs.append(Generators.fromValues(new HalfArrow(getClock(), "clock"),new HalfArrow(getStart(), "start")).toChecked());
+			FuncCallNode c = newGraph.new FuncCallNode(node.funcName, inputs.toList() ,node.location);
 			NodeTimeline resultDelay;
 			if (funcDelay instanceof KnownDelay)
 				resultDelay = startDelay.timeline.delay(funcDelay.latency);
 			else if (funcDelay instanceof UnknownDelay) {
 				resultDelay = new InputTimeline(
-						new InnerSource(startDelay.timeline, newGraph.new FunctionReturnNode("Done", Type.Boolean, c),
+						new InnerSource(startDelay.timeline, newGraph.new FunctionReturnNode("done", Type.Boolean, c),
 						new UnknownDelay(funcDelay.latency)));
 			}
 			else
@@ -763,16 +872,17 @@ public class PipelineBuilder extends LoggedBuilder {
 
 
 		private NodeTimeline buildPipeline(DataFlowGraph graph) throws CompilerException {
+			graph.getInputNodes().forEach_(this::getConvertedNode);
 			Synchronizer delay = mergeSources(graph.getOutputNodes().map(o -> o.source));
 			graph.getOutputNodes().forEach_(o -> newGraph.new OutputNode(o.nodeIdent, delay.synchronizeSource(o.source)));
-			newGraph.new OutputNode("done", delay.timeline.getDone());
+//			newGraph.new OutputNode("done", delay.timeline.getDone());
 			return delay.timeline;
 		}
 
 	}
 
 
-	public Pair<DataFlowGraph,Delay> buildPipeline(DataFlowGraph graph, Map<String, Delay> funcDelays) throws CompilerException {
+	public Pair<TimedDataFlowGraph,Delay> buildPipeline(DataFlowGraph graph, Map<String, Delay> funcDelays) throws CompilerException {
 		return new Builder(logger, graph, funcDelays).getResult();
 	}
 

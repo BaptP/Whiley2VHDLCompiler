@@ -4,6 +4,8 @@ import static wyvc.lang.LexicalElement.stringFromStream;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import wyvc.builder.CompilerLogger.CompilerException;
@@ -171,7 +173,7 @@ public interface Statement extends LexicalElement {
 			t.n("    ").n(defaultExpr).endLine();
 			/*/
 			t.endLine().n(cond, (Pair<Expression, Expression> p, Token to) -> to.n("    ").align().n(p.first).align().n(" when ").n(p.second).align().n(" else "), "\n");
-			t.endLine().n("    ").n(defaultExpr).endLine();
+			t.endLine().n("    ").n(defaultExpr).semiColon();
 			//*/
 		}
 
@@ -180,6 +182,31 @@ public interface Statement extends LexicalElement {
 			return stringFromStream(this);
 		}
 	}
+
+	public static class IfStatement implements SequentialStatement {
+		private final Expression condition;
+		private final List<SequentialStatement> trueBranch;
+		private final List<SequentialStatement> falseBranch;
+
+		public IfStatement(Expression condition, List<SequentialStatement> trueBranch, List<SequentialStatement> falseBranch) {
+			this.condition = condition;
+			this.trueBranch = trueBranch;
+			this.falseBranch = falseBranch;
+		}
+		public IfStatement(Expression condition, List<SequentialStatement> trueBranch) {
+			this(condition, trueBranch, Collections.emptyList());
+		}
+
+		@Override
+		public void addTokens(Token t) {
+			t.n("if ").n(condition).n(" then").endLine().indent().n(trueBranch).dedent();
+			if (!falseBranch.isEmpty())
+				t.n("else").endLine().indent().n(falseBranch).dedent();
+			t.n("end if").semiColon();
+		}
+
+	}
+
 
 	public static class NotAStatement implements ConcurrentStatement, SequentialStatement {
 		@Override

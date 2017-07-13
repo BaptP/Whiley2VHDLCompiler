@@ -5,6 +5,8 @@ import wyvc.lang.TypedValue.Port;
 import wyvc.lang.TypedValue.Port.Mode;
 import wyvc.lang.TypedValue.PortError;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.function.BiPredicate;
 
 import wyvc.builder.CompilerLogger.CompilerException;
@@ -16,7 +18,7 @@ import wyvc.lang.Type.VectorType;
 
 public interface Expression extends LexicalElement {
 	public Type getType();
-	public int getPrecedence();
+	public Precedence getPrecedence();
 
 	public final class TypesMismatchException extends TypeError {
 		private final Type expected;
@@ -34,25 +36,61 @@ public interface Expression extends LexicalElement {
 	}
 
 
-	public static final class Precedence {
-		public static final int LOGICAL_OP 	= 0;
-		public static final int COMPARISON 	= LOGICAL_OP 	+ 1;
-		public static final int SHIFT_OP 	= COMPARISON	+ 1;
-		public static final int ADDITIVE_OP = SHIFT_OP		+ 1;
-		public static final int UNARY_SIGN 	= ADDITIVE_OP	+ 1;
-		public static final int MULTIPL_OP 	= UNARY_SIGN	+ 1;
-		public static final int UNARY_NOT 	= MULTIPL_OP	+ 1;
-		public static final int SUB_VECTOR 	= UNARY_NOT		+ 1;
-		public static final int VAR_ACCESS 	= SUB_VECTOR	+ 1;
+	public static enum Precedence {
+		COMPARISON,
+		LOGICAL_OP,
+		SHIFT_OP,
+		ADDITIVE_OP,
+		UNARY_SIGN,
+		MULTIPL_OP,
+		UNARY_NOT,
+		FUNC_CALL,
+		SUB_VECTOR,
+		VAR_ACCESS;
 
+	}
+
+	public static abstract class UnaryOperation extends TypedElement implements Expression {
+		private final String op;
+		public final Expression arg;
+
+		protected UnaryOperation(String op, Expression arg, Type type){
+			super(type);
+			this.op = op;
+			this.arg = arg;
+		}
+
+		@Override
+		public final void addTokens(Token t) {
+			t.n(op).n("(").n(arg).n(")");
+		}
+
+
+		private static final Type getType(Type t) throws CompilerException{
+			if (t == Type.Boolean)
+				return t;
+			throw new CompilerException(new TypesMismatchException(UnaryOperation.class, t, t));
+		}
+	}
+
+
+	public static final class Not extends UnaryOperation {
+		public Not(Expression arg) throws CompilerException {
+			super("not", arg, UnaryOperation.getType(arg.getType()));
+		}
+
+		@Override
+		public Precedence getPrecedence() {
+			return Precedence.UNARY_NOT;
+		}
 	}
 
 	public static abstract class BinaryOperation extends TypedElement implements Expression {
 		private final String op;
 		public final Expression arg1, arg2;
-		public final int precedence;
+		public final Precedence precedence;
 
-		protected BinaryOperation(Expression arg1, String op, Expression arg2, int precedence, Type type){
+		protected BinaryOperation(Expression arg1, String op, Expression arg2, Precedence precedence, Type type){
 			super(type);
 			this.op = op;
 			this.arg1 = arg1;
@@ -62,22 +100,22 @@ public interface Expression extends LexicalElement {
 
 		@Override
 		public final void addTokens(Token t) {
-			int p = getPrecedence();
-			int p1 = arg1.getPrecedence();
-			int p2 = arg2.getPrecedence();
-			if (p > p1)
+			int p = getPrecedence().ordinal();
+			int p1 = arg1.getPrecedence().ordinal();
+			int p2 = arg2.getPrecedence().ordinal();
+			if (p > p1 || true)
 				t.n("(").n(arg1).n(")");
 			else
 				t.n(arg1);
 			t.n(" "+op+" ");
-			if (p2 > p)
+			if (p2 > p && false)
 				t.n(arg2);
 			else
 				t.n("(").n(arg2).n(")");
 		}
 
 		@Override
-		public int getPrecedence() {
+		public Precedence getPrecedence() {
 			return precedence;
 		}
 	}
@@ -316,7 +354,7 @@ public interface Expression extends LexicalElement {
 
 		@Override
 		public void addTokens(Token t) {
-			if (getPrecedence() > vector.getPrecedence())
+			if (getPrecedence().ordinal() > vector.getPrecedence().ordinal())
 				t.n("(").n(vector).n(")");
 			else
 				t.n(vector);
@@ -324,7 +362,7 @@ public interface Expression extends LexicalElement {
 		}
 
 		@Override
-		public int getPrecedence() {
+		public Precedence getPrecedence() {
 			return Precedence.SUB_VECTOR;
 		}
 	}
@@ -340,7 +378,7 @@ public interface Expression extends LexicalElement {
 		}
 
 		@Override
-		public int getPrecedence() {
+		public Precedence getPrecedence() {
 			return Precedence.VAR_ACCESS;
 		}
 
@@ -370,10 +408,42 @@ public interface Expression extends LexicalElement {
 		}
 
 		@Override
-		public int getPrecedence() {
+		public Precedence getPrecedence() {
 			return Precedence.VAR_ACCESS;
 		}
 
+
+	}
+
+	public static class FunctionCall implements Expression {
+		private final Type type;
+		private final String funcName;
+		private final List<Expression> args;
+
+		public FunctionCall(Type type, String funcName, List<Expression> args) {
+			this.type = type;
+			this.funcName = funcName;
+			this.args = args;
+		}
+		public FunctionCall(Type type, String funcName, Expression arg) {
+			this(type, funcName, Collections.singletonList(arg));
+		}
+
+		@Override
+		public void addTokens(Token t) {
+			t.n(funcName).n("(").n(args.get(0)).n(args.subList(1, args.size()), (e,to) -> to.n(",").n(e), "").n(")");
+
+		}
+
+		@Override
+		public Type getType() {
+			return type;
+		}
+
+		@Override
+		public Precedence getPrecedence() {
+			return Precedence.FUNC_CALL;
+		}
 
 	}
 

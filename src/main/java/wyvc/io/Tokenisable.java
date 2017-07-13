@@ -158,7 +158,6 @@ public interface Tokenisable {
 			public final String string;
 
 			public StringToken(String s) {
-				System.out.println("+"+s+"+");
 				int i = s.indexOf('\n');
 				if (i != -1){
 					string = s.substring(0, i);
