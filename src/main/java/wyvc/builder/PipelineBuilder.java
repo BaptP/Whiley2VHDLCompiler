@@ -440,6 +440,7 @@ public class PipelineBuilder extends LoggedBuilder {
 
 			@Override
 			protected DataNode computeDone() throws CompilerException {
+//				return getStart().node;
 				throw EmptySourceCompilerError.exception();
 			}
 
@@ -586,13 +587,15 @@ public class PipelineBuilder extends LoggedBuilder {
 
 					@Override
 					protected DataNode computeDone() throws CompilerException {
+						openLevel("Compute Done");
+						debugLevel(sources.toString());
 						if (sources.size() == 1) {
 							Entry<CalculationSource, KnownDelay> e = sources.entrySet().iterator().next();
-							return delayNode(e.getKey().getStart(), e.getValue().latency).node;
+							return end(delayNode(e.getKey().getStart(), e.getValue().latency).node);
 						}
 						if (toSync.isEmpty())
 							throw EmptySourceCompilerError.exception();
-						return buildSynchronization(toSync, 0, toSync.size());
+						return end(buildSynchronization(toSync, 0, toSync.size()));
 					}};
 
 			}
@@ -610,6 +613,8 @@ public class PipelineBuilder extends LoggedBuilder {
 			private DataNode synchronizeNodeP(DataNode node) throws CompilerException {
 				openLevel("Sync node "+node.nodeIdent);
 				NodeTimeline nt = getTimeline(node);
+				debugLevel("time line "+ nt.toString(""));
+				debugLevel("time line this "+ timeline.toString(""));
 				if (nt.sources.size() == 0)
 					return end(node);
 
@@ -625,6 +630,10 @@ public class PipelineBuilder extends LoggedBuilder {
 					}
 					else
 						sync = true;
+				}
+				if (sync) {
+					nt.getDone();
+					getDoneRegister();
 				}
 				return end(sync ? newGraph.new Buffer(nt.getDone(), getDoneRegister(), new HalfArrow(node), CONCURRENCY)
 						: diff == 0 ? node : newGraph.new Register(getClock(), new HalfArrow(node), diff));
@@ -783,12 +792,14 @@ public class PipelineBuilder extends LoggedBuilder {
 
 			Delay funcDelay = funcDelays.get(node.funcName);
 			Generator_<HalfArrow, CompilerException> inputs = node.sources.generate().map_(startDelay::synchronizeSource);
-			if (funcDelay instanceof KnownDelay)
+			if (funcDelay instanceof KnownDelay && funcDelay.latency != 0)
 				inputs = inputs.append(Generators.fromSingleton(new HalfArrow(getClock(), "clock")).toChecked());
 			else if (funcDelay instanceof UnknownDelay)
 				inputs = inputs.append(Generators.fromValues(new HalfArrow(getClock(), "clock"),new HalfArrow(getStart(), "start")).toChecked());
 			FuncCallNode c = newGraph.new FuncCallNode(node.funcName, inputs.toList() ,node.location);
 			NodeTimeline resultDelay;
+			GPairList<FunctionReturnNode, FunctionReturnNode> ret = node.returns.generate().compute_(
+					r -> newGraph.new FunctionReturnNode(r.nodeIdent, r.type, c)).toList();
 			if (funcDelay instanceof KnownDelay)
 				resultDelay = startDelay.timeline.delay(funcDelay.latency);
 			else if (funcDelay instanceof UnknownDelay) {
@@ -798,9 +809,7 @@ public class PipelineBuilder extends LoggedBuilder {
 			}
 			else
 				throw UnsupportedDelayCompilerError.exception(funcDelay);
-			node.returns.generate().forEach_(r -> setNodeDelay(r,
-					newGraph.new FunctionReturnNode(r.nodeIdent, r.type, c),
-					resultDelay));
+			ret.generate().forEach_((r,n) -> setNodeDelay(r,n,resultDelay));
 			closeLevel();
 		}
 
@@ -830,7 +839,25 @@ public class PipelineBuilder extends LoggedBuilder {
 					getConvertedHalfArrow(node.op), node.location), delay);
 		}
 		private EndIfNode buildPipeline(EndIfNode node) throws CompilerException {
+//			debug("Attention");
 			Synchronizer delay = mergeSources(Generators.fromValues(node.condition, node.trueNode, node.falseNode));
+			/*NodeTimeline trueTimeline = getTimeline(node.trueNode);
+			NodeTimeline falseTimeline = getTimeline(node.falseNode);
+			if (!falseTimeline.getSources().takeFirst().forAll(trueTimeline.sources::containsKey) ||
+					!trueTimeline.getSources().takeFirst().forAll(falseTimeline.sources::containsKey)) {
+				debug("DIFFICILE");
+				Synchronizer trueDelay = mergeSources(Generators.fromValues(node.condition, node.trueNode));
+				Synchronizer falseDelay = mergeSources(Generators.fromValues(node.condition, node.falseNode));
+
+				InnerSource s = new InnerSource(delay.timeline, newGraph.new BinOpNode(BinaryOperation.Or, Type.Boolean,
+						new HalfArrow(newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
+								trueDelay.timeline.getDone(), trueDelay.synchronizeSource(node.condition))),
+						new HalfArrow(newGraph.new BinOpNode(BinaryOperation.And, Type.Boolean,
+								falseDelay.timeline.getDone(), falseDelay.synchronizeSource(node.condition)))), new UnknownDelay(0));
+				return setNodeDelay(node, newGraph.new EndIfNode(s.getStart(),
+						trueDelay.synchronizeSource(node.trueNode), falseDelay.synchronizeSource(node.falseNode), node.location),
+						new InputTimeline(s));
+			}*/
 			return setNodeDelay(node, newGraph.new EndIfNode(delay.synchronizeSource(node.condition),
 					delay.synchronizeSource(node.trueNode), delay.synchronizeSource(node.falseNode), node.location), delay.timeline);
 		}
@@ -875,7 +902,6 @@ public class PipelineBuilder extends LoggedBuilder {
 			graph.getInputNodes().forEach_(this::getConvertedNode);
 			Synchronizer delay = mergeSources(graph.getOutputNodes().map(o -> o.source));
 			graph.getOutputNodes().forEach_(o -> newGraph.new OutputNode(o.nodeIdent, delay.synchronizeSource(o.source)));
-//			newGraph.new OutputNode("done", delay.timeline.getDone());
 			return delay.timeline;
 		}
 

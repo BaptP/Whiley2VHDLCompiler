@@ -34,6 +34,7 @@ import wyvc.builder.TypeCompiler.AccessibleTypeTree;
 import wyvc.builder.TypeCompiler.BooleanTypeLeaf;
 import wyvc.builder.TypeCompiler.TypeLeaf;
 import wyvc.builder.TypeCompiler.TypeOption;
+import wyvc.builder.TypeCompiler.TypeRecord;
 import wyvc.builder.TypeCompiler.TypeRecordUnion;
 import wyvc.builder.TypeCompiler.TypeSimpleRecord;
 import wyvc.builder.TypeCompiler.TypeSimpleUnion;
@@ -1201,6 +1202,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				return new BooleanVertexLeaf(graph.new ConstNode(val, ((TypeLeaf) t).getValue()));
 			if (t instanceof TypeLeaf)
 				return new GeneralVertexLeaf(graph.new ConstNode(val, ((TypeLeaf) t).getValue()));
+			if (t instanceof TypeSimpleRecord && ((TypeSimpleRecord) t).getNumberOfFields() == 0)
+				return new VertexSimpleRecord(Generators.emptyGenerator());
 			throw WyilUnsupportedCompilerError.exception(val);
 		}
 
@@ -1328,8 +1331,8 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new VertexRecordUnion(
 				type.getSharedFields().computeSecond_((f, t) -> buildCallReturn(ident+"_"+f, t, func)),
 				type.getSpecificFields().computeSecond_((f, t) -> new VertexOption<>(
-						buildCallReturn(ident+"_"+t+"_"+t.getFirstLabel(), t.getFirstOperand(), func),
-						buildCallReturn(ident+"_"+t+"_"+t.getSecondLabel(), t.getSecondOperand(), func))));
+						buildCallReturn(ident+"_"+f+"_"+t.getFirstLabel(), t.getFirstOperand(), func),
+						buildCallReturn(ident+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand(), func))));
 		}
 		private VertexUnion buildCallReturn(String ident, TypeUnion type, FuncCallNode func) throws CompilerException {
 			return new VertexUnion(
@@ -1416,10 +1419,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
 				BiFunction_<String, VertexLeaf<?>, VertexLeaf<?>, CompilerException> mergeGeneral,
 				String name, VertexSimpleUnion tree) throws CompilerException {
-			return new VertexSimpleUnion(tree.getOptions().map_(
-				o -> new VertexOption<>(
-						 buildNamedTransform(mergeBoolean, name+"_"+o.getFirstLabel(), o.getFirstOperand()),
-						 buildNamedTransform(mergeGeneral, name+"_"+o.getSecondLabel(), o.getSecondOperand()))));
+			return new VertexSimpleUnion(tree.getOptions().enumerate().map_(
+				(k,o) -> new VertexOption<>(
+						 buildNamedTransform(mergeBoolean, name+"_"+tree.getLabel(k)+"_"+o.getFirstLabel(), o.getFirstOperand()),
+						 buildNamedTransform(mergeGeneral, name+"_"+tree.getLabel(k)+"_"+o.getSecondLabel(), o.getSecondOperand()))));
 		}
 		private VertexRecordUnion buildNamedTransform(
 				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,
@@ -1428,10 +1431,10 @@ public final class DataFlowGraphBuilder extends LexicalElementTree {
 			return new VertexRecordUnion(
 				tree.getSharedFields().computeSecond_(
 					(n,t) -> buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getFirstLabel()+"_"+n, t)),
-				tree.getSpecificFields().mapSecond_(
-					t -> new VertexOption<>(
-							buildNamedTransform(mergeBoolean, name+"_"+tree.getSecondLabel()+"_"+t.getFirstLabel(), t.getFirstOperand()),
-							buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getSecondLabel()+"_"+t.getSecondLabel(), t.getSecondOperand()))));
+				tree.getSpecificFields().computeSecond_(
+					(f,t) -> new VertexOption<>(
+							buildNamedTransform(mergeBoolean, name+"_"+tree.getSecondLabel()+"_"+f+"_"+t.getFirstLabel(), t.getFirstOperand()),
+							buildNamedTransform(mergeBoolean, mergeGeneral, name+"_"+tree.getSecondLabel()+"_"+f+"_"+t.getSecondLabel(), t.getSecondOperand()))));
 		}
 		private VertexUnion buildNamedTransform(
 				BiFunction_<String, BooleanVertexLeaf, BooleanVertexLeaf, CompilerException> mergeBoolean,

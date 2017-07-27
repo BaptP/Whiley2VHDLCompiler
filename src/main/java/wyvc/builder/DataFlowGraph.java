@@ -73,7 +73,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public String getIdent() {
-			return ident;
+			return "";//ident;
 		}
 	}
 
@@ -167,7 +167,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 		@Override
 		public String getIdent() {
-			return getShortIdent()+"\n"+(type == null ? "Untyped" : type.toString());
+			return getShortIdent()+"\n"+(type == null ? "Untyped" : type.toString().equals("signed(31 downto 0)") ? "int" : type.toString());
 		}
 
 		@Override
@@ -438,7 +438,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public final DataArrow falseNode;
 
 		public EndIfNode(HalfArrow condition, HalfArrow trueNode, HalfArrow falseNode, Location<?> location) throws CompilerException {
-			super("mux", trueNode.node.type, Arrays.asList(condition, trueNode, falseNode), location);
+			super("Mux", trueNode.node.type, Arrays.asList(condition, trueNode, falseNode), location);
 			this.condition = condition.arrow;
 			this.trueNode  =  trueNode.arrow;
 			this.falseNode = falseNode.arrow;
@@ -600,6 +600,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 		public BackRegister(InputNode clock, Type type) throws CompilerException {
 			super("BReg", type, Collections.emptyList());
 			this.clock = clock;
+			System.out.println("création "+type.toString());
 		}
 
 
@@ -668,7 +669,7 @@ public class DataFlowGraph extends PrintableGraph<DataFlowGraph.DataNode, DataFl
 
 
 		public Register(InputNode clock, HalfArrow previousValue, int delay) throws CompilerException {
-			super("Reg-"+delay, previousValue.node.type, Collections.singletonList(previousValue));
+			super("Reg"+delay, previousValue.node.type, clock != null ? Arrays.asList(previousValue, new HalfArrow(clock)) : Arrays.asList(previousValue));
 			this.clock = clock;
 			this.previousValue  =  previousValue.arrow;
 			this.delay = delay; // TODO check delay > 0

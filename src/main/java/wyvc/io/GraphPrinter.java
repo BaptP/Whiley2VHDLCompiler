@@ -47,7 +47,7 @@ public class GraphPrinter {
 	public static <N extends PrintableGraph.PrintableNode<N,A>, A extends PrintableGraph.PrintableArrow<A,N>>  void print(CompilerLogger logger, PrintableGraph<N,A> graph, String name) {
 		try {
 			FileWriter output = new FileWriter("gr.dot");
-			output.write("digraph {\n");
+			output.write("digraph {node[fontsize=40]\n");
 			output.write("  inp [label=\"inputs\",color=blue,shape=box];\n");
 			Map<N, Integer> nodes = new HashMap<>();
 			int i = 0;

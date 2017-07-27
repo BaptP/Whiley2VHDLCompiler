@@ -70,7 +70,7 @@ public abstract class Type implements LexicalElement {
 
 		@Override
 		public String getDefault() {
-			return "'X'";
+			return type == Primitive.P_STD_LOGIC ? "'X'" : "false";
 		}
 	}
 
@@ -119,13 +119,6 @@ public abstract class Type implements LexicalElement {
 			}
 			return  false;
 		}
-
-		@Override
-		public String getDefault() {
-			char[] a = new char[lenght()];
-			Arrays.fill(a, 'X');
-			return "\""+new String(a)+"\"";
-		}
 	}
 
 	public static final class Std_logic_vector extends VectorType {
@@ -151,6 +144,13 @@ public abstract class Type implements LexicalElement {
 		@Override
 		public VectorType cloneType(int start, int end){
 			return new Std_logic_vector(start, end);
+		}
+
+		@Override
+		public String getDefault() {
+			char[] a = new char[lenght()];
+			Arrays.fill(a, 'X');
+			return "\""+new String(a)+"\"";
 		}
 	}
 
@@ -178,6 +178,11 @@ public abstract class Type implements LexicalElement {
 		public VectorType cloneType(int start, int end){
 			return new Unsigned(start, end);
 		}
+
+		@Override
+		public String getDefault() {
+			return "0";
+		}
 	}
 
 	public static final class Signed extends VectorType {
@@ -203,6 +208,11 @@ public abstract class Type implements LexicalElement {
 		@Override
 		public VectorType cloneType(int start, int end){
 			return new Signed(start, end);
+		}
+
+		@Override
+		public String getDefault() {
+			return "0";
 		}
 	}
 

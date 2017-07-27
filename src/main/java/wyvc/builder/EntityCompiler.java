@@ -157,6 +157,7 @@ public class EntityCompiler {
 		}
 
 		private Port createPort(OutputNode output) {
+			debug("NEW PORT "+output.nodeIdent);
 			Port port =  createPort(output.nodeIdent, output, Mode.OUT);
 //				                   : createSignal(output.nodeIdent, output);
 			planCompilation(port, output.source.from);
@@ -218,14 +219,18 @@ public class EntityCompiler {
 
 		private ConcurrentStatement compileBuffer(Signal to, Buffer buffer) throws CompilerException {
 			// TODO
-
+			Signal res = to;
+			if (res instanceof Port) {
+				res = createSignal(to.ident+"Bu", buffer);
+				statements.add(new SignalAssignment(to, new Access(res)));
+			}
 			String name = buffer.previousValue instanceof NamedDataArrow ?
 					"B"+((NamedDataArrow) buffer.previousValue).ident : "source";
 			Signal source = getSignal(buffer.previousValue.from, name);
 			Signal write = getSignal(buffer.write, "write");
 			Signal e = createSignal(name+"_reg", buffer);
-			registers.add(new SignalAssignment(e, new Access(to)));
-			return new ConditionalSignalAssignment(to, Collections.singletonList(new Pair<>(new Access(source), new Access(write))), new Access(e));
+			registers.add(new SignalAssignment(e, new Access(res)));
+			return new ConditionalSignalAssignment(res, Collections.singletonList(new Pair<>(new Access(source), new Access(write))), new Access(e));
 		}
 
 		private ConcurrentStatement compileBackRegister(Signal to, BackRegister register) throws CompilerException {
@@ -298,24 +303,29 @@ public class EntityCompiler {
 		}
 
 
-		private ConcurrentStatement compileInvoke(FuncCallNode call) throws CompilerException {
+		private void compileInvoke(FuncCallNode call) throws CompilerException {
 			if (compiled.contains(call))
-				return new NotAStatement();
+				return;
 			compiled.add(call);
 			Component fct = fcts.get(call.funcName);
 			components.add(fct);
 			List<Signal> args = call.getSources().enumerate().map((k,n) -> getSignal(n, call.funcName+"_arg_"+k)).toList();
 			List<Signal> rets = call.getReturns().map(n -> Utils.addIfAbsent(created, n, () -> createSignal(n.nodeIdent, n))).toList();
-			return new ComponentInstance(getFreshLabel(call.funcName), fct, Utils.concat(args, rets).toArray(new Signal[args.size()+rets.size()]));
+			statements.add(new ComponentInstance(getFreshLabel(call.funcName), fct, Utils.concat(args, rets).toArray(new Signal[args.size()+rets.size()])));
+		}
+		private ConcurrentStatement compileInvoke(Signal s, FunctionReturnNode ret) throws CompilerException {
+			if (!compiled.contains(ret.fct))
+				compileInvoke(ret.fct);
+			return new SignalAssignment(s, new Access(getSignal(ret, "ret")));
 		}
 
 		private ConcurrentStatement compileSource(Pair<Signal, DataNode> source) throws CompilerException {
-			debug("Nouvelle source "+source.first.ident + " <= " + source.second.nodeIdent);
+			debug("Nouvelle source "+source.first.ident + " <= " + source.second.nodeIdent+" "+source.second.getClass().getSimpleName());
 			if (source.second != null) {
 				if (source.second instanceof EndIfNode)
 					return compileEndIf(source.first, (EndIfNode) source.second);
 				if (source.second instanceof FunctionReturnNode)
-					return compileInvoke(((FunctionReturnNode) source.second).fct);
+					return compileInvoke(source.first, (FunctionReturnNode) source.second);
 				if (source.second instanceof Register)
 					return compileRegister(source.first, ((Register) source.second));
 				if (source.second instanceof Buffer)
