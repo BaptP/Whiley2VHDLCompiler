@@ -54,28 +54,32 @@ public class GraphPrinter {
 			for (N n : graph.nodes) {
 				nodes.put(n,  ++i);
 				output.write("  n"+i+" [label=\""+n.getSafeIdent()+"\"");
-				for (String o : n.getOptions())
+				for (String o : n.getOptions()) {
 					output.write(","+o);
+				}
 				output.write("];\n");
 			}
 			output.write("  out [label=\"outputs\",color=red,shape=box];\n\n");
 
-			for (N n : graph.getInputs())
+			for (N n : graph.getInputs()) {
 				output.write("  inp -> n"+nodes.get(n)+" "+"[color=blue];\n");
+			}
 
-			for (A a : graph.arrows)
+			for (A a : graph.arrows) {
 				output.write("  n"+nodes.get(a.from)+" -> n"+nodes.get(a.to)+
 /**/				"["+String.join(",",Utils.concat(a.getOptions(),Collections.singletonList("label=\""+a.getSafeIdent()+"\"")))+"]"+
 				";\n");
+			}
 
-			for (N n : graph.getOutputs())
+			for (N n : graph.getOutputs()) {
 				output.write("  n"+nodes.get(n)+" -> out [color=red];\n");
+			}
 			output.write("}\n");
 
 			output.close();
 			logger.debug("inputs : "+graph.getInputs().size());
 			logger.debug("outputs : "+graph.getOutputs().size());
-			Process t = Runtime.getRuntime().exec("graph-viewer gr.dot");
+			Process t = Runtime.getRuntime().exec("dotty gr.dot");
 			Process u = Runtime.getRuntime().exec("dot -Goverlap=scale -Tps gr.dot -o "+name+".ps");
 			t.waitFor();
 			u.waitFor();
