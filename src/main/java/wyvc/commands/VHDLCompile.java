@@ -20,6 +20,15 @@ public class VHDLCompile extends Compile {
 		super(registry, logger, sysout, syserr);
 	}
 
+	@Override
+	public String getName() {
+		return "vhdlcompile";
+	}
+
+	@Override
+	public String getDescription() {
+		return "Compile Whiley files to VHDL";
+	}
 
 	@Override
 	protected void addCompilationBuildRules(StdProject project) {

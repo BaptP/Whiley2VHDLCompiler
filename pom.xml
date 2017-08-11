@@ -4,39 +4,36 @@
   <artifactId>wyvc</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <name>Whiley2VHDL Compiler (WyVC)</name>
-  <description>Nothing</description>
+  <description>Responsible for compiling Whiley files to VHDL</description>
+
+  <!-- ============================================== -->
+  <!-- Dependencies -->
+  <!-- ============================================== -->
+  
   <dependencies>
   	<dependency>
   		<groupId>org.whiley</groupId>
   		<artifactId>wyc</artifactId>
-  	</dependency>
-  	<dependency>
-  		<groupId>org.whiley</groupId>
-  		<artifactId>wycc</artifactId>
-  		<version>0.5.3</version>
+  		<version>0.4.7</version>
   	</dependency>
   </dependencies>
-  
+
+  <!-- ============================================== -->
+  <!-- Build Config -->
+  <!-- ============================================== -->
+
   <build>
     <plugins>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>2.3.2</version>
-        <configuration>
+	<groupId>org.apache.maven.plugins</groupId>
+	<artifactId>maven-compiler-plugin</artifactId>
+	<version>3.5.1</version>
+	<configuration>
           <source>1.8</source>
           <target>1.8</target>
-        </configuration>
+	</configuration>
       </plugin>
     </plugins>
   </build>
-  <dependencyManagement>
-  	<dependencies>
-  		<dependency>
-  			<groupId>org.whiley</groupId>
-  			<artifactId>wyc</artifactId>
-  			<version>0.4.7</version>
-  		</dependency>
-  	</dependencies>
-  </dependencyManagement>
+  
 </project>
